@@ -442,9 +442,17 @@ ERR PKCodecFactory_CreateDecoderFromMemory(const char* file_name, unsigned long 
     struct WMPStream* pStream = NULL;
     PKImageDecode* pDecoder = NULL;
 
+#ifdef _WIN32
+    inFile = fopen(file_name, "rb");
+#else
     inFile = fopen64(file_name, "rb");
+#endif
     rdbuffer = malloc(rd_size);
+#ifdef _WIN32
+    _fseeki64(inFile, rd_position, SEEK_SET);
+#else
     fseeko64(inFile, rd_position, SEEK_SET);
+#endif
     if (fread(rdbuffer, 1, rd_size, inFile) != rd_size){
         printf("read failed\n");
         return 0;
