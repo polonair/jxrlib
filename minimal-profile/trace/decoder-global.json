@@ -1,0 +1,14 @@
+{
+  "mode": "decoder",
+  "width": 16,
+  "height": 16,
+  "macroblocks": { "width": 1, "height": 1 },
+  "color_format": 0,
+  "bit_depth": 1,
+  "overlap": 0,
+  "bitstream_format": 0,
+  "channels": 1,
+  "tiles": { "columns": 1, "rows": 1 },
+  "subbands": 0,
+  "alpha_mode": 0
+}

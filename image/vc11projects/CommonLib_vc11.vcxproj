@@ -167,6 +167,7 @@
   <ItemGroup>
     <ClCompile Include="..\sys\adaptHuff.c" />
     <ClCompile Include="..\sys\image.c" />
+    <ClCompile Include="..\sys\JXRTrace.c" />
     <ClCompile Include="..\sys\perfTimerANSI.c">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>

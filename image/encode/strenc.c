@@ -26,6 +26,7 @@
 //
 //*@@@---@@@@******************************************************************
 #include "strcodec.h"
+#include "JXRTrace.h"
 #include "encode.h"
 #include "strTransform.h"
 #include <math.h>
@@ -212,6 +213,7 @@ Int writeTileHeaderHP(CWMImageStrCodec * pSC, BitIOInfo * pIO)
 Int encodeMB(CWMImageStrCodec * pSC, Int iMBX, Int iMBY)
 {
     CCodingContext * pContext = &pSC->m_pCodingContext[pSC->cTileColumn];
+    size_t cbitStart;
     
     if(pSC->m_bCtxLeft && pSC->m_bCtxTop && pSC->m_bSecondary == FALSE && pSC->m_param.bTranscode == FALSE){ // write packet headers
         U8 pID = (U8)((pSC->cTileRow * (pSC->WMISCP.cNumOfSliceMinus1V + 1) + pSC->cTileColumn) & 0x1F);
@@ -243,16 +245,24 @@ Int encodeMB(CWMImageStrCodec * pSC, Int iMBX, Int iMBY)
         }
     }
     
+    cbitStart = JXRTraceBitPosition(pContext->m_pIODC, TRUE);
     if(EncodeMacroblockDC(pSC, pContext, iMBX, iMBY) != ICERR_OK)
         return ICERR_ERROR;
+    JXRTraceDumpBitRange("encoder", "dc", iMBX, iMBY, cbitStart, JXRTraceBitPosition(pContext->m_pIODC, TRUE));
     
-    if(pSC->WMISCP.sbSubband != SB_DC_ONLY)
+    if(pSC->WMISCP.sbSubband != SB_DC_ONLY) {
+        cbitStart = JXRTraceBitPosition(pContext->m_pIOLP, TRUE);
         if(EncodeMacroblockLowpass(pSC, pContext, iMBX, iMBY) != ICERR_OK)
             return ICERR_ERROR;
+        JXRTraceDumpBitRange("encoder", "lp", iMBX, iMBY, cbitStart, JXRTraceBitPosition(pContext->m_pIOLP, TRUE));
+    }
 
-    if(pSC->WMISCP.sbSubband != SB_DC_ONLY && pSC->WMISCP.sbSubband != SB_NO_HIGHPASS)
+    if(pSC->WMISCP.sbSubband != SB_DC_ONLY && pSC->WMISCP.sbSubband != SB_NO_HIGHPASS) {
+        cbitStart = JXRTraceBitPosition(pContext->m_pIOAC, TRUE);
         if(EncodeMacroblockHighpass(pSC, pContext, iMBX, iMBY) != ICERR_OK)
             return ICERR_ERROR;
+        JXRTraceDumpBitRange("encoder", "hp", iMBX, iMBY, cbitStart, JXRTraceBitPosition(pContext->m_pIOAC, TRUE));
+    }
     
     if(iMBX + 1 == (int) pSC->cmbWidth && (iMBY + 1 == (int) pSC->cmbHeight || 
         (pSC->cTileRow < pSC->WMISCP.cNumOfSliceMinus1H && iMBY == (int) pSC->WMISCP.uiTileY[pSC->cTileRow + 1] - 1)))
@@ -289,6 +299,8 @@ Int processMacroblock(CWMImageStrCodec *pSC)
 
     for (j = 0; j <= jend; j++) {
         transformMacroblock(pSC);
+        if (pSC->cColumn < pSC->cmbWidth && pSC->cRow < pSC->cmbHeight)
+            JXRTraceDumpStage("encoder", "transform_coefficients", pSC, (Int)pSC->cColumn, (Int)pSC->cRow, JXRTraceCoefficients);
         if(!topORleft){
             getTilePos(pSC, (Int)pSC->cColumn - 1, (Int)pSC->cRow - 1);
             if(jend){
@@ -1091,6 +1103,7 @@ Int StrEncInit(CWMImageStrCodec* pSC)
 static Int StrEncTerm(CTXSTRCODEC ctxSC)
 {
     CWMImageStrCodec* pSC = (CWMImageStrCodec*)ctxSC;
+    JXRTraceDumpCodecState("encoder", pSC);
     size_t j, jend = (pSC->m_pNextSC != NULL);
 
     for (j = 0; j <= jend; j++) {
@@ -1501,6 +1514,7 @@ Int ImageStrEncEncode(
     const CWMImageBufferInfo* pBI)
 {
     CWMImageStrCodec* pSC = (CWMImageStrCodec*)ctxSC;
+    JXRTraceDumpCodecState("encoder", pSC);
     CWMImageStrCodec* pNextSC = pSC->m_pNextSC;
     ImageDataProc ProcessLeft, ProcessCenter, ProcessRight;
 
@@ -1531,6 +1545,7 @@ Int ImageStrEncEncode(
 
     if( pSC->Load(pSC) != ICERR_OK )
 		return ICERR_ERROR;
+    JXRTraceDumpStage("encoder", "centered_samples", pSC, 0, (Int)pSC->cRow, JXRTraceSamples);
     if(ProcessLeft(pSC) != ICERR_OK)
         return ICERR_ERROR;
     advanceMRPtr(pSC);
@@ -1562,6 +1577,7 @@ Int ImageStrEncTerm(
     CTXSTRCODEC ctxSC)
 {
     CWMImageStrCodec* pSC = (CWMImageStrCodec*)ctxSC;
+    JXRTraceDumpCodecState("encoder", pSC);
     // CWMImageStrCodec *pNextSC = pSC->m_pNextSC;
 
     if (sizeof(*pSC) != pSC->cbStruct)

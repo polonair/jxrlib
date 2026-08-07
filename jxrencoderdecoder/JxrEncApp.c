@@ -26,6 +26,7 @@
 //
 //*@@@---@@@@******************************************************************
 #include <JXRTest.h>
+#include <JXRTrace.h>
 #include <time.h>
 
 
@@ -36,6 +37,7 @@ typedef struct tagWMPENCAPPARGS
 {
     char* szInputFile;
     char* szOutputFile;
+    char* szTraceDirectory;
     
     PKPixelFormatGUID guidPixFormat;
 //    Bool bFlagRGB_BGR;
@@ -140,6 +142,7 @@ void WmpEncAppUsage(const char* szExe)
     printf("  -t                           Display timing information" CRLF);
     printf(CRLF);
     printf("  -v                           Display verbose encoder information" CRLF);
+    printf("  -X directory                 Save JSON and bitstream trace artifacts" CRLF);
     printf(CRLF);
     printf("  -V tile_wd0 [tile_wd1 ... ]  Macro block columns per tile " CRLF);
     printf(CRLF);
@@ -326,6 +329,10 @@ ERR WmpEncAppParseArgs(int argc, char* argv[], WMPENCAPPARGS* args)
                 {
                     case 'i':
                         args->szInputFile = argv[i];
+                        break;
+
+                    case 'X':
+                        args->szTraceDirectory = argv[i];
                         break;
 
                     case 'o':
@@ -600,6 +607,7 @@ main(int argc, char* argv[])
     }
 
     Call(WmpEncAppParseArgs(argc, argv, &args));
+    JXRTraceConfigure(args.szTraceDirectory);
     if (args.wmiSCP.bVerbose)
     {
         WmpEncAppShowArgs(&args);
@@ -771,6 +779,7 @@ main(int argc, char* argv[])
 
 //    Call(pEncoder->Terminate(pEncoder));
     pEncoder->Release(&pEncoder);
+    JXRTraceCopyFile(args.szOutputFile, "encoder-bitstream.jxr");
 
 Cleanup:
     return (int)err;

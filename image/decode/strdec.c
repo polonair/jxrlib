@@ -26,6 +26,7 @@
 //
 //*@@@---@@@@******************************************************************
 #include "strcodec.h"
+#include "JXRTrace.h"
 #include "decode.h"
 #include "strTransform.h"
 #include <math.h>
@@ -350,22 +351,34 @@ Int processMacroblockDec(CWMImageStrCodec * pSC)
 			}
 
             if(pSC->m_Dparam->bDecodeFullFrame || pContext->m_bInROI){                
+                size_t cbitStart = JXRTraceBitPosition(pContext->m_pIODC, FALSE);
                 if ((result = DecodeMacroblockDC(pSC, pContext, (Int)pSC->cColumn, (Int)pSC->cRow)) != ICERR_OK)
                     return result;
+                JXRTraceDumpBitRange("decoder", "dc", (Int)pSC->cColumn, (Int)pSC->cRow, cbitStart, JXRTraceBitPosition(pContext->m_pIODC, FALSE));
+                JXRTraceDumpStage("decoder", "after_dc", pSC, (Int)pSC->cColumn, (Int)pSC->cRow, JXRTraceCoefficients);
 
                 if(pSC->m_Dparam->bDecodeLP){
+                    cbitStart = JXRTraceBitPosition(pContext->m_pIOLP, FALSE);
                     if ((result = DecodeMacroblockLowpass(pSC, pContext, (Int)pSC->cColumn, (Int)pSC->cRow)) != ICERR_OK)
                         return result;
+                    JXRTraceDumpBitRange("decoder", "lp", (Int)pSC->cColumn, (Int)pSC->cRow, cbitStart, JXRTraceBitPosition(pContext->m_pIOLP, FALSE));
                 }
 
+                JXRTraceDumpStage("decoder", "after_lp", pSC, (Int)pSC->cColumn, (Int)pSC->cRow, JXRTraceCoefficients);
                 predDCACDec(pSC);
+                JXRTraceDumpStage("decoder", "after_dc_lp_prediction", pSC, (Int)pSC->cColumn, (Int)pSC->cRow, JXRTraceCoefficients);
                                 
                 dequantizeMacroblock(pSC);
+                JXRTraceDumpStage("decoder", "after_dequantization", pSC, (Int)pSC->cColumn, (Int)pSC->cRow, JXRTraceCoefficients);
 
                 if(pSC->m_Dparam->bDecodeHP){
+                    cbitStart = JXRTraceBitPosition(pContext->m_pIOAC, FALSE);
                     if ((result = DecodeMacroblockHighpass(pSC, pContext, (Int)pSC->cColumn, (Int)pSC->cRow)) != ICERR_OK)
                         return result;
+                    JXRTraceDumpBitRange("decoder", "hp", (Int)pSC->cColumn, (Int)pSC->cRow, cbitStart, JXRTraceBitPosition(pContext->m_pIOAC, FALSE));
+                    JXRTraceDumpStage("decoder", "after_hp", pSC, (Int)pSC->cColumn, (Int)pSC->cRow, JXRTraceCoefficients);
                     predACDec(pSC);
+                    JXRTraceDumpStage("decoder", "after_ac_prediction", pSC, (Int)pSC->cColumn, (Int)pSC->cRow, JXRTraceCoefficients);
                 }
            
                 /* keep necessary info for future prediction */
@@ -381,6 +394,8 @@ Int processMacroblockDec(CWMImageStrCodec * pSC)
         }
         else {
             pSC->Transform(pSC);
+            if (pSC->cColumn < pSC->cmbWidth && pSC->cRow < pSC->cmbHeight)
+                JXRTraceDumpStage("decoder", "reconstructed_samples", pSC, (Int)pSC->cColumn, (Int)pSC->cRow, JXRTraceOutput);
         }
 
         if (jend) {
@@ -3414,6 +3429,7 @@ Int ImageStrDecDecode(
     )
 {
     CWMImageStrCodec* pSC = (CWMImageStrCodec*)ctxSC;
+    JXRTraceDumpCodecState("decoder", pSC);
     CWMImageStrCodec* pNextSC = pSC->m_pNextSC;
     size_t cMBRow, k;
 
@@ -3604,6 +3620,7 @@ Int ImageStrDecTerm(
     CTXSTRCODEC ctxSC)
 {
     CWMImageStrCodec* pSC = (CWMImageStrCodec*)ctxSC;
+    JXRTraceDumpCodecState("decoder", pSC);
     if (NULL == pSC)
     {
         return ICERR_OK;

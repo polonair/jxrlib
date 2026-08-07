@@ -29,6 +29,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "strcodec.h"
+#include "JXRTrace.h"
 #include "encode.h"
 
 #ifdef MEM_TRACE
@@ -144,8 +145,10 @@ Int EncodeMacroblockDC (CWMImageStrCodec *pSC, CCodingContext *pContext, Int iMB
 
     if(pSC->m_param.bTranscode == FALSE)
         pSC->Quantize(pSC);
+    JXRTraceDumpStage("encoder", "quantized_coefficients", pSC, iMBX, iMBY, JXRTraceCoefficients);
 
     predMacroblockEnc(pSC);
+    JXRTraceDumpStage("encoder", "predicted_coefficients", pSC, iMBX, iMBY, JXRTraceCoefficients);
 
     /** code path for Y_ONLY, CMYK and N_CHANNEL DC **/
     if(cf == Y_ONLY || cf == CMYK || cf == NCOMPONENT) {

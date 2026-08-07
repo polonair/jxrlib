@@ -26,6 +26,7 @@
 //
 //*@@@---@@@@******************************************************************
 #include <JXRTest.h>
+#include <JXRTrace.h>
 #include <time.h>
 
 
@@ -39,6 +40,7 @@ typedef struct tagWMPDECAPPARGS
 {
     char* szInputFile;
     char* szOutputFile;
+    char* szTraceDirectory;
 
     Bool bVerbose;
 
@@ -189,6 +191,7 @@ void WmpDecAppUsage(const char* szExe)
     printf(CRLF);
 
     printf("  -v                           Display verbose decoder information" CRLF);
+    printf("  -X directory                 Save JSON and bitstream trace artifacts" CRLF);
     printf(CRLF);
     printf("Eg: %s -i input.jxr -o output.bmp -c 0" CRLF, szExe);
 }
@@ -325,6 +328,10 @@ ERR WmpDecAppParseArgs(int argc, char* argv[], WMPDECAPPARGS* args)
                 {
                 case 'i':
                     args->szInputFile= argv[i];
+                    break;
+
+                case 'X':
+                    args->szTraceDirectory = argv[i];
                     break;
 
                 case 'o':
@@ -465,6 +472,7 @@ main(int argc, char* argv[])
     }
 
     Call(WmpDecAppParseArgs(argc, argv, &args));
+    JXRTraceConfigure(args.szTraceDirectory);
     if (args.bVerbose)
     {
         WmpDecAppShowArgs(&args);
@@ -476,6 +484,7 @@ main(int argc, char* argv[])
 
     //================================
     Call(PKCreateFactory(&pFactory, PK_SDK_VERSION));
+    JXRTraceCopyFile(args.szInputFile, "decoder-bitstream.jxr");
     
     Call(PKCreateCodecFactory(&pCodecFactory, WMP_SDK_VERSION));
     Call(pCodecFactory->CreateDecoderFromFile(args.szInputFile, &pDecoder));

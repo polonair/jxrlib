@@ -1,0 +1,11 @@
+{
+  "mode": "decoder",
+  "packet": "hp",
+  "macroblock": { "x": 0, "y": 0 },
+  "byte_start": 193,
+  "bit_start": 1544,
+  "byte_end": 437,
+  "bit_end": 3502,
+  "bit_count": 1958,
+  "binary_source": "decoder-bitstream.jxr"
+}

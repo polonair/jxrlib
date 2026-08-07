@@ -16,6 +16,12 @@ JXREncApp.exe -i minimal-gray-16x16.bmp -o minimal-gray-16x16.jxr -c 2 -d 0 -q 1
 JXRDecApp.exe -i minimal-gray-16x16.jxr -o minimal-gray-16x16-restored.bmp -c 2 -a 0 -p 0
 ```
 
+Run `trace-minimal-profile.cmd` to produce JSON snapshots in `minimal-profile/trace`. The new `-X <directory>` option is accepted by both command-line utilities.
+
+For the minimal profile, the trace contains encoder snapshots for centered samples, transformed coefficients, quantized coefficients and predicted coefficients; decoder snapshots after DC, LP, DC/LP prediction, dequantization, HP, AC prediction and inverse transform. Each utility also emits a `*-global.json` with normalized codec settings.
+
+The trace now records the entropy-coding boundary as well. `encoder-mb-*-bitstream-{dc,lp,hp}.json` and their decoder counterparts describe the exact half-open bit ranges consumed by the DC, LP and HP portions of each macroblock. `encoder-bitstream.jxr` and `decoder-bitstream.jxr` are binary copies of the full JXR input/output stream; the ranges index those copies. In the minimal profile, the encoder and decoder ranges must match exactly.
+
 ## Algorithmic path
 
 ### BMP to JXR
