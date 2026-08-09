@@ -5,44 +5,46 @@
 #include "JxrEntropyBlockDecoder.h"
 #include "JxrEntropyReader.h"
 #include "JxrLpResidualDecoder.h"
+#include "JxrAdaptiveHuffman.h"
 
 U8 decodeQPIndex(BitIOInfo* input, U8 bitCount);
 
-Int JxrLpDecoderDecodeMacroblock(CWMImageStrCodec * pSC, CCodingContext *pContext,
-        Int iMBX, Int iMBYdummy)
+Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
+        Int macroblockX, Int macroblockY)
 {
-    const COLORFORMAT cf = pSC->m_param.cfColorFormat;
-    const Int iChannels = (Int) pSC->m_param.cNumChannels;
+    CWMImageStrCodec* codec = state->codec;
+    const COLORFORMAT cf = codec->m_param.cfColorFormat;
+    const Int iChannels = (Int) codec->m_param.cNumChannels;
     const Int iFullPlanes = (cf == YUV_420 || cf == YUV_422) ? 2 : iChannels;
     Int k;
-	CAdaptiveScan *pScan = pContext->m_aScanLowpass;
-    BitIOInfo* pIO = pContext->m_pIOLP;
-    Int iModelBits = pContext->m_aModelLP.m_iFlcBits[0];
+    CAdaptiveScan* pScan = state->lowpassScan;
+    BitIOInfo* pIO = state->lowpassInput;
+    Int iModelBits = state->lowpassModel->m_iFlcBits[0];
     Int aRLCoeffs[32], iNumNonzero = 0, iIndex = 0;
     Int aLaplacianMean[2] = { 0, 0}, *pLM = aLaplacianMean;
     Int iChannel, iCBP = 0;
-    CWMIMBInfo * pMBInfo = &pSC->MBInfo;
+    CWMIMBInfo* pMBInfo = &codec->MBInfo;
     I32 *aDC[MAX_CHANNELS];
 
-    UNREFERENCED_PARAMETER( iMBX );
-    UNREFERENCED_PARAMETER( iMBYdummy );
+    UNREFERENCED_PARAMETER(macroblockX);
+    UNREFERENCED_PARAMETER(macroblockY);
 
-    readIS_L1(pSC, pIO);
-    if((pSC->WMISCP.bfBitstreamFormat != SPATIAL) && (pSC->pTile[pSC->cTileColumn].cBitsLP > 0))  // MB-based LP QP index
-        pMBInfo->iQIndexLP = decodeQPIndex(pIO, pSC->pTile[pSC->cTileColumn].cBitsLP);
+    readIS_L1(codec, pIO);
+    if((codec->WMISCP.bfBitstreamFormat != SPATIAL) && (codec->pTile[codec->cTileColumn].cBitsLP > 0))  // MB-based LP QP index
+        pMBInfo->iQIndexLP = decodeQPIndex(pIO, codec->pTile[codec->cTileColumn].cBitsLP);
 
     // set arrays
-    for (k = 0; k < (Int) pSC->m_param.cNumChannels; k++) {
+    for (k = 0; k < (Int) codec->m_param.cNumChannels; k++) {
         aDC[k & 15] = pMBInfo->iBlockDC[k];
     }
     /** reset adaptive scan totals **/
-    if (pSC->m_bResetRGITotals) {
+    if (codec->m_bResetRGITotals) {
         JxrAdaptiveScanResetTotals(pScan, 16);
     }
 
     /** in raw mode, this can take 6% of the bits in the extreme low rate case!!! **/
     if (cf == YUV_420 || cf == YUV_422 || cf == YUV_444) {
-        int iCountM = pContext->m_iCBPCountMax, iCountZ = pContext->m_iCBPCountZero;
+        int iCountM = *state->lowpassCbpCountMax, iCountZ = *state->lowpassCbpCountZero;
         int iMax = iFullPlanes * 4 - 5; /* actually (1 << iNChannels) - 1 **/
         if (iCountZ <= 0 || iCountM < 0) {
             iCBP = 0;
@@ -66,13 +68,13 @@ Int JxrLpDecoderDecodeMacroblock(CWMImageStrCodec * pSC, CCodingContext *pContex
             iCountM = -8;
         else if (iCountM > 7)
             iCountM = 7;
-        pContext->m_iCBPCountMax = iCountM;
+        *state->lowpassCbpCountMax = iCountM;
 
         if (iCountZ < -8)
             iCountZ = -8;
         else if (iCountZ > 7)
             iCountZ = 7;
-        pContext->m_iCBPCountZero = iCountZ;
+        *state->lowpassCbpCountZero = iCountZ;
     }
     else { /** 1 or N channel **/
         for (iChannel = 0; iChannel < iChannels; iChannel++)
@@ -83,7 +85,7 @@ Int JxrLpDecoderDecodeMacroblock(CWMImageStrCodec * pSC, CCodingContext *pContex
         JxrCoefficientBuffer coefficients = JxrCoefficientBufferCreate(aDC[iChannel], 0, 16);
 
         if (iCBP & 1) {
-            iNumNonzero = JxrEntropyBlockDecoderDecodeLowpassBlock(iChannel > 0, aRLCoeffs, pContext->m_pAHexpt,
+            iNumNonzero = JxrEntropyBlockDecoderDecodeLowpassBlock(iChannel > 0, aRLCoeffs, state->huffmanStates,
                 CTDC, pIO, 1 + 9 * ((cf == YUV_420) && (iChannel == 1))
                 + ((cf == YUV_422) && (iChannel == 1)));
 
@@ -136,21 +138,26 @@ Int JxrLpDecoderDecodeMacroblock(CWMImageStrCodec * pSC, CCodingContext *pContex
             }
         }
         pLM = aLaplacianMean + 1;
-        iModelBits = pContext->m_aModelLP.m_iFlcBits[1];
+        iModelBits = state->lowpassModel->m_iFlcBits[1];
 
         iCBP >>= 1;
     }
 
-    UpdateModelMB (cf, iChannels, aLaplacianMean, &(pContext->m_aModelLP));
+    UpdateModelMB(cf, iChannels, aLaplacianMean, state->lowpassModel);
 
-    if (pSC->m_bResetContext) {
-        AdaptLowpassDec(pContext);
+    if (codec->m_bResetContext) {
+        for (k = 0; k < CONTEXTX + CTDC; ++k) {
+            JxrAdaptiveHuffmanAdapt(state->huffmanStates[k]);
+        }
     }
 
     return ICERR_OK;
 }
 
-Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, Int macroblockY)
+Int JxrLpDecoderDecodeMacroblock(CWMImageStrCodec* codec, CCodingContext* entropy,
+    Int macroblockX, Int macroblockY)
 {
-    return JxrLpDecoderDecodeMacroblock(state->codec, state->entropy, macroblockX, macroblockY);
+    JxrDecoderSubbandContext state;
+    JxrDecoderSubbandContextInit(&state, codec, entropy);
+    return JxrLpDecoderDecodeSubband(&state, macroblockX, macroblockY);
 }
