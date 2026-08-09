@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include "JxrManagedBitIO.h"
 #ifdef _WIN32
 #include <direct.h>
 #include <io.h>
@@ -30,6 +31,22 @@ static int files_equal(const char* left, const char* right)
 }
 
 static int test_smoke(void) { return 1; }
+
+static int test_bit_io_vectors(void)
+{
+    U8 data[8] = {0}; U32 value; JxrBitWriter writer; JxrBitReader reader;
+    JxrBitWriterInit(&writer, data, sizeof(data));
+    if (!JxrBitWriterWrite(&writer, 5, 3) || !JxrBitWriterWrite(&writer, 17, 5) ||
+        !JxrBitWriterWrite(&writer, 0xabcd, 16) || !JxrBitWriterWrite(&writer, 15, 4) ||
+        !JxrBitWriterFlush(&writer) || JxrBitWriterBytes(&writer) != 4 ||
+        data[0] != 0xb1 || data[1] != 0xab || data[2] != 0xcd || data[3] != 0xf0) return 0;
+    JxrBitReaderInit(&reader, data, 4);
+    return JxrBitReaderRead(&reader, 3, &value) && value == 5 &&
+        JxrBitReaderRead(&reader, 5, &value) && value == 17 &&
+        JxrBitReaderRead(&reader, 16, &value) && value == 0xabcd &&
+        JxrBitReaderRead(&reader, 4, &value) && value == 15 &&
+        !JxrBitReaderRead(&reader, 16, &value);
+}
 
 static int test_minimal_fixture(void)
 {
@@ -79,6 +96,7 @@ int main(int argc, char** argv)
     size_t i; int failed = 0;
     JxrTestCase tests[] = {
         { "smoke", test_smoke },
+        { "bit_io_vectors", test_bit_io_vectors },
         { "minimal_fixture", test_minimal_fixture },
         { "minimal_round_trip", test_minimal_round_trip },
         { "bit_ranges", test_bit_ranges },
