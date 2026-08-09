@@ -3,6 +3,7 @@
 #include "JxrAdaptiveHuffman.h"
 #include "JxrAdaptiveScan.h"
 #include "JxrCoefficientBuffer.h"
+#include "JxrCbpPredictor.h"
 #include "JxrEntropyBlockDecoder.h"
 #include "JxrEntropyLevelDecoder.h"
 #include "JxrEntropyReader.h"
@@ -433,7 +434,7 @@ Int JxrHpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
 
 
     JxrHpDecoderDecodeCbp(state);
-    predCBPDec(codec, state->entropy);
+    JxrCbpPredictorDecode(state);
 
     if (JxrHpDecoderDecodeCoefficients(codec, state->entropy, macroblockX, macroblockY,
         state->highpassInput, state->flexbitsInput) != ICERR_OK)

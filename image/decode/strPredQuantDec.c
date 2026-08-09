@@ -27,6 +27,7 @@
 //*@@@---@@@@******************************************************************
 
 #include "strcodec.h"
+#include "JxrCbpPredictor.h"
 
 #define DEQUANT(iRaw, iQP) ((iRaw) * (iQP))
 
@@ -340,6 +341,21 @@ static int NumOnes(int i)
 /*  2  3  6  7 */
 /*  8  9 12 13 */
 /* 10 11 14 15 */
+static Int JxrCbpPredictorGetCurrentCbp(CWMImageStrCodec* codec, size_t channel, size_t column)
+{
+    return codec->PredInfo[channel][column].iCBP;
+}
+
+static Int JxrCbpPredictorGetPreviousCbp(CWMImageStrCodec* codec, size_t channel, size_t column)
+{
+    return codec->PredInfoPrevRow[channel][column].iCBP;
+}
+
+static Void JxrCbpPredictorSetCurrentCbp(CWMImageStrCodec* codec, size_t channel,
+    size_t column, Int cbp)
+{
+    codec->PredInfo[channel][column].iCBP = cbp;
+}
 static Int predCBPCDec(CWMImageStrCodec * pSC, Int iCBP, size_t mbX, size_t mbY, size_t c, CCBPModel *pModel)
 {
     Int iNOrig;
@@ -354,12 +370,12 @@ static Int predCBPCDec(CWMImageStrCodec * pSC, Int iCBP, size_t mbX, size_t mbY,
                 iCBP ^= 1;
             }
             else {
-                Int iTopCBP  = (pSC->PredInfoPrevRow[c] + mbX)->iCBP;
+                Int iTopCBP  = JxrCbpPredictorGetPreviousCbp(pSC, c, mbX);
                 iCBP ^= (iTopCBP >> 10) & 1; // left: top(10) => 0
             }
         }
         else {
-            Int iLeftCBP = (pSC->PredInfo[c] + mbX - 1)->iCBP;
+            Int iLeftCBP = JxrCbpPredictorGetCurrentCbp(pSC, c, mbX - 1);
             iCBP ^= ((iLeftCBP >> 5) & 1); // left(5) => 0
         }
 
@@ -414,12 +430,12 @@ static Int predCBPC420Dec(CWMImageStrCodec * pSC, Int iCBP, size_t mbX, size_t m
                 iCBP ^= 1;
             }
             else {
-                Int iTopCBP  = (pSC->PredInfoPrevRow[c] + mbX)->iCBP;
+                Int iTopCBP  = JxrCbpPredictorGetPreviousCbp(pSC, c, mbX);
                 iCBP ^= (iTopCBP >> 2) & 1; // left: top(2) => 0
             }
         }
         else {
-            Int iLeftCBP = (pSC->PredInfo[c] + mbX - 1)->iCBP;
+            Int iLeftCBP = JxrCbpPredictorGetCurrentCbp(pSC, c, mbX - 1);
             iCBP ^= ((iLeftCBP >> 1) & 1); // left(1) => 0
         }
 
@@ -469,12 +485,12 @@ static Int predCBPC422Dec(CWMImageStrCodec * pSC, Int iCBP, size_t mbX, size_t m
                 iCBP ^= 1;
             }
             else {
-                Int iTopCBP  = (pSC->PredInfoPrevRow[c] + mbX)->iCBP;
+                Int iTopCBP  = JxrCbpPredictorGetPreviousCbp(pSC, c, mbX);
                 iCBP ^= (iTopCBP >> 6) & 1; // left: top(6) => 0
             }
         }
         else {
-            Int iLeftCBP = (pSC->PredInfo[c] + mbX - 1)->iCBP;
+            Int iLeftCBP = JxrCbpPredictorGetCurrentCbp(pSC, c, mbX - 1);
             iCBP ^= ((iLeftCBP >> 1) & 1); // left(1) => 0
         }
         
@@ -515,25 +531,47 @@ static Int predCBPC422Dec(CWMImageStrCodec * pSC, Int iCBP, size_t mbX, size_t m
 
 
 /* Coded Block Pattern (CBP) prediction */
-Void predCBPDec(CWMImageStrCodec *pSC, CCodingContext *pContext)
+Void JxrCbpPredictorDecode(JxrDecoderSubbandContext* state)
 {
-    const COLORFORMAT cf = pSC->m_param.cfColorFormat;
-    const size_t iChannels = (cf == YUV_420 || cf == YUV_422) ? 1 : pSC->m_param.cNumChannels;
-    size_t i, mbX = pSC->cColumn, mbY = pSC->cRow;
-    CWMIMBInfo *pMBInfo = &(pSC->MBInfo);
+    CWMImageStrCodec* codec = state->codec;
+    const COLORFORMAT cf = codec->m_param.cfColorFormat;
+    const size_t channelCount = (cf == YUV_420 || cf == YUV_422) ? 1 : codec->m_param.cNumChannels;
+    size_t channel;
+    const size_t macroblockX = codec->cColumn;
+    const size_t macroblockY = codec->cRow;
 
-    for (i = 0; i < iChannels; i++) {
-        (pSC->PredInfo[i] + mbX)->iCBP = pMBInfo->iCBP[i] = predCBPCDec(pSC, pMBInfo->iDiffCBP[i], mbX, mbY, i, &pContext->m_aCBPModel); // Y Channel
+    for (channel = 0; channel < channelCount; ++channel) {
+        Int cbp = predCBPCDec(codec, state->differentialCbp[channel], macroblockX, macroblockY,
+            channel, state->highpassCbpModel);
+        state->cbp[channel] = cbp;
+        JxrCbpPredictorSetCurrentCbp(codec, channel, macroblockX, cbp);
     }
 
-    if (cf == YUV_422){
-        (pSC->PredInfo[1] + mbX)->iCBP = pMBInfo->iCBP[1] = predCBPC422Dec(pSC, pMBInfo->iDiffCBP[1], mbX, mbY, 1, &pContext->m_aCBPModel);
-        (pSC->PredInfo[2] + mbX)->iCBP = pMBInfo->iCBP[2] = predCBPC422Dec(pSC, pMBInfo->iDiffCBP[2], mbX, mbY, 2, &pContext->m_aCBPModel);
+    if (cf == YUV_422) {
+        Int cbpU = predCBPC422Dec(codec, state->differentialCbp[1], macroblockX, macroblockY,
+            1, state->highpassCbpModel);
+        Int cbpV = predCBPC422Dec(codec, state->differentialCbp[2], macroblockX, macroblockY,
+            2, state->highpassCbpModel);
+        state->cbp[1] = cbpU;
+        state->cbp[2] = cbpV;
+        JxrCbpPredictorSetCurrentCbp(codec, 1, macroblockX, cbpU);
+        JxrCbpPredictorSetCurrentCbp(codec, 2, macroblockX, cbpV);
     }
     else if (cf == YUV_420) {
-        (pSC->PredInfo[1] + mbX)->iCBP = pMBInfo->iCBP[1] = predCBPC420Dec(pSC, pMBInfo->iDiffCBP[1], mbX, mbY, 1, &pContext->m_aCBPModel);
-        (pSC->PredInfo[2] + mbX)->iCBP = pMBInfo->iCBP[2] = predCBPC420Dec(pSC, pMBInfo->iDiffCBP[2], mbX, mbY, 2, &pContext->m_aCBPModel);
+        Int cbpU = predCBPC420Dec(codec, state->differentialCbp[1], macroblockX, macroblockY,
+            1, state->highpassCbpModel);
+        Int cbpV = predCBPC420Dec(codec, state->differentialCbp[2], macroblockX, macroblockY,
+            2, state->highpassCbpModel);
+        state->cbp[1] = cbpU;
+        state->cbp[2] = cbpV;
+        JxrCbpPredictorSetCurrentCbp(codec, 1, macroblockX, cbpU);
+        JxrCbpPredictorSetCurrentCbp(codec, 2, macroblockX, cbpV);
     }
-    //}
 }
 
+Void predCBPDec(CWMImageStrCodec* codec, CCodingContext* entropy)
+{
+    JxrDecoderSubbandContext state;
+    JxrDecoderSubbandContextInit(&state, codec, entropy);
+    JxrCbpPredictorDecode(&state);
+}
