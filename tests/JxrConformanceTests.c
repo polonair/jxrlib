@@ -8,6 +8,7 @@
 #include "JxrAdaptiveScan.h"
 #include "JxrCoefficientBuffer.h"
 #include "JxrHuffmanDecoder.h"
+#include "JxrLpResidualDecoder.h"
 #ifdef _WIN32
 #include <direct.h>
 #include <io.h>
@@ -133,6 +134,14 @@ static int test_huffman_decoder_vectors(void)
         JxrHuffmanDecoderDecodeSymbol(&table, &input) == 6 && input.cBitsUsed == 6;
 }
 
+static int test_lp_residual_vectors(void)
+{
+    return JxrLpResidualDecoderCombineNonZero(1, 2, 2) == 6 &&
+        JxrLpResidualDecoderCombineNonZero(-1, 2, 2) == -6 &&
+        JxrLpResidualDecoderCombineSignedMagnitude(2, 1, 2) == 9 &&
+        JxrLpResidualDecoderCombineSignedMagnitude(-2, 1, 2) == -9;
+}
+
 static int test_minimal_fixture(void)
 {
     return files_equal("minimal-profile/minimal-gray-16x16.bmp",
@@ -232,6 +241,7 @@ int main(int argc, char** argv)
         { "adaptive_scan_vectors", test_adaptive_scan_vectors },
         { "coefficient_buffer_vectors", test_coefficient_buffer_vectors },
         { "huffman_decoder_vectors", test_huffman_decoder_vectors },
+        { "lp_residual_vectors", test_lp_residual_vectors },
         { "minimal_fixture", test_minimal_fixture },
         { "minimal_round_trip", test_minimal_round_trip },
         { "real_image_round_trip", test_real_image_round_trip },

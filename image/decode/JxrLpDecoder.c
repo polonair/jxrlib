@@ -1,9 +1,10 @@
-﻿#include "JxrLpDecoder.h"
+#include "JxrLpDecoder.h"
 #include "decode.h"
 #include "JxrAdaptiveScan.h"
 #include "JxrCoefficientBuffer.h"
 #include "JxrEntropyBlockDecoder.h"
 #include "JxrEntropyReader.h"
+#include "JxrLpResidualDecoder.h"
 
 U8 decodeQPIndex(BitIOInfo* input, U8 bitCount);
 
@@ -20,9 +21,6 @@ Int JxrLpDecoderDecodeMacroblock(CWMImageStrCodec * pSC, CCodingContext *pContex
     Int aRLCoeffs[32], iNumNonzero = 0, iIndex = 0;
     Int aLaplacianMean[2] = { 0, 0}, *pLM = aLaplacianMean;
     Int iChannel, iCBP = 0;
-#ifndef ARMOPT_BITIO    // ARM opt always uses 32-bit version of getBits
-    U32 (*getBits)(BitIOInfo* pIO, U32 cBits) = JxrEntropyReaderRead;
-#endif
     CWMIMBInfo * pMBInfo = &pSC->MBInfo;
     I32 *aDC[MAX_CHANNELS];
 
@@ -78,14 +76,8 @@ Int JxrLpDecoderDecodeMacroblock(CWMImageStrCodec * pSC, CCodingContext *pContex
     }
     else { /** 1 or N channel **/
         for (iChannel = 0; iChannel < iChannels; iChannel++)
-            iCBP |= (getBits (pIO, 1) << iChannel);
+            iCBP |= ((Int)JxrLpResidualDecoderReadBits(pIO, 1) << iChannel);
     }
-
-#ifndef ARMOPT_BITIO    // ARM opt always uses 32-bit version of getBits
-    if (pContext->m_aModelLP.m_iFlcBits[0] > 14 || pContext->m_aModelLP.m_iFlcBits[1] > 14) {
-        getBits = getBit32;
-    }
-#endif
 
     for (iChannel = 0; iChannel < iFullPlanes; iChannel++) {
         JxrCoefficientBuffer coefficients = JxrCoefficientBufferCreate(aDC[iChannel], 0, 16);
@@ -131,65 +123,15 @@ Int JxrLpDecoderDecodeMacroblock(CWMImageStrCodec * pSC, CCodingContext *pContex
         if (iModelBits) {
             if ((cf == YUV_420 || cf == YUV_422) && iChannel) {
                 for (k = 1; k < (cf == YUV_420 ? 4 : 8); k++) {
-                    if (aDC[1][k] > 0) {
-                        aDC[1][k] <<= iModelBits;
-                        aDC[1][k] += getBits (pIO, iModelBits);
-                    }
-                    else if (aDC[1][k] < 0) {
-                        aDC[1][k] <<= iModelBits;
-                        aDC[1][k] -= getBits (pIO, iModelBits);
-                    }
-                    else {
-                        aDC[1][k] = getBits (pIO, iModelBits);
-                        if (aDC[1][k] && JxrEntropyReaderReadFlag(pIO))
-                            aDC[1][k] = -aDC[1][k];
-                    }
-
-                    if (aDC[2][k] > 0) {
-                        aDC[2][k] <<= iModelBits;
-                        aDC[2][k] += getBits (pIO, iModelBits);
-                    }
-                    else if (aDC[2][k] < 0) {
-                        aDC[2][k] <<= iModelBits;
-                        aDC[2][k] -= getBits (pIO, iModelBits);
-                    }
-                    else {
-                        aDC[2][k] = getBits (pIO, iModelBits);
-                        if (aDC[2][k] && JxrEntropyReaderReadFlag(pIO))
-                            aDC[2][k] = -aDC[2][k];
-                    }
+                    aDC[1][k] = JxrLpResidualDecoderDecodeChromaCoefficient(aDC[1][k], pIO, iModelBits);
+                    aDC[2][k] = JxrLpResidualDecoderDecodeChromaCoefficient(aDC[2][k], pIO, iModelBits);
                 }
             }
             else {
-#ifdef WIN32
-                const Int iMask = (1 << iModelBits) - 1;
-#endif // WIN32
                 for (k = 1; k < 16; k++) {
                     PixelI coefficient = JxrCoefficientBufferGet(&coefficients, k);
-#ifdef WIN32
-                    if (coefficient) {
-                        Int r1 = _rotl(coefficient, iModelBits);
-                        coefficient = (r1 ^ getBits(pIO, iModelBits)) - (r1 & iMask);
-                        JxrCoefficientBufferSet(&coefficients, k, coefficient);
-                    }
-#else // WIN32
-                    if (coefficient > 0) {
-                        coefficient <<= iModelBits;
-                        coefficient += getBits (pIO, iModelBits);
-                        JxrCoefficientBufferSet(&coefficients, k, coefficient);
-                    }
-                    else if (coefficient < 0) {
-                        coefficient <<= iModelBits;
-                        coefficient -= getBits (pIO, iModelBits);
-                        JxrCoefficientBufferSet(&coefficients, k, coefficient);
-                    }
-#endif // WIN32
-                    else {
-                        Int r1 = JxrEntropyReaderPeek(pIO, iModelBits + 1);
-                        coefficient = ((r1 >> 1) ^ (-(r1 & 1))) + (r1 & 1);
-                        JxrCoefficientBufferSet(&coefficients, k, coefficient);
-                        JxrEntropyReaderConsume(pIO, iModelBits + (coefficient != 0));
-                    }
+                    JxrCoefficientBufferSet(&coefficients, k,
+                        JxrLpResidualDecoderDecodeNormalCoefficient(coefficient, pIO, iModelBits));
                 }
             }
         }
