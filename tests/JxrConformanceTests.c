@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include "JxrManagedBitIO.h"
 #include "strcodec.h"
+#include "JxrEntropyState.h"
 #ifdef _WIN32
 #include <direct.h>
 #include <io.h>
@@ -60,6 +61,16 @@ static int test_adaptive_state(void)
     UpdateModelMB(Y_ONLY, 1, mean, &context.m_aModelDC);
     UpdateModelMB(Y_ONLY, 1, mean, &context.m_aModelLP);
     return context.m_aModelDC.m_iFlcBits[0] == 7 && context.m_aModelLP.m_iFlcBits[0] == 3;
+}
+
+static int test_explicit_entropy_context(void)
+{
+    CCodingContext native; JxrEntropyContext state;
+    memset(&native, 0, sizeof(native)); JxrEntropyContextInit(&state, &native);
+    JxrEntropyContextReset(&state);
+    return state.native == &native && state.dcModel == &native.m_aModelDC &&
+        state.lpModel == &native.m_aModelLP && state.acModel == &native.m_aModelAC &&
+        state.lowpassScan[1].uScan == 1 && state.dcModel->m_iFlcBits[0] == 8;
 }
 
 static int test_minimal_fixture(void)
@@ -133,6 +144,7 @@ int main(int argc, char** argv)
         { "smoke", test_smoke },
         { "bit_io_vectors", test_bit_io_vectors },
         { "adaptive_state", test_adaptive_state },
+        { "explicit_entropy_context", test_explicit_entropy_context },
         { "minimal_fixture", test_minimal_fixture },
         { "minimal_round_trip", test_minimal_round_trip },
         { "bit_ranges", test_bit_ranges },
