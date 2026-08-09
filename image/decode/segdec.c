@@ -28,6 +28,7 @@
 
 #include "strcodec.h"
 #include "decode.h"
+#include "JxrEntropyReader.h"
 
 #ifdef MEM_TRACE
 #define TRACE_MALLOC    1
@@ -50,42 +51,21 @@ static Int DecodeSignificantAbsLevel (struct CAdaptiveHuffman *pAHexpt, BitIOInf
 #endif // X86OPT_INLINE
 
 //================================================================
-// Memory access functions
+// Decoder bit reader compatibility helpers
 //================================================================
-static U32 _FORCEINLINE _load4(void* pv)
+static U32 _peekBit16(BitIOInfo* pIO, U32 cBits)
 {
-#ifdef _BIG__ENDIAN_
-    return (*(U32*)pv);
-#else // _BIG__ENDIAN_
-#if defined(_M_IA64) || defined(_ARM_)
-    U32  v;
-    v = ((U16 *) pv)[0];
-    v |= ((U32)((U16 *) pv)[1]) << 16;
-    return _byteswap_ulong(v);
-#else // _M_IA64
-    return _byteswap_ulong(*(U32*)pv);
-#endif // _M_IA64
-#endif // _BIG__ENDIAN_
+    return JxrEntropyReaderPeek(pIO, cBits);
 }
 
-static _FORCEINLINE U32 _peekBit16(BitIOInfo* pIO, U32 cBits)
+static Void _flushBit16(BitIOInfo* pIO, U32 cBits)
 {
-    PEEKBIT16(pIO, cBits);
-    // masking is not needed here because shift of unsigned int is implemented as a logical shift (SHR)!
+    JxrEntropyReaderConsume(pIO, cBits);
 }
 
-#define LOAD16 _load4
-static _FORCEINLINE U32 _flushBit16(BitIOInfo* pIO, U32 cBits)
+static U32 _getBit16(BitIOInfo* pIO, U32 cBits)
 {
-    FLUSHBIT16(pIO, cBits);
-}
-
-static _FORCEINLINE U32 _getBit16(BitIOInfo* pIO, U32 cBits)
-{
-    U32 uiRet = _peekBit16(pIO, cBits);
-    _flushBit16(pIO, cBits);
-
-    return uiRet;
+    return JxrEntropyReaderRead(pIO, cBits);
 }
 
 #define SIGN_BIT(TypeOrValue) (((UInt) 1) << (8 * sizeof (TypeOrValue) - 1))
@@ -107,52 +87,20 @@ Int getHuff(const short *pDecodeTable, BitIOInfo* pIO)
     return (iSymbolHuff);
 }
 
-#if 1
-static _FORCEINLINE U32 _getBool16(BitIOInfo* pIO)
+static U32 _getBool16(BitIOInfo* pIO)
 {
-    U32 uiRet = pIO->uiAccumulator >> 31;//_peekBit16(pIO, 1);
-    //_flushBit16(pIO, 1);
-    pIO->cBitsUsed++;
-    if (pIO->cBitsUsed < 16) {
-        pIO->uiAccumulator <<= 1;
-    }
-    else {
-        pIO->pbCurrent = MASKPTR(pIO->pbCurrent + ((pIO->cBitsUsed >> 3)/* & 2*/), pIO->iMask);
-        pIO->cBitsUsed &= 16 - 1;
-        pIO->uiAccumulator = LOAD16(pIO->pbCurrent) << pIO->cBitsUsed;
-    }
-
-    return uiRet;
+    return JxrEntropyReaderReadFlag(pIO);
 }
 
-static _FORCEINLINE I32 _getSign(BitIOInfo* pIO)
+static I32 _getSign(BitIOInfo* pIO)
 {
-    I32 uiRet = (int) pIO->uiAccumulator >> 31;//_peekBit16(pIO, 1);
-    //_flushBit16(pIO, 1);
-    pIO->cBitsUsed++;
-    if (pIO->cBitsUsed < 16) {
-        pIO->uiAccumulator <<= 1;
-    }
-    else {
-        pIO->pbCurrent = MASKPTR(pIO->pbCurrent + ((pIO->cBitsUsed >> 3)/* & 2*/), pIO->iMask);
-        pIO->cBitsUsed &= 16 - 1;
-        pIO->uiAccumulator = LOAD16(pIO->pbCurrent) << pIO->cBitsUsed;
-    }
-
-    return uiRet;
+    return JxrEntropyReaderReadSign(pIO);
 }
-#else
-#define _getBool16(x)   _getBit16((x),1)
-#define _getSign(x)   (-_getBit16((x),1))
-#endif
 
 /** this function returns cBits if zero is read, or a signed value if first cBits are not all zero **/
-static _FORCEINLINE I32 _getBit16s(BitIOInfo* pIO, U32 cBits)
+static I32 _getBit16s(BitIOInfo* pIO, U32 cBits)
 {
-    I32 iRet = (I32)_peekBit16(pIO, cBits + 1);
-    iRet = ((iRet >> 1) ^ (-(iRet & 1))) + (iRet & 1);
-    _flushBit16(pIO, cBits + (iRet != 0));
-    return iRet;
+    return JxrEntropyReaderReadSignedResidual(pIO, cBits);
 }
 
 /*************************************************************************
