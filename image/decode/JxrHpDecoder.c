@@ -15,20 +15,21 @@ U8 decodeQPIndex(BitIOInfo* input, U8 bitCount);
 /*************************************************************************
     DecodeCBP
 *************************************************************************/
-static Void JxrHpDecoderDecodeCbp(CWMImageStrCodec * pSC, CCodingContext *pContext)
+Void JxrHpDecoderDecodeCbp(JxrDecoderSubbandContext* state)
 {
-    BitIOInfo* pIO = pContext->m_pIOAC;
-    const COLORFORMAT cf = pSC->m_param.cfColorFormat;
-    const Int iChannel = (cf == NCOMPONENT || cf == CMYK) ? (Int) pSC->m_param.cNumChannels : 1;
+    CWMImageStrCodec* codec = state->codec;
+    BitIOInfo* pIO = state->highpassInput;
+    const COLORFORMAT cf = codec->m_param.cfColorFormat;
+    const Int iChannel = (cf == NCOMPONENT || cf == CMYK) ? (Int) codec->m_param.cNumChannels : 1;
     Int iCBPCY, iCBPCU , iCBPCV;
     Int k, iBlock, i;
     Int iNumCBP;
     Bool bIsChroma;
-    CAdaptiveHuffman *pAHCBP = pContext->m_pAdaptHuffCBPCY;
-    CAdaptiveHuffman *pAHCBP1 = pContext->m_pAdaptHuffCBPCY1;
-    CAdaptiveHuffman *pAHex1 = pContext->m_pAHexpt[1];
+    CAdaptiveHuffman* pAHCBP = state->cbpHuffman;
+    CAdaptiveHuffman* pAHCBP1 = state->cbpCountHuffman;
+    CAdaptiveHuffman* pAHex1 = state->huffmanStates[1];
 
-    readIS_L1(pSC, pIO);
+    readIS_L1(codec, pIO);
 
     for (i = 0; i < iChannel; i++) {
 
@@ -165,10 +166,10 @@ static Void JxrHpDecoderDecodeCbp(CWMImageStrCodec * pSC, CCodingContext *pConte
             }
         }
 
-        pSC->MBInfo.iDiffCBP[i] = iCBPCY;
+        state->differentialCbp[i] = iCBPCY;
         if (cf == YUV_420 || cf == YUV_444 || cf == YUV_422) {
-            pSC->MBInfo.iDiffCBP[1] = iCBPCU;
-            pSC->MBInfo.iDiffCBP[2] = iCBPCV;
+            state->differentialCbp[1] = iCBPCU;
+            state->differentialCbp[2] = iCBPCV;
         }
     }
 }
@@ -413,6 +414,9 @@ static Int JxrHpDecoderDecodeCoefficients (CWMImageStrCodec * pSC, CCodingContex
 Int JxrHpDecoderDecodeMacroblock(CWMImageStrCodec *pSC, CCodingContext *pContext,
                       Int iMBX, Int iMBY)
 {
+    JxrDecoderSubbandContext state;
+    JxrDecoderSubbandContextInit(&state, pSC, pContext);
+
     /** reset adaptive scan totals **/
     if (pSC->m_bResetRGITotals) {
         JxrAdaptiveScanResetTotals(pContext->m_aScanHoriz, 16);
@@ -427,7 +431,7 @@ Int JxrHpDecoderDecodeMacroblock(CWMImageStrCodec *pSC, CCodingContext *pContext
         pSC->MBInfo.iQIndexHP = pSC->MBInfo.iQIndexLP;
 
 
-    JxrHpDecoderDecodeCbp(pSC, pContext);
+    JxrHpDecoderDecodeCbp(&state);
     predCBPDec(pSC, pContext);
 
     if (JxrHpDecoderDecodeCoefficients(pSC, pContext, iMBX, iMBY,
