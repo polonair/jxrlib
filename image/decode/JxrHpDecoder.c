@@ -442,3 +442,8 @@ Int JxrHpDecoderDecodeMacroblock(CWMImageStrCodec *pSC, CCodingContext *pContext
 ErrorExit:
     return ICERR_ERROR;
 }
+
+Int JxrHpDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, Int macroblockY)
+{
+    return JxrHpDecoderDecodeMacroblock(state->codec, state->entropy, macroblockX, macroblockY);
+}

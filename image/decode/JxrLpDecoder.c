@@ -149,3 +149,8 @@ Int JxrLpDecoderDecodeMacroblock(CWMImageStrCodec * pSC, CCodingContext *pContex
 
     return ICERR_OK;
 }
+
+Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, Int macroblockY)
+{
+    return JxrLpDecoderDecodeMacroblock(state->codec, state->entropy, macroblockX, macroblockY);
+}

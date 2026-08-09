@@ -9,6 +9,7 @@
 #include "JxrCoefficientBuffer.h"
 #include "JxrHuffmanDecoder.h"
 #include "JxrLpResidualDecoder.h"
+#include "JxrDecoderSubbandContext.h"
 #ifdef _WIN32
 #include <direct.h>
 #include <io.h>
@@ -142,6 +143,29 @@ static int test_lp_residual_vectors(void)
         JxrLpResidualDecoderCombineSignedMagnitude(-2, 1, 2) == -9;
 }
 
+static int test_decoder_subband_context(void)
+{
+    CWMImageStrCodec codec;
+    CCodingContext entropy;
+    BitIOInfo dcInput, lowpassInput, highpassInput, flexbitsInput;
+    JxrDecoderSubbandContext state;
+    memset(&codec, 0, sizeof(codec));
+    memset(&entropy, 0, sizeof(entropy));
+    entropy.m_pIODC = &dcInput;
+    entropy.m_pIOLP = &lowpassInput;
+    entropy.m_pIOAC = &highpassInput;
+    entropy.m_pIOFL = &flexbitsInput;
+    JxrDecoderSubbandContextInit(&state, &codec, &entropy);
+    return state.codec == &codec && state.entropy == &entropy &&
+        state.dcInput == &dcInput && state.lowpassInput == &lowpassInput &&
+        state.highpassInput == &highpassInput && state.flexbitsInput == &flexbitsInput &&
+        state.dcModel == &entropy.m_aModelDC && state.lowpassModel == &entropy.m_aModelLP &&
+        state.highpassModel == &entropy.m_aModelAC && state.huffmanStates == entropy.m_pAHexpt &&
+        state.lowpassScan == entropy.m_aScanLowpass && state.horizontalScan == entropy.m_aScanHoriz &&
+        state.verticalScan == entropy.m_aScanVert && state.cbp == codec.MBInfo.iCBP &&
+        state.differentialCbp == codec.MBInfo.iDiffCBP;
+}
+
 static int test_minimal_fixture(void)
 {
     return files_equal("minimal-profile/minimal-gray-16x16.bmp",
@@ -242,6 +266,7 @@ int main(int argc, char** argv)
         { "coefficient_buffer_vectors", test_coefficient_buffer_vectors },
         { "huffman_decoder_vectors", test_huffman_decoder_vectors },
         { "lp_residual_vectors", test_lp_residual_vectors },
+        { "decoder_subband_context", test_decoder_subband_context },
         { "minimal_fixture", test_minimal_fixture },
         { "minimal_round_trip", test_minimal_round_trip },
         { "real_image_round_trip", test_real_image_round_trip },

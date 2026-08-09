@@ -182,6 +182,7 @@
     <ClCompile Include="..\decode\JxrHpDecoder.c" />
     <ClCompile Include="..\decode\JxrHuffmanDecoder.c" />
     <ClCompile Include="..\decode\JxrLpResidualDecoder.c" />
+    <ClCompile Include="..\decode\JxrDecoderSubbandContext.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\sys\common.h" />

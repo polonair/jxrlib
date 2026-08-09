@@ -66,7 +66,9 @@ U8 decodeQPIndex(BitIOInfo* input, U8 bitCount)
 *************************************************************************/
 Int DecodeMacroblockLowpass(CWMImageStrCodec* pSC, CCodingContext* pContext, Int iMBX, Int iMBYdummy)
 {
-    return JxrLpDecoderDecodeMacroblock(pSC, pContext, iMBX, iMBYdummy);
+    JxrDecoderSubbandContext state;
+    JxrDecoderSubbandContextInit(&state, pSC, pContext);
+    return JxrLpDecoderDecodeSubband(&state, iMBX, iMBYdummy);
 }
 
 /*************************************************************************
@@ -91,7 +93,9 @@ Int DecodeMacroblockLowpass(CWMImageStrCodec* pSC, CCodingContext* pContext, Int
 *************************************************************************/
 Int DecodeMacroblockDC(CWMImageStrCodec* pSC, CCodingContext* pContext, Int iMBX, Int iMBY)
 {
-    return JxrDcDecoderDecodeMacroblock(pSC, pContext, iMBX, iMBY);
+    JxrDecoderSubbandContext state;
+    JxrDecoderSubbandContextInit(&state, pSC, pContext);
+    return JxrDcDecoderDecodeSubband(&state, iMBX, iMBY);
 }
 
 /*************************************************************************
@@ -99,7 +103,9 @@ Int DecodeMacroblockDC(CWMImageStrCodec* pSC, CCodingContext* pContext, Int iMBX
 *************************************************************************/
 Int DecodeMacroblockHighpass(CWMImageStrCodec* pSC, CCodingContext* pContext, Int iMBX, Int iMBY)
 {
-    return JxrHpDecoderDecodeMacroblock(pSC, pContext, iMBX, iMBY);
+    JxrDecoderSubbandContext state;
+    JxrDecoderSubbandContextInit(&state, pSC, pContext);
+    return JxrHpDecoderDecodeSubband(&state, iMBX, iMBY);
 }
 
 /*************************************************************************

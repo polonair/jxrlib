@@ -1,9 +1,10 @@
 #ifndef JXR_HP_DECODER_H
 #define JXR_HP_DECODER_H
 
-#include "strcodec.h"
+#include "JxrDecoderSubbandContext.h"
 
 Int JxrHpDecoderDecodeMacroblock(CWMImageStrCodec* codec, CCodingContext* context,
     Int macroblockX, Int macroblockY);
+Int JxrHpDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, Int macroblockY);
 
 #endif
