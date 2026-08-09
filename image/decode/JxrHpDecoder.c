@@ -411,35 +411,40 @@ static Int JxrHpDecoderDecodeCoefficients (CWMImageStrCodec * pSC, CCodingContex
 }
 
 
-Int JxrHpDecoderDecodeMacroblock(CWMImageStrCodec *pSC, CCodingContext *pContext,
-                      Int iMBX, Int iMBY)
+Int JxrHpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
+    Int macroblockX, Int macroblockY)
 {
-    JxrDecoderSubbandContext state;
-    JxrDecoderSubbandContextInit(&state, pSC, pContext);
+    CWMImageStrCodec* codec = state->codec;
+    CWMITile* tile = codec->pTile + codec->cTileColumn;
+    Int tableIndex;
 
     /** reset adaptive scan totals **/
-    if (pSC->m_bResetRGITotals) {
-        JxrAdaptiveScanResetTotals(pContext->m_aScanHoriz, 16);
-        JxrAdaptiveScanResetTotals(pContext->m_aScanVert, 16);
+    if (codec->m_bResetRGITotals) {
+        JxrAdaptiveScanResetTotals(state->horizontalScan, 16);
+        JxrAdaptiveScanResetTotals(state->verticalScan, 16);
     }
-    if((pSC->WMISCP.bfBitstreamFormat != SPATIAL) && (pSC->pTile[pSC->cTileColumn].cBitsHP > 0)) { // MB-based HP QP index
-        pSC->MBInfo.iQIndexHP = decodeQPIndex(pContext->m_pIOAC, pSC->pTile[pSC->cTileColumn].cBitsHP);
-        if (pSC->MBInfo.iQIndexHP >= pSC->pTile[pSC->cTileColumn].cNumQPHP)
+    if((codec->WMISCP.bfBitstreamFormat != SPATIAL) && (tile->cBitsHP > 0)) { // MB-based HP QP index
+        codec->MBInfo.iQIndexHP = decodeQPIndex(state->highpassInput, tile->cBitsHP);
+        if (codec->MBInfo.iQIndexHP >= tile->cNumQPHP)
             goto ErrorExit;
     }
-    else if(pSC->pTile[pSC->cTileColumn].cBitsHP == 0 && pSC->pTile[pSC->cTileColumn].cNumQPHP > 1) // use LP QP
-        pSC->MBInfo.iQIndexHP = pSC->MBInfo.iQIndexLP;
+    else if(tile->cBitsHP == 0 && tile->cNumQPHP > 1) // use LP QP
+        codec->MBInfo.iQIndexHP = codec->MBInfo.iQIndexLP;
 
 
-    JxrHpDecoderDecodeCbp(&state);
-    predCBPDec(pSC, pContext);
+    JxrHpDecoderDecodeCbp(state);
+    predCBPDec(codec, state->entropy);
 
-    if (JxrHpDecoderDecodeCoefficients(pSC, pContext, iMBX, iMBY,
-        pContext->m_pIOAC, pContext->m_pIOFL) != ICERR_OK)
+    if (JxrHpDecoderDecodeCoefficients(codec, state->entropy, macroblockX, macroblockY,
+        state->highpassInput, state->flexbitsInput) != ICERR_OK)
         goto ErrorExit;
 
-    if (pSC->m_bResetContext) {
-        AdaptHighpassDec(pContext);
+    if (codec->m_bResetContext) {
+        JxrAdaptiveHuffmanAdapt(state->cbpHuffman);
+        JxrAdaptiveHuffmanAdapt(state->cbpCountHuffman);
+        for (tableIndex = 0; tableIndex < CONTEXTX; ++tableIndex) {
+            JxrAdaptiveHuffmanAdapt(state->huffmanStates[tableIndex + CONTEXTX + CTDC]);
+        }
     }
 
     return ICERR_OK;
@@ -447,7 +452,10 @@ ErrorExit:
     return ICERR_ERROR;
 }
 
-Int JxrHpDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, Int macroblockY)
+Int JxrHpDecoderDecodeMacroblock(CWMImageStrCodec* codec, CCodingContext* entropy,
+    Int macroblockX, Int macroblockY)
 {
-    return JxrHpDecoderDecodeMacroblock(state->codec, state->entropy, macroblockX, macroblockY);
+    JxrDecoderSubbandContext state;
+    JxrDecoderSubbandContextInit(&state, codec, entropy);
+    return JxrHpDecoderDecodeSubband(&state, macroblockX, macroblockY);
 }
