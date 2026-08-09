@@ -180,6 +180,7 @@
     <ClCompile Include="..\decode\JxrEntropyBlockDecoder.c" />
     <ClCompile Include="..\decode\JxrLpDecoder.c" />
     <ClCompile Include="..\decode\JxrHpDecoder.c" />
+    <ClCompile Include="..\decode\JxrHuffmanDecoder.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\sys\common.h" />

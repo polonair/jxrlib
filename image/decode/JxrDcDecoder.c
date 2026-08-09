@@ -3,6 +3,7 @@
 #include "JxrEntropyLevelDecoder.h"
 #include "JxrEntropyReader.h"
 #include "JxrAdaptiveHuffman.h"
+#include "JxrHuffmanDecoder.h"
 
 U8 decodeQPIndex(BitIOInfo* input, U8 bitCount);
 
@@ -60,7 +61,10 @@ Int JxrDcDecoderDecodeMacroblock(CWMImageStrCodec* codec, CCodingContext* contex
     }
     else {
         significantFlags = context->m_pAHexpt[2];
-        index = getHuff(significantFlags->m_hufDecTable, input);
+        {
+            JxrHuffmanTable table = JxrHuffmanTableCreate(significantFlags->m_hufDecTable);
+            index = JxrHuffmanDecoderDecodeSymbol(&table, input);
+        }
         luminance = index >> 2;
         chromaU = (index >> 1) & 1;
         chromaV = index & 1;

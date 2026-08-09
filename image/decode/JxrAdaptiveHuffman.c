@@ -1,20 +1,19 @@
 #include "JxrAdaptiveHuffman.h"
 #include "JxrEntropyReader.h"
-#include "decode.h"
+#include "JxrHuffmanDecoder.h"
 
 Int JxrAdaptiveHuffmanDecode(CAdaptiveHuffman* state, BitIOInfo* input)
 {
-    Int symbol = getHuff(state->m_hufDecTable, input);
+    JxrHuffmanTable table = JxrHuffmanTableCreate(state->m_hufDecTable);
+    Int symbol = JxrHuffmanDecoderDecodeSymbol(&table, input);
     JxrAdaptiveHuffmanObserve(state, symbol);
     return symbol;
 }
 
 Int JxrAdaptiveHuffmanDecodeShortTable(const short* table, BitIOInfo* input)
 {
-    Int encoded = table[JxrEntropyReaderPeek(input, HUFFMAN_DECODE_ROOT_BITS)];
-    assert(encoded >= 0);
-    JxrEntropyReaderConsume(input, encoded & ((1 << HUFFMAN_DECODE_ROOT_BITS_LOG) - 1));
-    return encoded >> HUFFMAN_DECODE_ROOT_BITS_LOG;
+    JxrHuffmanTable huffmanTable = JxrHuffmanTableCreate(table);
+    return JxrHuffmanDecoderDecodeShortSymbol(&huffmanTable, input);
 }
 
 Void JxrAdaptiveHuffmanObserve(CAdaptiveHuffman* state, Int symbol)

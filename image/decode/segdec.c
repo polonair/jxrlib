@@ -49,29 +49,6 @@ extern const int dctIndex[3][16];
 extern const int blkOffset[16];
 extern const int blkOffsetUV[4];
 
-/***********************************************************************************************************
-  Huffman decode (input is a fully built Huffman table)
-***********************************************************************************************************/
-static UInt JxrHuffmanDecodeTableBranchOffset(void)
-{
-    return 0x8000u;
-}
-
-Int getHuff(const short *pDecodeTable, BitIOInfo* pIO)
-{
-    Int iSymbol, iSymbolHuff;
-    iSymbol = pDecodeTable[JxrEntropyReaderPeek(pIO, HUFFMAN_DECODE_ROOT_BITS)];
-
-    JxrEntropyReaderConsume(pIO, iSymbol < 0 ? HUFFMAN_DECODE_ROOT_BITS : iSymbol & ((1 << HUFFMAN_DECODE_ROOT_BITS_LOG) - 1));
-	iSymbolHuff = iSymbol >> HUFFMAN_DECODE_ROOT_BITS_LOG;
-
-	if (iSymbolHuff < 0) {
-		iSymbolHuff = iSymbol;
-        while ((iSymbolHuff = pDecodeTable[iSymbolHuff + JxrHuffmanDecodeTableBranchOffset() + JxrEntropyReaderRead(pIO, 1)]) < 0);
-	}
-    return (iSymbolHuff);
-}
-
 static Int AdaptDecFixed(CAdaptiveHuffman* state)
 {
     JxrAdaptiveHuffmanAdapt(state);

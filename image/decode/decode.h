@@ -133,11 +133,5 @@ Void strPost4x4SecondStage(PixelI *);
 Void strPost4x4Stage2Split(PixelI*, PixelI*);
 Void strPost4x4Stage2Split_alternate(PixelI*, PixelI*);
 
-/** Huffman decode related defines **/
-#define HUFFMAN_DECODE_ROOT_BITS_LOG    3
-#define HUFFMAN_DECODE_ROOT_BITS    (5)   
-
-Int getHuff(const short *pDecodeTable, BitIOInfo* pIO);
-
 #endif // WMI_DECODE_H
 

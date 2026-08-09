@@ -7,6 +7,7 @@
 #include "JxrEntropyState.h"
 #include "JxrAdaptiveScan.h"
 #include "JxrCoefficientBuffer.h"
+#include "JxrHuffmanDecoder.h"
 #ifdef _WIN32
 #include <direct.h>
 #include <io.h>
@@ -101,6 +102,37 @@ static int test_coefficient_buffer_vectors(void)
     return values[0] == 3 && values[1] == 0 && values[2] == 0 && values[3] == 0 && values[4] == 13;
 }
 
+static int test_huffman_decoder_vectors(void)
+{
+    short root[32];
+    short branch[JXR_HUFFMAN_BRANCH_OFFSET + 1];
+    U8 rootData[2] = { 0, 0 };
+    U8 branchData[2] = { 0x04, 0 };
+    BitIOInfo input;
+    JxrHuffmanTable table;
+    int i;
+
+    for (i = 0; i < 32; ++i) root[i] = (2 << JXR_HUFFMAN_ENCODED_LENGTH_BITS) | 5;
+    table = JxrHuffmanTableCreate(root);
+    memset(&input, 0, sizeof(input));
+    input.uiAccumulator = 0;
+    input.iMask = -2;
+    input.pbCurrent = rootData;
+    if (JxrHuffmanDecoderDecodeSymbol(&table, &input) != 2 || input.cBitsUsed != 5) return 0;
+
+    for (i = 0; i <= JXR_HUFFMAN_BRANCH_OFFSET; ++i) branch[i] = 0;
+    for (i = 0; i < 32; ++i) branch[i] = -8;
+    branch[JXR_HUFFMAN_BRANCH_OFFSET - 8] = 4;
+    branch[JXR_HUFFMAN_BRANCH_OFFSET - 7] = 6;
+    table = JxrHuffmanTableCreate(branch);
+    memset(&input, 0, sizeof(input));
+    input.uiAccumulator = 0x04000000;
+    input.iMask = -2;
+    input.pbCurrent = branchData;
+    return JxrHuffmanTableGetEntry(&table, JXR_HUFFMAN_BRANCH_OFFSET - 7) == 6 &&
+        JxrHuffmanDecoderDecodeSymbol(&table, &input) == 6 && input.cBitsUsed == 6;
+}
+
 static int test_minimal_fixture(void)
 {
     return files_equal("minimal-profile/minimal-gray-16x16.bmp",
@@ -187,6 +219,7 @@ int main(int argc, char** argv)
         { "explicit_entropy_context", test_explicit_entropy_context },
         { "adaptive_scan_vectors", test_adaptive_scan_vectors },
         { "coefficient_buffer_vectors", test_coefficient_buffer_vectors },
+        { "huffman_decoder_vectors", test_huffman_decoder_vectors },
         { "minimal_fixture", test_minimal_fixture },
         { "minimal_round_trip", test_minimal_round_trip },
         { "real_image_round_trip", test_real_image_round_trip },
