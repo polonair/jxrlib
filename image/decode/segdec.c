@@ -32,6 +32,8 @@
 #include "JxrAdaptiveHuffman.h"
 #include "JxrAdaptiveScan.h"
 #include "JxrCoefficientBuffer.h"
+#include "JxrEntropyLevelDecoder.h"
+#include "JxrDcDecoder.h"
 
 #ifdef MEM_TRACE
 #define TRACE_MALLOC    1
@@ -43,7 +45,6 @@
 extern const int dctIndex[3][16];
 extern const int blkOffset[16];
 extern const int blkOffsetUV[4];
-static Int DecodeSignificantAbsLevel (struct CAdaptiveHuffman *pAHexpt, BitIOInfo* pIO);
 
 //#undef X86OPT_INLINE
 
@@ -396,7 +397,7 @@ static _FORCEINLINE Int DecodeBlock (Bool bChroma, Int *aLocalCoef, struct CAdap
     iSign = _getSign(pIO);
 
     if (iIndex & 2 /* iSL */) {
-        aLocalCoef[1] = (DecodeSignificantAbsLevel (pAHexpt[6 + iContextOffset + iCont], pIO) ^ iSign) - iSign;
+        aLocalCoef[1] = (JxrEntropyLevelDecoderDecode (pAHexpt[6 + iContextOffset + iCont], pIO) ^ iSign) - iSign;
     }
     else {
         aLocalCoef[1] = (1 | iSign); // 0 -> 1; -1 -> -1
@@ -423,7 +424,7 @@ static _FORCEINLINE Int DecodeBlock (Bool bChroma, Int *aLocalCoef, struct CAdap
 
         if (iIndex & 1 /* iSL */) {
             aLocalCoef[iNumNonzero * 2 + 1] = 
-                (DecodeSignificantAbsLevel (pAHexpt[6 + iContextOffset + iCont], pIO) ^ iSign) - iSign;
+                (JxrEntropyLevelDecoderDecode (pAHexpt[6 + iContextOffset + iCont], pIO) ^ iSign) - iSign;
         }
         else {
             aLocalCoef[iNumNonzero * 2 + 1] = (1 | iSign); // 0 -> 1; -1 -> -1 (was 1 + (iSign * 2))
@@ -455,7 +456,7 @@ static _FORCEINLINE Int DecodeBlockHighpass (const Bool bChroma, struct CAdaptiv
 
     iLevel = (iQP ^ iSign) - iSign;
     if (iIndex & 2 /* iSL */) {
-        iLevel *= DecodeSignificantAbsLevel (pAHexpt[6 + iContextOffset + iCont], pIO);// ^ iSign) - iSign;
+        iLevel *= JxrEntropyLevelDecoderDecode (pAHexpt[6 + iContextOffset + iCont], pIO);// ^ iSign) - iSign;
     }
     //else {
     //    iLevel = (1 | iSign); // 0 -> 1; -1 -> -1
@@ -485,8 +486,8 @@ static _FORCEINLINE Int DecodeBlockHighpass (const Bool bChroma, struct CAdaptiv
 
         iLevel = (iQP ^ iSign) - iSign;
         if (iIndex & 1 /* iSL */) {
-            iLevel *= DecodeSignificantAbsLevel (pAHexpt[6 + iContextOffset + iCont], pIO);// ^ iSign) - iSign;
-            //iLevel = (DecodeSignificantAbsLevel (pAHexpt[6 + iContextOffset + iCont], pIO) ^ iSign) - iSign;
+            iLevel *= JxrEntropyLevelDecoderDecode (pAHexpt[6 + iContextOffset + iCont], pIO);// ^ iSign) - iSign;
+            //iLevel = (JxrEntropyLevelDecoderDecode (pAHexpt[6 + iContextOffset + iCont], pIO) ^ iSign) - iSign;
         }
         //else {
         //    iLevel = (1 | iSign); // 0 -> 1; -1 -> -1 (was 1 + (iSign * 2))
@@ -667,44 +668,6 @@ static _FORCEINLINE Int DecodeCoeffs (CWMImageStrCodec * pSC, CCodingContext *pC
     /** update model at end of MB **/
     UpdateModelMB (cf, iChannels, aLaplacianMean, &(pContext->m_aModelAC));
     return ICERR_OK;
-}
-
-/*************************************************************************
-    DecodeSignificantAbsLevel
-*************************************************************************/
-#ifndef X86OPT_INLINE
-static Int DecodeSignificantAbsLevel (struct CAdaptiveHuffman *pAHexpt, BitIOInfo* pIO)
-#else
-static __forceinline Int DecodeSignificantAbsLevel (struct CAdaptiveHuffman *pAHexpt, BitIOInfo* pIO)
-#endif
-{
-    UInt iIndex;
-    Int iFixed, iLevel;
-    static const Int aRemap[] = { 2, 3, 4, 6, 10, 14 };
-    static const Int aFixedLength[] = { 0, 0, 1, 2, 2, 2 };
-
-    iIndex = (UInt)JxrAdaptiveHuffmanDecode(pAHexpt, pIO);
-    assert(iIndex <= 6);
-    if (iIndex < 2) {
-        iLevel = iIndex + 2; // = aRemap[iIndex]
-    }
-    else if (iIndex < 6) {
-        iFixed = aFixedLength[iIndex];
-        iLevel = aRemap[iIndex] + _getBit16 (pIO, iFixed);
-    }
-    else{
-        iFixed = _getBit16 (pIO, 4) + 4;
-        if (iFixed == 19) {
-            iFixed += _getBit16 (pIO, 2);
-            if (iFixed == 22) {
-                iFixed += _getBit16 (pIO, 3);
-            }
-        }
-        iLevel = 2 + (1 << iFixed);
-        iIndex = getBit32 (pIO, iFixed);
-        iLevel += iIndex;
-    }
-    return iLevel;
 }
 
 U8 decodeQPIndex(BitIOInfo* pIO,U8 cBits)
@@ -938,119 +901,9 @@ Int DecodeMacroblockLowpass (CWMImageStrCodec * pSC, CCodingContext *pContext,
     x [0..3]
     [8..11] [4..7,12..15]
 *************************************************************************/
-Int DecodeMacroblockDC(CWMImageStrCodec * pSC, CCodingContext *pContext, Int iMBX, Int iMBY)
+Int DecodeMacroblockDC(CWMImageStrCodec* pSC, CCodingContext* pContext, Int iMBX, Int iMBY)
 {
-    CWMITile * pTile = pSC->pTile + pSC->cTileColumn;
-    CWMIMBInfo * pMBInfo = &pSC->MBInfo;
-    const COLORFORMAT cf = pSC->m_param.cfColorFormat;
-    const Int iChannels = (Int) pSC->m_param.cNumChannels;
-    BitIOInfo* pIO = pContext->m_pIODC;
-    Int iIndex, i;
-    Int aLaplacianMean[2] = { 0, 0}, *pLM = aLaplacianMean;
-    Int iModelBits = pContext->m_aModelDC.m_iFlcBits[0];
-    struct CAdaptiveHuffman *pAH;
-    Int iQDCY, iQDCU, iQDCV;
-    // const Int iChromaElements = (cf == YUV_420) ? 8 * 8 : ((cf == YUV_422) ? 8 * 16 : 16 * 16);
-
-    UNREFERENCED_PARAMETER( iMBX );
-    UNREFERENCED_PARAMETER( iMBY );
-
-    for (i = 0; i < iChannels; i++)
-        memset (pMBInfo->iBlockDC[i], 0, 16 * sizeof (I32));
-
-    readIS_L1(pSC, pIO);
-
-    pMBInfo->iQIndexLP = pMBInfo->iQIndexHP = 0;
-
-    if(pSC->WMISCP.bfBitstreamFormat == SPATIAL && pSC->WMISCP.sbSubband != SB_DC_ONLY){
-        if(pTile->cBitsLP > 0)  // MB-based LP QP index
-            pMBInfo->iQIndexLP = decodeQPIndex(pIO, pTile->cBitsLP);
-        if( pSC->WMISCP.sbSubband != SB_NO_HIGHPASS && pTile->cBitsHP > 0)  // MB-based HP QP index
-            pMBInfo->iQIndexHP = decodeQPIndex(pIO, pTile->cBitsHP);
-    }
-    if(pTile->cBitsHP == 0 && pTile->cNumQPHP > 1) // use LP QP
-        pMBInfo->iQIndexHP = pMBInfo->iQIndexLP;
-    if (pMBInfo->iQIndexLP >= pTile->cNumQPLP || pMBInfo->iQIndexHP >= pTile->cNumQPHP)
-        return ICERR_ERROR;
-
-    if(cf == Y_ONLY || cf == CMYK || cf == NCOMPONENT) {
-        for (i = 0; i < iChannels; i++) {
-            iQDCY = 0;
-            /** get luminance DC **/
-            if (_getBool16 (pIO)) {
-                iQDCY = DecodeSignificantAbsLevel(pContext->m_pAHexpt[3], pIO) - 1;
-                *pLM += 1;
-            }
-            if (iModelBits) {
-                iQDCY = (iQDCY << iModelBits) | _getBit16(pIO, iModelBits);
-            }
-            if (iQDCY && _getBool16 (pIO))
-                iQDCY = -iQDCY;
-            pMBInfo->iBlockDC[i][0] = iQDCY;
-
-            pLM = aLaplacianMean + 1;
-            iModelBits = pContext->m_aModelDC.m_iFlcBits[1];
-        }
-    }
-    else {
-        /** find significant level in 3D **/
-        pAH = pContext->m_pAHexpt[2];
-        iIndex = getHuff (pAH->m_hufDecTable, pIO);
-        iQDCY = iIndex >> 2;
-        iQDCU = (iIndex >> 1) & 1;
-        iQDCV = iIndex & 1;
-
-        /** get luminance DC **/
-        if (iQDCY) {
-            iQDCY = DecodeSignificantAbsLevel(pContext->m_pAHexpt[3], pIO) - 1;
-            *pLM += 1;
-        }
-        if (iModelBits) {
-            iQDCY = (iQDCY << iModelBits) | _getBit16(pIO, iModelBits);
-        }
-        if (iQDCY && _getBool16 (pIO))
-            iQDCY = -iQDCY;
-        pMBInfo->iBlockDC[0][0] = iQDCY;
-
-        /** get chrominance DC **/        
-        pLM = aLaplacianMean + 1;
-        iModelBits = pContext->m_aModelDC.m_iFlcBits[1];
-
-        if (iQDCU) {
-            iQDCU = DecodeSignificantAbsLevel(pContext->m_pAHexpt[4], pIO) - 1;
-            *pLM += 1;
-        }
-        if (iModelBits) {
-            iQDCU = (iQDCU << iModelBits) | _getBit16(pIO, iModelBits);
-        }
-        if (iQDCU && _getBool16 (pIO))
-            iQDCU = -iQDCU;
-        pMBInfo->iBlockDC[1][0] = iQDCU;
-
-        if (iQDCV) {
-            iQDCV = DecodeSignificantAbsLevel(pContext->m_pAHexpt[4], pIO) - 1;
-            *pLM += 1;
-        }
-        if (iModelBits) {
-            iQDCV = (iQDCV << iModelBits) | _getBit16(pIO, iModelBits);
-        }
-        if (iQDCV && _getBool16 (pIO))
-            iQDCV = -iQDCV;
-        pMBInfo->iBlockDC[2][0] = iQDCV;
-    }
-
-    UpdateModelMB (cf, iChannels, aLaplacianMean, &(pContext->m_aModelDC));
-    
-    if(((!(pSC->WMISCP.bfBitstreamFormat != FREQUENCY || pSC->m_Dparam->cThumbnailScale < 16)) || pSC->WMISCP.sbSubband == SB_DC_ONLY) && pSC->m_bResetContext){
-        Int kk;
-        for (kk = 2; kk < 5; kk++) {
-            if (ICERR_OK != AdaptDecFixed (pContext->m_pAHexpt[kk])) {
-                return ICERR_ERROR;
-            }
-        }
-    }
-
-    return ICERR_OK;
+    return JxrDcDecoderDecodeMacroblock(pSC, pContext, iMBX, iMBY);
 }
 
 /*************************************************************************

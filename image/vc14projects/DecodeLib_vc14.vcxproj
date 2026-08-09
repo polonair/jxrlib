@@ -175,6 +175,8 @@
     <ClCompile Include="..\decode\JXRTranscode.c" />
     <ClCompile Include="..\decode\JxrEntropyReader.c" />
     <ClCompile Include="..\decode\JxrAdaptiveHuffman.c" />
+    <ClCompile Include="..\decode\JxrEntropyLevelDecoder.c" />
+    <ClCompile Include="..\decode\JxrDcDecoder.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\sys\common.h" />
