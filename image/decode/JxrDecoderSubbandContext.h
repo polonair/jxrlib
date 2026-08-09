@@ -21,6 +21,7 @@ typedef struct JxrDecoderSubbandContext {
     CAdaptiveHuffman* cbpHuffman;
     CAdaptiveHuffman* cbpCountHuffman;
     CCBPModel* highpassCbpModel;
+    Int trimFlexBits;
     Int* lowpassCbpCountZero;
     Int* lowpassCbpCountMax;
     CAdaptiveScan* lowpassScan;

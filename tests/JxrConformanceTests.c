@@ -164,6 +164,7 @@ static int test_decoder_subband_context(void)
         state.cbpHuffman == entropy.m_pAdaptHuffCBPCY &&
         state.cbpCountHuffman == entropy.m_pAdaptHuffCBPCY1 &&
         state.highpassCbpModel == &entropy.m_aCBPModel &&
+        state.trimFlexBits == entropy.m_iTrimFlexBits &&
         state.lowpassCbpCountZero == &entropy.m_iCBPCountZero &&
         state.lowpassCbpCountMax == &entropy.m_iCBPCountMax &&
         state.lowpassScan == entropy.m_aScanLowpass && state.horizontalScan == entropy.m_aScanHoriz &&

@@ -309,38 +309,40 @@ static Int JxrHpDecoderDecodeBlockAdaptive(Bool bNoSkip, Bool bChroma, CAdaptive
 /*************************************************************************
     GetCoeffs
 *************************************************************************/
-static Int JxrHpDecoderDecodeCoefficients (CWMImageStrCodec * pSC, CCodingContext *pContext,
-                         Int iMBX, Int iMBY,
-                         BitIOInfo* pIO, BitIOInfo *pIOFL)
+static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
+    Int macroblockX, Int macroblockY)
 {
-    CWMITile * pTile = pSC->pTile + pSC->cTileColumn;
-    const COLORFORMAT cf = pSC->m_param.cfColorFormat;
-    const Int iChannels = (Int) pSC->m_param.cNumChannels;
+    CWMImageStrCodec* codec = state->codec;
+    CWMITile* pTile = codec->pTile + codec->cTileColumn;
+    BitIOInfo* pIO = state->highpassInput;
+    BitIOInfo* pIOFL = state->flexbitsInput;
+    const COLORFORMAT cf = codec->m_param.cfColorFormat;
+    const Int iChannels = (Int) codec->m_param.cNumChannels;
     const Int iPlanes = (cf == YUV_420 || cf == YUV_422) ? 1 : iChannels;
     Int  iQP;
     CAdaptiveScan *pScan;
     PixelI  *pCoeffs;
     JxrCoefficientBuffer coefficients;
     Int i, iBlock, iSubblock, iNBlocks = 4;
-    Int iModelBits = pContext->m_aModelAC.m_iFlcBits[0];
+    Int iModelBits = state->highpassModel->m_iFlcBits[0];
     Int aLaplacianMean[2] = { 0, 0}, *pLM = aLaplacianMean + 0;
     const Int *pOrder = dctIndex[0];
-    const Int iOrient = pSC->MBInfo.iOrientation;
+    const Int iOrient = codec->MBInfo.iOrientation;
     Bool bChroma = FALSE;
 
-    Int iCBPCU = pSC->MBInfo.iCBP[1];
-    Int iCBPCV = pSC->MBInfo.iCBP[2];
-    Int iCBPCY = pSC->MBInfo.iCBP[0];
+    Int iCBPCU = state->cbp[1];
+    Int iCBPCV = state->cbp[2];
+    Int iCBPCY = state->cbp[0];
 
-    UNREFERENCED_PARAMETER( iMBX );
-    UNREFERENCED_PARAMETER( iMBY );
+    UNREFERENCED_PARAMETER(macroblockX);
+    UNREFERENCED_PARAMETER(macroblockY);
 
     /** set scan arrays and other MB level constants **/
     if (iOrient == 1) {
-        pScan = pContext->m_aScanVert;
+        pScan = state->verticalScan;
     }
     else {
-        pScan = pContext->m_aScanHoriz;
+        pScan = state->horizontalScan;
     }
 
     if (cf == YUV_420) {
@@ -355,19 +357,19 @@ static Int JxrHpDecoderDecodeCoefficients (CWMImageStrCodec * pSC, CCodingContex
     for (i = 0; i < iPlanes; i++) {
         Int iIndex = 0, iNumNonZero;
 
-        if(pSC->WMISCP.sbSubband != SB_NO_FLEXBITS)
-            readIS_L1(pSC, pIOFL);
+        if(codec->WMISCP.sbSubband != SB_NO_FLEXBITS)
+            readIS_L1(codec, pIOFL);
 
         for (iBlock = 0; iBlock < iNBlocks; iBlock++) {
 
-            readIS_L2(pSC, pIO);
+            readIS_L2(codec, pIO);
             if (pIO != pIOFL)
-                readIS_L2(pSC, pIOFL);
+                readIS_L2(codec, pIOFL);
 
-            iQP = (pSC->m_param.bTranscode ? 1 : pTile->pQuantizerHP[iPlanes > 1 ? i : (iBlock > 3 ? (cf == YUV_420 ? iBlock - 3 : iBlock / 2 - 1) : 0)][pSC->MBInfo.iQIndexHP].iQP);
+            iQP = (codec->m_param.bTranscode ? 1 : pTile->pQuantizerHP[iPlanes > 1 ? i : (iBlock > 3 ? (cf == YUV_420 ? iBlock - 3 : iBlock / 2 - 1) : 0)][codec->MBInfo.iQIndexHP].iQP);
 
             for (iSubblock = 0; iSubblock < 4; iSubblock++, iIndex++, iCBPCY >>= 1) {
-                pCoeffs = pSC->p1MBbuffer[i] + blkOffset[iIndex & 0xf];
+                pCoeffs = codec->p1MBbuffer[i] + blkOffset[iIndex & 0xf];
 
                 //if (iBlock < 4) {//(cf == YUV_444) {
                     //bBlockNoSkip = ((iTempCBPC & (1 << iIndex1)) != 0);
@@ -376,38 +378,38 @@ static Int JxrHpDecoderDecodeCoefficients (CWMImageStrCodec * pSC, CCodingContex
                 //else {
                 if (iBlock >= 4) {
                     if(cf == YUV_420) {
-                        pCoeffs = pSC->p1MBbuffer[iBlock - 3] + blkOffsetUV[iSubblock];
+                        pCoeffs = codec->p1MBbuffer[iBlock - 3] + blkOffsetUV[iSubblock];
                     }
                     else { // YUV_422
-                        pCoeffs = pSC->p1MBbuffer[1 + (1 & (iBlock >> 1))] + ((iBlock & 1) * 32) + blkOffsetUV_422[iSubblock];
+                        pCoeffs = codec->p1MBbuffer[1 + (1 & (iBlock >> 1))] + ((iBlock & 1) * 32) + blkOffsetUV_422[iSubblock];
                     }
                 }
 
                 coefficients = JxrCoefficientBufferCreate(pCoeffs, 0, 16);
 
                 /** read AC values **/
-                assert (pSC->m_Dparam->bSkipFlexbits == 0 || pSC->WMISCP.bfBitstreamFormat == FREQUENCY || pSC->WMISCP.sbSubband == SB_NO_FLEXBITS);
-                iNumNonZero = JxrHpDecoderDecodeBlockAdaptive((iCBPCY & 1), bChroma, pContext->m_pAHexpt,
-                    pIO, pIOFL, &coefficients, pScan, iModelBits, pContext->m_iTrimFlexBits,
-                    iQP, pOrder, pSC->m_Dparam->bSkipFlexbits);
+                assert (codec->m_Dparam->bSkipFlexbits == 0 || codec->WMISCP.bfBitstreamFormat == FREQUENCY || codec->WMISCP.sbSubband == SB_NO_FLEXBITS);
+                iNumNonZero = JxrHpDecoderDecodeBlockAdaptive((iCBPCY & 1), bChroma, state->huffmanStates,
+                    pIO, pIOFL, &coefficients, pScan, iModelBits, state->trimFlexBits,
+                    iQP, pOrder, codec->m_Dparam->bSkipFlexbits);
                 if(iNumNonZero > 16) // something is wrong!
                     return ICERR_ERROR;
                 // shouldn't this be > 15?
                 (*pLM) += iNumNonZero;
             }
             if (iBlock == 3) {
-                iModelBits = pContext->m_aModelAC.m_iFlcBits[1];
+                iModelBits = state->highpassModel->m_iFlcBits[1];
                 pLM = aLaplacianMean + 1;
                 bChroma = TRUE;
             }
         }
 
-        iCBPCY = pSC->MBInfo.iCBP[(i + 1) & 0xf];
+        iCBPCY = state->cbp[(i + 1) & 0xf];
         assert (MAX_CHANNELS == 16);
     }
 
     /** update model at end of MB **/
-    UpdateModelMB (cf, iChannels, aLaplacianMean, &(pContext->m_aModelAC));
+    UpdateModelMB(cf, iChannels, aLaplacianMean, state->highpassModel);
     return ICERR_OK;
 }
 
@@ -436,8 +438,7 @@ Int JxrHpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
     JxrHpDecoderDecodeCbp(state);
     JxrCbpPredictorDecode(state);
 
-    if (JxrHpDecoderDecodeCoefficients(codec, state->entropy, macroblockX, macroblockY,
-        state->highpassInput, state->flexbitsInput) != ICERR_OK)
+    if (JxrHpDecoderDecodeCoefficients(state, macroblockX, macroblockY) != ICERR_OK)
         goto ErrorExit;
 
     if (codec->m_bResetContext) {
