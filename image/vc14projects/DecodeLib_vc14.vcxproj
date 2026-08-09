@@ -179,6 +179,7 @@
     <ClCompile Include="..\decode\JxrDcDecoder.c" />
     <ClCompile Include="..\decode\JxrEntropyBlockDecoder.c" />
     <ClCompile Include="..\decode\JxrLpDecoder.c" />
+    <ClCompile Include="..\decode\JxrHpDecoder.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\sys\common.h" />
