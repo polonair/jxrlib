@@ -41,6 +41,21 @@ static int test_minimal_fixture(void)
                        "minimal-profile/trace/decoder-bitstream.jxr");
 }
 
+static int test_minimal_round_trip(void)
+{
+    int result;
+    result = system("cmd /c if not exist tests\\work mkdir tests\\work & "
+        "jxrencoderdecoder\\Release\\JXREncApp\\x64\\JXREncApp.exe -i minimal-profile\\minimal-gray-16x16.bmp -o tests\\work\\minimal.jxr -c 2 -d 0 -q 1 -l 0 -f -X tests\\work\\trace & "
+        "jxrencoderdecoder\\Release\\JXRDecApp\\x64\\JXRDecApp.exe -i tests\\work\\minimal.jxr -o tests\\work\\minimal.bmp -c 2 -a 0 -p 0 -X tests\\work\\trace");
+    return result == 0 &&
+        files_equal("minimal-profile/minimal-gray-16x16.bmp", "tests/work/minimal.bmp") &&
+        files_equal("minimal-profile/minimal-gray-16x16.jxr", "tests/work/minimal.jxr") &&
+        files_equal("tests/work/trace/encoder-bitstream.jxr", "tests/work/trace/decoder-bitstream.jxr") &&
+        file_contains("tests/work/trace/encoder-mb-000-000-bitstream-dc.json", "\"bit_count\": 10") &&
+        file_contains("tests/work/trace/encoder-mb-000-000-bitstream-lp.json", "\"bit_count\": 214") &&
+        file_contains("tests/work/trace/encoder-mb-000-000-bitstream-hp.json", "\"bit_count\": 1958");
+}
+
 static int test_bit_ranges(void)
 {
     return file_contains("minimal-profile/trace/encoder-mb-000-000-bitstream-dc.json", "\"bit_start\": 1320") &&
@@ -65,6 +80,7 @@ int main(int argc, char** argv)
     JxrTestCase tests[] = {
         { "smoke", test_smoke },
         { "minimal_fixture", test_minimal_fixture },
+        { "minimal_round_trip", test_minimal_round_trip },
         { "bit_ranges", test_bit_ranges },
         { "entropy_trace", test_entropy_trace }
     };
