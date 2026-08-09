@@ -126,6 +126,18 @@ static int test_minimal_round_trip(void)
         file_contains("tests/work/trace/encoder-mb-000-000-bitstream-hp.json", "\"bit_count\": 1958");
 }
 
+static int test_real_image_round_trip(void)
+{
+    int result;
+    result = system("cmd /c if not exist tests\\work mkdir tests\\work & "
+        "jxrencoderdecoder\\Release\\JXREncApp\\x64\\JXREncApp.exe -i real-image-profile\\test-sign-334x330.bmp -o tests\\work\\real-image.jxr -c 0 -d 3 -q 1 -l 0 -f -p & "
+        "jxrencoderdecoder\\Release\\JXRDecApp\\x64\\JXRDecApp.exe -i tests\\work\\real-image.jxr -o tests\\work\\real-image.bmp -c 0 -a 0 -p 0");
+    return result == 0 &&
+        files_equal("real-image-profile/test-sign-334x330.bmp", "tests/work/real-image.bmp") &&
+        files_equal("real-image-profile/test-sign-334x330-restored.bmp", "tests/work/real-image.bmp") &&
+        files_equal("real-image-profile/test-sign-334x330.jxr", "tests/work/real-image.jxr");
+}
+
 static int test_bit_ranges(void)
 {
     return file_contains("minimal-profile/trace/encoder-mb-000-000-bitstream-dc.json", "\"bit_start\": 1320") &&
@@ -177,6 +189,7 @@ int main(int argc, char** argv)
         { "coefficient_buffer_vectors", test_coefficient_buffer_vectors },
         { "minimal_fixture", test_minimal_fixture },
         { "minimal_round_trip", test_minimal_round_trip },
+        { "real_image_round_trip", test_real_image_round_trip },
         { "bit_ranges", test_bit_ranges },
         { "entropy_trace", test_entropy_trace }
         ,{ "dc_conformance", test_dc_conformance }
