@@ -29,6 +29,7 @@
 #include "strcodec.h"
 #include "decode.h"
 #include "JxrEntropyReader.h"
+#include "JxrAdaptiveHuffman.h"
 
 #ifdef MEM_TRACE
 #define TRACE_MALLOC    1
@@ -119,7 +120,7 @@ static _FORCEINLINE Int _getHuffShort(const short *pDecodeTable, BitIOInfo* pIO)
 *************************************************************************/
 static Int AdaptDecFixed (CAdaptiveHuffman *pAH)
 {
-    AdaptDiscriminant (pAH);
+    JxrAdaptiveHuffmanAdapt(pAH);
     return ICERR_OK;
 }
 
@@ -144,8 +145,8 @@ static Void DecodeCBP(CWMImageStrCodec * pSC, CCodingContext *pContext)
     for (i = 0; i < iChannel; i++) {
 
         iCBPCY = iCBPCU = iCBPCV = 0;
-        iNumCBP = _getHuffShort(pAHCBP1->m_hufDecTable, pIO);
-        pAHCBP1->m_iDiscriminant += pAHCBP1->m_pDelta[iNumCBP];
+        iNumCBP = JxrAdaptiveHuffmanDecodeShortTable(pAHCBP1->m_hufDecTable, pIO);
+        JxrAdaptiveHuffmanObserve(pAHCBP1, iNumCBP);
 
         switch (iNumCBP) {
             case 2:
@@ -174,10 +175,10 @@ static Void DecodeCBP(CWMImageStrCodec * pSC, CCodingContext *pContext)
                 static const UInt gFLC0[] = { 0,2,1,2,2,0 };
                 static const UInt gOff0[] = { 0,4,2,8,12,1 };
                 static const UInt gOut0[] = { 0,15,3,12, 1,2,4,8, 5,6,9,10, 7,11,13,14 };
-                Int iNumBlockCBP = getHuff(pAHCBP->m_hufDecTable, pIO);
+                Int iNumBlockCBP = JxrAdaptiveHuffmanDecode(pAHCBP, pIO);
                 unsigned int val = (unsigned int) iNumBlockCBP + 1, iCode1;
 
-                pAHCBP->m_iDiscriminant += pAHCBP->m_pDelta[iNumBlockCBP];
+                /* Observation is performed by JxrAdaptiveHuffmanDecode. */
                 iNumBlockCBP = 0;
 
                 if (val >= 6) { // chroma present
@@ -342,9 +343,7 @@ static __forceinline Void DecodeFirstIndex (Int *pIndex, struct CAdaptiveHuffman
 #endif
 {
     Int iIndex;
-    iIndex = getHuff (pAHexpt->m_hufDecTable, pIO);
-    pAHexpt->m_iDiscriminant += pAHexpt->m_pDelta[iIndex];
-    pAHexpt->m_iDiscriminant1 += pAHexpt->m_pDelta1[iIndex];
+    iIndex = JxrAdaptiveHuffmanDecode(pAHexpt, pIO);
     *pIndex = iIndex;
 }
 
@@ -358,9 +357,8 @@ static __forceinline Void DecodeIndex (Int *pIndex, Int iLoc,
 {
     Int iIndex;
     if (iLoc < 15) {
-        iIndex = _getHuffShort (pAHexpt->m_hufDecTable, pIO);
-        pAHexpt->m_iDiscriminant += pAHexpt->m_pDelta[iIndex];
-        pAHexpt->m_iDiscriminant1 += pAHexpt->m_pDelta1[iIndex];
+        iIndex = JxrAdaptiveHuffmanDecodeShortTable(pAHexpt->m_hufDecTable, pIO);
+        JxrAdaptiveHuffmanObserve(pAHexpt, iIndex);
         *pIndex = iIndex;
     }
     else if (iLoc == 15) {
@@ -691,9 +689,8 @@ static __forceinline Int DecodeSignificantAbsLevel (struct CAdaptiveHuffman *pAH
     static const Int aRemap[] = { 2, 3, 4, 6, 10, 14 };
     static const Int aFixedLength[] = { 0, 0, 1, 2, 2, 2 };
 
-    iIndex = (UInt)getHuff (pAHexpt->m_hufDecTable, pIO);
+    iIndex = (UInt)JxrAdaptiveHuffmanDecode(pAHexpt, pIO);
     assert(iIndex <= 6);
-    pAHexpt->m_iDiscriminant += pAHexpt->m_pDelta[iIndex];
     if (iIndex < 2) {
         iLevel = iIndex + 2; // = aRemap[iIndex]
     }
