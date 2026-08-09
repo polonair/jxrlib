@@ -119,6 +119,13 @@ static int test_lp_conformance(void)
         file_contains("minimal-profile/trace/decoder-mb-000-000-bitstream-lp.json", "\"bit_count\": 214");
 }
 
+static int test_hp_conformance(void)
+{
+    return file_contains("minimal-profile/trace/encoder-mb-000-000-bitstream-hp.json", "\"bit_start\": 1544") &&
+        file_contains("minimal-profile/trace/encoder-mb-000-000-bitstream-hp.json", "\"bit_end\": 3502") &&
+        file_contains("minimal-profile/trace/decoder-mb-000-000-after_ac_prediction.json", "\"cbp\": 65535");
+}
+
 int main(int argc, char** argv)
 {
     size_t i; int failed = 0;
@@ -132,6 +139,7 @@ int main(int argc, char** argv)
         { "entropy_trace", test_entropy_trace }
         ,{ "dc_conformance", test_dc_conformance }
         ,{ "lp_conformance", test_lp_conformance }
+        ,{ "hp_conformance", test_hp_conformance }
     };
     const char* selected = argc == 2 ? argv[1] : NULL;
 #ifdef _WIN32
