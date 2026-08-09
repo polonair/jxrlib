@@ -31,6 +31,7 @@
 #include "JxrEntropyReader.h"
 #include "JxrAdaptiveHuffman.h"
 #include "JxrAdaptiveScan.h"
+#include "JxrCoefficientBuffer.h"
 
 #ifdef MEM_TRACE
 #define TRACE_MALLOC    1
@@ -436,7 +437,7 @@ static _FORCEINLINE Int DecodeBlock (Bool bChroma, Int *aLocalCoef, struct CAdap
     DecodeBlockHighpass : 
 *************************************************************************/
 static _FORCEINLINE Int DecodeBlockHighpass (const Bool bChroma, struct CAdaptiveHuffman **pAHexpt,
-                       BitIOInfo* pIO, const Int iQP, Int *pCoef, CAdaptiveScan *pScan)
+                       BitIOInfo* pIO, const Int iQP, JxrCoefficientBuffer *coefficients, CAdaptiveScan *pScan)
 {
     const Int iContextOffset = CTDC + CONTEXTX;
     UInt  iLoc = 1;
@@ -463,7 +464,7 @@ static _FORCEINLINE Int DecodeBlockHighpass (const Bool bChroma, struct CAdaptiv
        iLoc += DecodeSignificantRun (15 - iLoc, pAHexpt[0], pIO);
     }
     iLoc &= 0xf;
-    pCoef[JxrAdaptiveScanGetCoefficientIndex(pConstScan, iLoc)] = (PixelI) iLevel;//(PixelI)(iQP * iLevel);
+    JxrCoefficientBufferSet(coefficients, JxrAdaptiveScanGetCoefficientIndex(pConstScan, iLoc), (PixelI)iLevel);//(PixelI)(iQP * iLevel);
     JxrAdaptiveScanObserveNonZero(pScan, iLoc);
     iLoc = (iLoc + 1) & 0xf;
     //iLoc++;
@@ -490,7 +491,7 @@ static _FORCEINLINE Int DecodeBlockHighpass (const Bool bChroma, struct CAdaptiv
         //else {
         //    iLevel = (1 | iSign); // 0 -> 1; -1 -> -1 (was 1 + (iSign * 2))
         //}
-    pCoef[JxrAdaptiveScanGetCoefficientIndex(pConstScan, iLoc)] = (PixelI) iLevel;//(PixelI)(iQP * iLevel);
+    JxrCoefficientBufferSet(coefficients, JxrAdaptiveScanGetCoefficientIndex(pConstScan, iLoc), (PixelI)iLevel);//(PixelI)(iQP * iLevel);
     JxrAdaptiveScanObserveNonZero(pScan, iLoc);
 
         iLoc = (iLoc + 1) & 0xf;
@@ -504,7 +505,7 @@ static _FORCEINLINE Int DecodeBlockHighpass (const Bool bChroma, struct CAdaptiv
 *************************************************************************/
 static _FORCEINLINE Int DecodeBlockAdaptive (Bool bNoSkip, Bool bChroma, CAdaptiveHuffman **pAdHuff,
                                 BitIOInfo *pIO, BitIOInfo *pIOFL,
-                                PixelI *pCoeffs, CAdaptiveScan *pScan,
+                                JxrCoefficientBuffer *coefficients, CAdaptiveScan *pScan,
                                 const Int iModelBits, const Int iTrim, const Int iQP,
                                 const Int *pOrder, const Bool bSkipFlexbits)
 {
@@ -517,7 +518,7 @@ static _FORCEINLINE Int DecodeBlockAdaptive (Bool bNoSkip, Bool bChroma, CAdapti
 
     if (bNoSkip) {
         const Int iQP1 = (iQP << iModelBits);
-        iNumNonzero = DecodeBlockHighpass (bChroma, pAdHuff, pIO, iQP1, pCoeffs, pScan);
+        iNumNonzero = DecodeBlockHighpass (bChroma, pAdHuff, pIO, iQP1, coefficients, pScan);
     }
     if (iFlex) {
         UInt k;
@@ -526,34 +527,34 @@ static _FORCEINLINE Int DecodeBlockAdaptive (Bool bNoSkip, Bool bChroma, CAdapti
             assert (iQP == 1);
 
             for (k = 1; k < 16; k++) {
-                PixelI *pk = pCoeffs + pOrder[k];
-                if (*pk < 0) {
+                PixelI coefficient = JxrCoefficientBufferGet(coefficients, pOrder[k]);
+                if (coefficient < 0) {
                     Int fine = _getBit16(pIOFL, iFlex);
-                    *pk -= (PixelI)(fine);
+                    JxrCoefficientBufferAdd(coefficients, pOrder[k], (PixelI)(-fine));
                 }
-                else if (*pk > 0) {
+                else if (coefficient > 0) {
                     Int fine = _getBit16(pIOFL, iFlex);
-                    *pk += (PixelI)(fine);
+                    JxrCoefficientBufferAdd(coefficients, pOrder[k], (PixelI)fine);
                 }
                 else {
-                    *pk = (PixelI)(_getBit16s(pIOFL, iFlex));
+                    JxrCoefficientBufferSet(coefficients, pOrder[k], (PixelI)_getBit16s(pIOFL, iFlex));
                 }
             }
         }
         else {
             const Int iQP1 = iQP << iTrim;
             for (k = 1; k < 16; k++) {
-                kk = pCoeffs[pOrder[k]];
+                kk = JxrCoefficientBufferGet(coefficients, pOrder[k]);
                 if (kk < 0) {
                     Int fine = _getBit16(pIOFL, iFlex);
-                    pCoeffs[pOrder[k]] -= (PixelI)(iQP1 * fine);
+                    JxrCoefficientBufferAdd(coefficients, pOrder[k], (PixelI)(-iQP1 * fine));
                 }
                 else if (kk > 0) {
                     Int fine = _getBit16(pIOFL, iFlex);
-                    pCoeffs[pOrder[k]] += (PixelI)(iQP1 * fine);
+                    JxrCoefficientBufferAdd(coefficients, pOrder[k], (PixelI)(iQP1 * fine));
                 }
                 else {
-                    pCoeffs[pOrder[k]] = (PixelI)(iQP1 * _getBit16s(pIOFL, iFlex));
+                    JxrCoefficientBufferSet(coefficients, pOrder[k], (PixelI)(iQP1 * _getBit16s(pIOFL, iFlex)));
                 }
             }
         }
@@ -577,6 +578,7 @@ static _FORCEINLINE Int DecodeCoeffs (CWMImageStrCodec * pSC, CCodingContext *pC
     Int  iQP;
     CAdaptiveScan *pScan;
     PixelI  *pCoeffs;
+    JxrCoefficientBuffer coefficients;
     Int i, iBlock, iSubblock, iNBlocks = 4;
     Int iModelBits = pContext->m_aModelAC.m_iFlcBits[0];
     Int aLaplacianMean[2] = { 0, 0}, *pLM = aLaplacianMean + 0;
@@ -639,10 +641,12 @@ static _FORCEINLINE Int DecodeCoeffs (CWMImageStrCodec * pSC, CCodingContext *pC
                     }
                 }
 
+                coefficients = JxrCoefficientBufferCreate(pCoeffs, 0, 16);
+
                 /** read AC values **/
                 assert (pSC->m_Dparam->bSkipFlexbits == 0 || pSC->WMISCP.bfBitstreamFormat == FREQUENCY || pSC->WMISCP.sbSubband == SB_NO_FLEXBITS);
                 iNumNonZero = DecodeBlockAdaptive ((iCBPCY & 1), bChroma, pContext->m_pAHexpt,
-                    pIO, pIOFL, pCoeffs, pScan, iModelBits, pContext->m_iTrimFlexBits,
+                    pIO, pIOFL, &coefficients, pScan, iModelBits, pContext->m_iTrimFlexBits,
                     iQP, pOrder, pSC->m_Dparam->bSkipFlexbits);
                 if(iNumNonZero > 16) // something is wrong!
                     return ICERR_ERROR;
@@ -794,7 +798,7 @@ Int DecodeMacroblockLowpass (CWMImageStrCodec * pSC, CCodingContext *pContext,
 #endif
 
     for (iChannel = 0; iChannel < iFullPlanes; iChannel++) {
-        PixelI *pCoeffs = aDC[iChannel];
+        JxrCoefficientBuffer coefficients = JxrCoefficientBufferCreate(aDC[iChannel], 0, 16);
 
         if (iCBP & 1) {
             iNumNonzero = DecodeBlock (iChannel > 0, aRLCoeffs, pContext->m_pAHexpt,
@@ -827,7 +831,7 @@ Int DecodeMacroblockLowpass (CWMImageStrCodec * pSC, CCodingContext *pContext,
 
                 for (k = 0; k < iNumNonzero; k++) {
                     iIndex += aRLCoeffs[k * 2];
-                    pCoeffs[JxrAdaptiveScanGetCoefficientIndex(pScan, iIndex)] = aRLCoeffs[k * 2 + 1];
+                    JxrCoefficientBufferSet(&coefficients, JxrAdaptiveScanGetCoefficientIndex(pScan, iIndex), aRLCoeffs[k * 2 + 1]);
                     JxrAdaptiveScanObserveNonZero(pScan, iIndex);
                     iIndex++;
                 }
@@ -871,28 +875,30 @@ Int DecodeMacroblockLowpass (CWMImageStrCodec * pSC, CCodingContext *pContext,
                 const Int iMask = (1 << iModelBits) - 1;
 #endif // WIN32
                 for (k = 1; k < 16; k++) {
+                    PixelI coefficient = JxrCoefficientBufferGet(&coefficients, k);
 #ifdef WIN32
-                    if (pCoeffs[k]) {
-                        Int r1 = _rotl(pCoeffs[k], iModelBits);
-                        pCoeffs[k] = (r1 ^ getBits(pIO, iModelBits)) - (r1 & iMask);
+                    if (coefficient) {
+                        Int r1 = _rotl(coefficient, iModelBits);
+                        coefficient = (r1 ^ getBits(pIO, iModelBits)) - (r1 & iMask);
+                        JxrCoefficientBufferSet(&coefficients, k, coefficient);
                     }
 #else // WIN32
-                    if (pCoeffs[k] > 0) {
-                        pCoeffs[k] <<= iModelBits;
-                        pCoeffs[k] += getBits (pIO, iModelBits);
+                    if (coefficient > 0) {
+                        coefficient <<= iModelBits;
+                        coefficient += getBits (pIO, iModelBits);
+                        JxrCoefficientBufferSet(&coefficients, k, coefficient);
                     }
-                    else if (pCoeffs[k] < 0) {
-                        pCoeffs[k] <<= iModelBits;
-                        pCoeffs[k] -= getBits (pIO, iModelBits);
+                    else if (coefficient < 0) {
+                        coefficient <<= iModelBits;
+                        coefficient -= getBits (pIO, iModelBits);
+                        JxrCoefficientBufferSet(&coefficients, k, coefficient);
                     }
 #endif // WIN32
                     else {
-                        //pCoeffs[k] = getBits (pIO, iModelBits);
-                        //if (pCoeffs[k] && _getBool16 (pIO))
-                        //    pCoeffs[k] = -pCoeffs[k];
                         Int r1 = _peekBit16 (pIO, iModelBits + 1);
-                        pCoeffs[k] = ((r1 >> 1) ^ (-(r1 & 1))) + (r1 & 1);
-                        _flushBit16 (pIO, iModelBits + (pCoeffs[k] != 0));
+                        coefficient = ((r1 >> 1) ^ (-(r1 & 1))) + (r1 & 1);
+                        JxrCoefficientBufferSet(&coefficients, k, coefficient);
+                        _flushBit16 (pIO, iModelBits + (coefficient != 0));
                     }
                 }
             }

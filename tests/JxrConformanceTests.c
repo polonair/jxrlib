@@ -6,6 +6,7 @@
 #include "strcodec.h"
 #include "JxrEntropyState.h"
 #include "JxrAdaptiveScan.h"
+#include "JxrCoefficientBuffer.h"
 #ifdef _WIN32
 #include <direct.h>
 #include <io.h>
@@ -87,6 +88,19 @@ static int test_adaptive_scan_vectors(void)
         scan[2].uScan == 1 && scan[2].uTotal == 32;
 }
 
+static int test_coefficient_buffer_vectors(void)
+{
+    PixelI values[5] = { 3, 5, 7, 11, 13 };
+    JxrCoefficientBuffer buffer = JxrCoefficientBufferCreate(values, 1, 3);
+    if (JxrCoefficientBufferGet(&buffer, 0) != 5 ||
+        JxrCoefficientBufferGet(&buffer, 2) != 11) return 0;
+    JxrCoefficientBufferSet(&buffer, 1, -2);
+    JxrCoefficientBufferAdd(&buffer, 2, 4);
+    if (values[0] != 3 || values[1] != 5 || values[2] != -2 || values[3] != 15 || values[4] != 13) return 0;
+    JxrCoefficientBufferClear(&buffer);
+    return values[0] == 3 && values[1] == 0 && values[2] == 0 && values[3] == 0 && values[4] == 13;
+}
+
 static int test_minimal_fixture(void)
 {
     return files_equal("minimal-profile/minimal-gray-16x16.bmp",
@@ -160,6 +174,7 @@ int main(int argc, char** argv)
         { "adaptive_state", test_adaptive_state },
         { "explicit_entropy_context", test_explicit_entropy_context },
         { "adaptive_scan_vectors", test_adaptive_scan_vectors },
+        { "coefficient_buffer_vectors", test_coefficient_buffer_vectors },
         { "minimal_fixture", test_minimal_fixture },
         { "minimal_round_trip", test_minimal_round_trip },
         { "bit_ranges", test_bit_ranges },
