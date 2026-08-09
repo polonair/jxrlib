@@ -10,6 +10,7 @@
 #include "JxrHuffmanDecoder.h"
 #include "JxrLpResidualDecoder.h"
 #include "JxrDecoderSubbandContext.h"
+#include "JxrHpCoefficientBlockResolver.h"
 #ifdef _WIN32
 #include <direct.h>
 #include <io.h>
@@ -143,6 +144,35 @@ static int test_lp_residual_vectors(void)
         JxrLpResidualDecoderCombineSignedMagnitude(-2, 1, 2) == -9;
 }
 
+static int test_hp_coefficient_block_resolver(void)
+{
+    CWMImageStrCodec codec;
+    JxrDecoderSubbandContext state;
+    PixelI plane0[256], plane1[256], plane2[256];
+    JxrCoefficientBuffer block;
+
+    memset(&codec, 0, sizeof(codec));
+    memset(&state, 0, sizeof(state));
+    codec.p1MBbuffer[0] = plane0;
+    codec.p1MBbuffer[1] = plane1;
+    codec.p1MBbuffer[2] = plane2;
+    state.codec = &codec;
+
+    codec.m_param.cfColorFormat = YUV_444;
+    block = JxrHpCoefficientBlockResolverResolve(&state, 1, 0, 0, 2);
+    if (block.values != plane1 || block.offset != 16 || block.count != 16)
+        return 0;
+
+    codec.m_param.cfColorFormat = YUV_420;
+    block = JxrHpCoefficientBlockResolverResolve(&state, 0, 4, 1, 0);
+    if (block.values != plane1 || block.offset != 32 || block.count != 16)
+        return 0;
+
+    codec.m_param.cfColorFormat = YUV_422;
+    block = JxrHpCoefficientBlockResolverResolve(&state, 0, 5, 1, 0);
+    return block.values == plane1 && block.offset == 96 && block.count == 16;
+}
+
 static int test_decoder_subband_context(void)
 {
     CWMImageStrCodec codec;
@@ -272,6 +302,7 @@ int main(int argc, char** argv)
         { "coefficient_buffer_vectors", test_coefficient_buffer_vectors },
         { "huffman_decoder_vectors", test_huffman_decoder_vectors },
         { "lp_residual_vectors", test_lp_residual_vectors },
+        { "hp_coefficient_block_resolver", test_hp_coefficient_block_resolver },
         { "decoder_subband_context", test_decoder_subband_context },
         { "minimal_fixture", test_minimal_fixture },
         { "minimal_round_trip", test_minimal_round_trip },

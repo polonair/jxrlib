@@ -4,13 +4,12 @@
 #include "JxrAdaptiveScan.h"
 #include "JxrCoefficientBuffer.h"
 #include "JxrCbpPredictor.h"
+#include "JxrHpCoefficientBlockResolver.h"
 #include "JxrEntropyBlockDecoder.h"
 #include "JxrEntropyLevelDecoder.h"
 #include "JxrEntropyReader.h"
 
 extern const int dctIndex[3][16];
-extern const int blkOffset[16];
-extern const int blkOffsetUV[4];
 U8 decodeQPIndex(BitIOInfo* input, U8 bitCount);
 
 /*************************************************************************
@@ -321,7 +320,6 @@ static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
     const Int iPlanes = (cf == YUV_420 || cf == YUV_422) ? 1 : iChannels;
     Int  iQP;
     CAdaptiveScan *pScan;
-    PixelI  *pCoeffs;
     JxrCoefficientBuffer coefficients;
     Int i, iBlock, iSubblock, iNBlocks = 4;
     Int iModelBits = state->highpassModel->m_iFlcBits[0];
@@ -369,23 +367,8 @@ static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
             iQP = (codec->m_param.bTranscode ? 1 : pTile->pQuantizerHP[iPlanes > 1 ? i : (iBlock > 3 ? (cf == YUV_420 ? iBlock - 3 : iBlock / 2 - 1) : 0)][codec->MBInfo.iQIndexHP].iQP);
 
             for (iSubblock = 0; iSubblock < 4; iSubblock++, iIndex++, iCBPCY >>= 1) {
-                pCoeffs = codec->p1MBbuffer[i] + blkOffset[iIndex & 0xf];
-
-                //if (iBlock < 4) {//(cf == YUV_444) {
-                    //bBlockNoSkip = ((iTempCBPC & (1 << iIndex1)) != 0);
-                    //pCoeffs = pSC->p1MBbuffer[iBlock >> 2] + blkOffset[iIndex & 0xf];
-                //}
-                //else {
-                if (iBlock >= 4) {
-                    if(cf == YUV_420) {
-                        pCoeffs = codec->p1MBbuffer[iBlock - 3] + blkOffsetUV[iSubblock];
-                    }
-                    else { // YUV_422
-                        pCoeffs = codec->p1MBbuffer[1 + (1 & (iBlock >> 1))] + ((iBlock & 1) * 32) + blkOffsetUV_422[iSubblock];
-                    }
-                }
-
-                coefficients = JxrCoefficientBufferCreate(pCoeffs, 0, 16);
+                coefficients = JxrHpCoefficientBlockResolverResolve(state, i, iBlock,
+                    iSubblock, iIndex);
 
                 /** read AC values **/
                 assert (codec->m_Dparam->bSkipFlexbits == 0 || codec->WMISCP.bfBitstreamFormat == FREQUENCY || codec->WMISCP.sbSubband == SB_NO_FLEXBITS);
