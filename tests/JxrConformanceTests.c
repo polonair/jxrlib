@@ -170,6 +170,18 @@ static int test_real_image_round_trip(void)
         files_equal("real-image-profile/test-sign-334x330.jxr", "tests/work/real-image.jxr");
 }
 
+static int test_default_image_round_trip(void)
+{
+    int result;
+    result = system("cmd /c if not exist tests\\work mkdir tests\\work & "
+        "jxrencoderdecoder\\Release\\JXREncApp\\x64\\JXREncApp.exe -i default-profile\\city-park-605x478.bmp -o tests\\work\\default-image.jxr -c 0 & "
+        "jxrencoderdecoder\\Release\\JXRDecApp\\x64\\JXRDecApp.exe -i tests\\work\\default-image.jxr -o tests\\work\\default-image.bmp -c 0");
+    return result == 0 &&
+        files_equal("default-profile/city-park-605x478.bmp", "tests/work/default-image.bmp") &&
+        files_equal("default-profile/city-park-605x478-restored.bmp", "tests/work/default-image.bmp") &&
+        files_equal("default-profile/city-park-605x478.jxr", "tests/work/default-image.jxr");
+}
+
 static int test_bit_ranges(void)
 {
     return file_contains("minimal-profile/trace/encoder-mb-000-000-bitstream-dc.json", "\"bit_start\": 1320") &&
@@ -223,6 +235,7 @@ int main(int argc, char** argv)
         { "minimal_fixture", test_minimal_fixture },
         { "minimal_round_trip", test_minimal_round_trip },
         { "real_image_round_trip", test_real_image_round_trip },
+        { "default_image_round_trip", test_default_image_round_trip },
         { "bit_ranges", test_bit_ranges },
         { "entropy_trace", test_entropy_trace }
         ,{ "dc_conformance", test_dc_conformance }
