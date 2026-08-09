@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include "JxrManagedBitIO.h"
+#include "strcodec.h"
 #ifdef _WIN32
 #include <direct.h>
 #include <io.h>
@@ -46,6 +47,19 @@ static int test_bit_io_vectors(void)
         JxrBitReaderRead(&reader, 16, &value) && value == 0xabcd &&
         JxrBitReaderRead(&reader, 4, &value) && value == 15 &&
         !JxrBitReaderRead(&reader, 16, &value);
+}
+
+static int test_adaptive_state(void)
+{
+    CCodingContext context; Int mean[2] = { 0, 0 };
+    memset(&context, 0, sizeof(context)); ResetCodingContext(&context); InitZigzagScan(&context);
+    if (context.m_aModelDC.m_iFlcBits[0] != 8 || context.m_aModelLP.m_iFlcBits[0] != 4 ||
+        context.m_aModelAC.m_iFlcBits[0] != 0 || context.m_iCBPCountZero != 1 ||
+        context.m_aScanLowpass[0].uScan != 0 || context.m_aScanLowpass[1].uScan != 1 ||
+        context.m_aScanHoriz[0].uScan != 0 || context.m_aScanVert[0].uScan != 0) return 0;
+    UpdateModelMB(Y_ONLY, 1, mean, &context.m_aModelDC);
+    UpdateModelMB(Y_ONLY, 1, mean, &context.m_aModelLP);
+    return context.m_aModelDC.m_iFlcBits[0] == 7 && context.m_aModelLP.m_iFlcBits[0] == 3;
 }
 
 static int test_minimal_fixture(void)
@@ -97,6 +111,7 @@ int main(int argc, char** argv)
     JxrTestCase tests[] = {
         { "smoke", test_smoke },
         { "bit_io_vectors", test_bit_io_vectors },
+        { "adaptive_state", test_adaptive_state },
         { "minimal_fixture", test_minimal_fixture },
         { "minimal_round_trip", test_minimal_round_trip },
         { "bit_ranges", test_bit_ranges },
