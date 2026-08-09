@@ -5,6 +5,7 @@
 #include "JxrManagedBitIO.h"
 #include "strcodec.h"
 #include "JxrEntropyState.h"
+#include "JxrAdaptiveScan.h"
 #ifdef _WIN32
 #include <direct.h>
 #include <io.h>
@@ -71,6 +72,19 @@ static int test_explicit_entropy_context(void)
     return state.native == &native && state.dcModel == &native.m_aModelDC &&
         state.lpModel == &native.m_aModelLP && state.acModel == &native.m_aModelAC &&
         state.lowpassScan[1].uScan == 1 && state.dcModel->m_iFlcBits[0] == 8;
+}
+
+static int test_adaptive_scan_vectors(void)
+{
+    CAdaptiveScan scan[4];
+    memset(scan, 0, sizeof(scan)); scan[0].uScan=0; scan[1].uScan=1; scan[2].uScan=2; scan[3].uScan=3;
+    JxrAdaptiveScanResetTotals(scan, 4);
+    if (scan[0].uTotal != MAXTOTAL || scan[1].uTotal != 32 || scan[2].uTotal != 30 ||
+        JxrAdaptiveScanGetCoefficientIndex(scan, 2) != 2) return 0;
+    JxrAdaptiveScanObserveNonZero(scan, 2); JxrAdaptiveScanObserveNonZero(scan, 2);
+    JxrAdaptiveScanObserveNonZero(scan, 2);
+    return scan[1].uScan == 2 && scan[1].uTotal == 33 &&
+        scan[2].uScan == 1 && scan[2].uTotal == 32;
 }
 
 static int test_minimal_fixture(void)
@@ -145,6 +159,7 @@ int main(int argc, char** argv)
         { "bit_io_vectors", test_bit_io_vectors },
         { "adaptive_state", test_adaptive_state },
         { "explicit_entropy_context", test_explicit_entropy_context },
+        { "adaptive_scan_vectors", test_adaptive_scan_vectors },
         { "minimal_fixture", test_minimal_fixture },
         { "minimal_round_trip", test_minimal_round_trip },
         { "bit_ranges", test_bit_ranges },

@@ -30,6 +30,7 @@
 #include "decode.h"
 #include "JxrEntropyReader.h"
 #include "JxrAdaptiveHuffman.h"
+#include "JxrAdaptiveScan.h"
 
 #ifdef MEM_TRACE
 #define TRACE_MALLOC    1
@@ -462,13 +463,8 @@ static _FORCEINLINE Int DecodeBlockHighpass (const Bool bChroma, struct CAdaptiv
        iLoc += DecodeSignificantRun (15 - iLoc, pAHexpt[0], pIO);
     }
     iLoc &= 0xf;
-	pCoef[pConstScan[iLoc].uScan] = (PixelI) iLevel;//(PixelI)(iQP * iLevel);
-    pScan[iLoc].uTotal++;
-	if (iLoc && pScan[iLoc].uTotal > pScan[iLoc - 1].uTotal) {
-		CAdaptiveScan cTemp = pScan[iLoc];
-		pScan[iLoc] = pScan[iLoc - 1];
-		pScan[iLoc - 1] = cTemp;
-    }
+    pCoef[JxrAdaptiveScanGetCoefficientIndex(pConstScan, iLoc)] = (PixelI) iLevel;//(PixelI)(iQP * iLevel);
+    JxrAdaptiveScanObserveNonZero(pScan, iLoc);
     iLoc = (iLoc + 1) & 0xf;
     //iLoc++;
 
@@ -494,14 +490,8 @@ static _FORCEINLINE Int DecodeBlockHighpass (const Bool bChroma, struct CAdaptiv
         //else {
         //    iLevel = (1 | iSign); // 0 -> 1; -1 -> -1 (was 1 + (iSign * 2))
         //}
-       
-	    pCoef[pConstScan[iLoc].uScan] = (PixelI) iLevel;//(PixelI)(iQP * iLevel);
-        pScan[iLoc].uTotal++;
-	    if (iLoc && pScan[iLoc].uTotal > pScan[iLoc - 1].uTotal) {
-		    CAdaptiveScan cTemp = pScan[iLoc];
-		    pScan[iLoc] = pScan[iLoc - 1];
-		    pScan[iLoc - 1] = cTemp;
-        }
+    pCoef[JxrAdaptiveScanGetCoefficientIndex(pConstScan, iLoc)] = (PixelI) iLevel;//(PixelI)(iQP * iLevel);
+    JxrAdaptiveScanObserveNonZero(pScan, iLoc);
 
         iLoc = (iLoc + 1) & 0xf;
         iNumNonzero++;
@@ -753,16 +743,9 @@ Int DecodeMacroblockLowpass (CWMImageStrCodec * pSC, CCodingContext *pContext,
     for (k = 0; k < (Int) pSC->m_param.cNumChannels; k++) {
         aDC[k & 15] = pMBInfo->iBlockDC[k];
     }
-
     /** reset adaptive scan totals **/
     if (pSC->m_bResetRGITotals) {
-        int iScale = 2;
-        int iWeight = iScale * 16;
-		pScan[0].uTotal = MAXTOTAL;
-        for (k = 1; k < 16; k++) {
-			pScan[k].uTotal = iWeight;
-            iWeight -= iScale;
-        }
+        JxrAdaptiveScanResetTotals(pScan, 16);
     }
 
     /** in raw mode, this can take 6% of the bits in the extreme low rate case!!! **/
@@ -844,13 +827,8 @@ Int DecodeMacroblockLowpass (CWMImageStrCodec * pSC, CCodingContext *pContext,
 
                 for (k = 0; k < iNumNonzero; k++) {
                     iIndex += aRLCoeffs[k * 2];
-					pCoeffs[pScan[iIndex].uScan] = aRLCoeffs[k * 2 + 1];
-					pScan[iIndex].uTotal++;
-					if (pScan[iIndex].uTotal > pScan[iIndex - 1].uTotal) {
-						CAdaptiveScan cTemp = pScan[iIndex];
-						pScan[iIndex] = pScan[iIndex - 1];
-						pScan[iIndex - 1] = cTemp;
-					}
+                    pCoeffs[JxrAdaptiveScanGetCoefficientIndex(pScan, iIndex)] = aRLCoeffs[k * 2 + 1];
+                    JxrAdaptiveScanObserveNonZero(pScan, iIndex);
                     iIndex++;
                 }
             }
@@ -1074,16 +1052,11 @@ Int DecodeMacroblockDC(CWMImageStrCodec * pSC, CCodingContext *pContext, Int iMB
 *************************************************************************/
 Int DecodeMacroblockHighpass (CWMImageStrCodec *pSC, CCodingContext *pContext, 
                       Int iMBX, Int iMBY)
-{   
+{
     /** reset adaptive scan totals **/
     if (pSC->m_bResetRGITotals) {
-        int iScale = 2, k;
-        int iWeight = iScale * 16;
-        pContext->m_aScanHoriz[0].uTotal = pContext->m_aScanVert[0].uTotal = MAXTOTAL;
-        for (k = 1; k < 16; k++) {
-            pContext->m_aScanHoriz[k].uTotal = pContext->m_aScanVert[k].uTotal = iWeight;
-            iWeight -= iScale;
-        }
+        JxrAdaptiveScanResetTotals(pContext->m_aScanHoriz, 16);
+        JxrAdaptiveScanResetTotals(pContext->m_aScanVert, 16);
     }
     if((pSC->WMISCP.bfBitstreamFormat != SPATIAL) && (pSC->pTile[pSC->cTileColumn].cBitsHP > 0)) { // MB-based HP QP index
         pSC->MBInfo.iQIndexHP = decodeQPIndex(pContext->m_pIOAC, pSC->pTile[pSC->cTileColumn].cBitsHP);
