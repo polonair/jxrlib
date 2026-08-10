@@ -146,6 +146,7 @@ static int test_macroblock_state_vectors(void)
     JxrMacroblockState state;
 
     memset(&macroblock, 0xff, sizeof(macroblock));
+    macroblock.iOrientation = 1;
     JxrMacroblockStateInit(&state, &macroblock);
     JxrMacroblockStateClearDc(&state, 2);
     if (JxrMacroblockStateGetDcCoefficients(&state, 0)[0] != 0 ||
@@ -154,12 +155,25 @@ static int test_macroblock_state_vectors(void)
     JxrMacroblockStateSetDcCoefficient(&state, 1, 5, 42);
     if (JxrMacroblockStateGetDcCoefficient(&state, 1, 5) != 42) return 0;
     JxrMacroblockStateResetQuantizerIndices(&state);
-    macroblock.iOrientation = 1;
     JxrMacroblockStateSetLowpassQuantizerIndex(&state, 3);
     JxrMacroblockStateSetHighpassQuantizerIndex(&state, 7);
-    return JxrMacroblockStateGetLowpassQuantizerIndex(&state) == 3 &&
-        JxrMacroblockStateGetHighpassQuantizerIndex(&state) == 7 &&
-        JxrMacroblockStateGetOrientation(&state) == 1;
+    if (JxrMacroblockStateGetLowpassQuantizerIndex(&state) != 3 ||
+        JxrMacroblockStateGetHighpassQuantizerIndex(&state) != 7 ||
+        JxrMacroblockStateGetOrientation(&state) != 1 || macroblock.iQIndexLP == 3)
+        return 0;
+    JxrMacroblockStateCommitToNative(&state);
+    if (macroblock.iBlockDC[0][0] != 0 || macroblock.iBlockDC[1][5] != 42 ||
+        macroblock.iQIndexLP != 3 || macroblock.iQIndexHP != 7 ||
+        JxrMacroblockStateGetOrientation(&state) != 1) return 0;
+    macroblock.iBlockDC[0][0] = 7;
+    macroblock.iQIndexLP = 2;
+    macroblock.iQIndexHP = 4;
+    macroblock.iOrientation = 9;
+    JxrMacroblockStateLoadFromNative(&state);
+    return JxrMacroblockStateGetDcCoefficient(&state, 0, 0) == 7 &&
+        JxrMacroblockStateGetLowpassQuantizerIndex(&state) == 2 &&
+        JxrMacroblockStateGetHighpassQuantizerIndex(&state) == 4 &&
+        JxrMacroblockStateGetOrientation(&state) == 9;
 }
 
 static int test_coefficient_plane_state_vectors(void)

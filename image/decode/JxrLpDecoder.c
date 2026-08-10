@@ -29,7 +29,10 @@ Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
     UNREFERENCED_PARAMETER(macroblockX);
     UNREFERENCED_PARAMETER(macroblockY);
 
-    if (!JxrDecoderFormatStateRefillLevel1(format, reader)) return ICERR_ERROR;
+    if (!JxrDecoderFormatStateRefillLevel1(format, reader)) {
+        JxrMacroblockStateCommitToNative(macroblock);
+        return ICERR_ERROR;
+    }
     if(!JxrDecoderFormatStateIsSpatial(format) && JxrDecoderTileStateGetLowpassQuantizerBits(tile) > 0)  // MB-based LP QP index
         JxrMacroblockStateSetLowpassQuantizerIndex(macroblock,
             JxrQuantizationIndexReaderDecode(reader, JxrDecoderTileStateGetLowpassQuantizerBits(tile)));
@@ -144,6 +147,7 @@ Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
         }
     }
 
+    JxrMacroblockStateCommitToNative(macroblock);
     return ICERR_OK;
 }
 

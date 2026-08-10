@@ -30,7 +30,10 @@ Int JxrDcDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, 
 
     JxrMacroblockStateClearDc(macroblock, channelCount);
 
-    if (!JxrDecoderFormatStateRefillLevel1(format, reader)) return ICERR_ERROR;
+    if (!JxrDecoderFormatStateRefillLevel1(format, reader)) {
+        JxrMacroblockStateCommitToNative(macroblock);
+        return ICERR_ERROR;
+    }
     JxrMacroblockStateResetQuantizerIndices(macroblock);
 
     if (JxrDecoderFormatStateIsSpatial(format) && !JxrDecoderFormatStateIsDcOnly(format)) {
@@ -46,7 +49,10 @@ Int JxrDcDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, 
         JxrMacroblockStateSetHighpassQuantizerIndex(macroblock,
             JxrMacroblockStateGetLowpassQuantizerIndex(macroblock));
     if (JxrMacroblockStateGetLowpassQuantizerIndex(macroblock) >= JxrDecoderTileStateGetLowpassQuantizerCount(tile) ||
-        JxrMacroblockStateGetHighpassQuantizerIndex(macroblock) >= JxrDecoderTileStateGetHighpassQuantizerCount(tile)) return ICERR_ERROR;
+        JxrMacroblockStateGetHighpassQuantizerIndex(macroblock) >= JxrDecoderTileStateGetHighpassQuantizerCount(tile)) {
+        JxrMacroblockStateCommitToNative(macroblock);
+        return ICERR_ERROR;
+    }
 
     if (colorFormat == Y_ONLY || colorFormat == CMYK || colorFormat == NCOMPONENT) {
         for (channel = 0; channel < channelCount; ++channel) {
@@ -100,6 +106,7 @@ Int JxrDcDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, 
             JxrHuffmanStateSetAdapt(&state->huffmanStateSet, tableIndex);
         }
     }
+    JxrMacroblockStateCommitToNative(macroblock);
     return ICERR_OK;
 }
 

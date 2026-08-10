@@ -333,8 +333,10 @@ Int JxrHpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
         }
     }
 
+    JxrMacroblockStateCommitToNative(macroblock);
     return ICERR_OK;
 ErrorExit:
+    JxrMacroblockStateCommitToNative(macroblock);
     return ICERR_ERROR;
 }
 

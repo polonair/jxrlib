@@ -3,12 +3,18 @@
 
 #include "strcodec.h"
 
-/* Explicit mutable data for the macroblock currently being decoded. */
+/* Explicit mutable macroblock data with a temporary native commit bridge. */
 typedef struct JxrMacroblockState {
+    I32 dcCoefficients[MAX_CHANNELS][16];
+    U8 lowpassQuantizerIndex;
+    U8 highpassQuantizerIndex;
+    I32 orientation;
     CWMIMBInfo* nativeMacroblock;
 } JxrMacroblockState;
 
 Void JxrMacroblockStateInit(JxrMacroblockState* state, CWMIMBInfo* nativeMacroblock);
+Void JxrMacroblockStateLoadFromNative(JxrMacroblockState* state);
+Void JxrMacroblockStateCommitToNative(const JxrMacroblockState* state);
 Void JxrMacroblockStateClearDc(JxrMacroblockState* state, Int channelCount);
 I32* JxrMacroblockStateGetDcCoefficients(JxrMacroblockState* state, Int channel);
 I32 JxrMacroblockStateGetDcCoefficient(const JxrMacroblockState* state, Int channel, Int index);
