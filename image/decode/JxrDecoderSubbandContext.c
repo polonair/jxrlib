@@ -6,7 +6,9 @@ Void JxrDecoderSubbandContextInit(JxrDecoderSubbandContext* state,
     state->codec = codec;
     JxrDecoderFormatStateInit(&state->formatState, codec);
     JxrMacroblockStateInit(&state->macroblockState, &codec->MBInfo);
-    JxrCoefficientPlaneStateInit(&state->coefficientPlanes, codec->p1MBbuffer);
+    JxrCoefficientPlaneStateInit(&state->coefficientPlanes, codec->p1MBbuffer,
+        JxrDecoderFormatStateGetColorFormat(&state->formatState),
+        JxrDecoderFormatStateGetChannelCount(&state->formatState));
     JxrSharedBitReaderStateInit(&state->dcSharedReaderState, entropy->m_pIODC);
     JxrEntropyBitReaderInitShared(&state->dcReader, &state->dcSharedReaderState);
     if (entropy->m_pIOLP == entropy->m_pIODC)
