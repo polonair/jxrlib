@@ -9,6 +9,7 @@
 #include "JxrCoefficientBuffer.h"
 #include "JxrHuffmanDecoder.h"
 #include "JxrLpResidualDecoder.h"
+#include "JxrBitMath.h"
 #include "JxrDecoderSubbandContext.h"
 #include "JxrHpCoefficientBlockResolver.h"
 #include "JxrEntropyReader.h"
@@ -143,6 +144,23 @@ static int test_lp_residual_vectors(void)
         JxrLpResidualDecoderCombineNonZero(-1, 2, 2) == -6 &&
         JxrLpResidualDecoderCombineSignedMagnitude(2, 1, 2) == 9 &&
         JxrLpResidualDecoderCombineSignedMagnitude(-2, 1, 2) == -9;
+}
+
+static int test_bit_math_vectors(void)
+{
+    const U32 value = 0x12345678U;
+
+    return JxrBitMathRotateLeft32(value, 0) == 0x12345678U &&
+        JxrBitMathRotateLeft32(value, 1) == 0x2468acf0U &&
+        JxrBitMathRotateLeft32(value, 14) == 0x159e048dU &&
+        JxrBitMathRotateLeft32(value, 16) == 0x56781234U &&
+        JxrBitMathRotateLeft32(value, 31) == 0x091a2b3cU &&
+        JxrBitMathLowMask32(0) == 0U &&
+        JxrBitMathLowMask32(1) == 0x1U &&
+        JxrBitMathLowMask32(14) == 0x3fffU &&
+        JxrBitMathLowMask32(16) == 0xffffU &&
+        JxrBitMathLowMask32(31) == 0x7fffffffU &&
+        JxrBitMathLowMask32(32) == 0xffffffffU;
 }
 
 static int test_entropy_reader_signed_residual_vectors(void)
@@ -315,6 +333,7 @@ int main(int argc, char** argv)
         { "coefficient_buffer_vectors", test_coefficient_buffer_vectors },
         { "huffman_decoder_vectors", test_huffman_decoder_vectors },
         { "lp_residual_vectors", test_lp_residual_vectors },
+        { "bit_math_vectors", test_bit_math_vectors },
         { "entropy_reader_signed_residual_vectors", test_entropy_reader_signed_residual_vectors },
         { "hp_coefficient_block_resolver", test_hp_coefficient_block_resolver },
         { "decoder_subband_context", test_decoder_subband_context },

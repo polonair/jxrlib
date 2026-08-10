@@ -1,10 +1,6 @@
 #include "JxrLpResidualDecoder.h"
 #include "JxrEntropyReader.h"
-
-static U32 JxrLpResidualDecoderRotateLeft(U32 value, Int bitCount)
-{
-    return (value << bitCount) | (value >> (32 - bitCount));
-}
+#include "JxrBitMath.h"
 
 U32 JxrLpResidualDecoderReadBitsReader(JxrEntropyBitReader* input, Int bitCount)
 {
@@ -14,8 +10,8 @@ U32 JxrLpResidualDecoderReadBitsReader(JxrEntropyBitReader* input, Int bitCount)
 
 PixelI JxrLpResidualDecoderCombineNonZero(PixelI coefficient, U32 residual, Int bitCount)
 {
-    U32 mask = ((U32)1 << bitCount) - 1;
-    U32 rotated = JxrLpResidualDecoderRotateLeft((U32)coefficient, bitCount);
+    U32 mask = JxrBitMathLowMask32((U32)bitCount);
+    U32 rotated = JxrBitMathRotateLeft32((U32)coefficient, (U32)bitCount);
     return (PixelI)((I32)((rotated ^ residual) - (rotated & mask)));
 }
 
