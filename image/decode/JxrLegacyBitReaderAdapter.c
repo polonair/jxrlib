@@ -3,6 +3,11 @@
 #include "JxrPacketExecutor.h"
 #include "JxrWmpPacketSource.h"
 
+static U8* JxrLegacyBitReaderAdapterRingBuffer(BitIOInfo* stream)
+{
+    return (U8*)stream - PACKETLENGTH * 2;
+}
+
 Void JxrLegacyBitReaderAdapterInit(JxrLegacyBitReaderAdapter* state, BitIOInfo* stream)
 {
     state->stream = stream;
@@ -50,23 +55,28 @@ Void JxrLegacyBitReaderAdapterRefillLevel1(CWMImageStrCodec* codec, JxrLegacyBit
         Bool executorMatchesLegacy;
         Bool legacyNeedsRefill = ((((INTPTR_T)before.pbStart ^
             (INTPTR_T)before.pbCurrent) & (UINTPTR_T)PACKETLENGTH) != 0);
-        UINTPTR_T legacyStartAddress = (UINTPTR_T)MASKPTR(before.pbStart + PACKETLENGTH, before.iMask);
+        size_t legacyStartIndex = (state->inputBufferState.packetStartIndex + PACKETLENGTH) %
+            state->inputBufferState.length;
         size_t legacyOffset = before.offRef + PACKETLENGTH;
 
         JxrWmpPacketSourceInit(&wmpSource, before.pWS, &source);
-        JxrPacketExecutorTryRefill(&state->inputBufferState, &source, before.pbStart,
+        JxrPacketExecutorTryRefill(&state->inputBufferState, &source,
             PACKETLENGTH, &executorDidRefill);
-        state->stream->pbStart = (U8*)state->inputBufferState.startAddress;
+        state->stream->pbStart = state->inputBufferState.buffer +
+            state->inputBufferState.packetStartIndex;
         state->stream->offRef = state->inputBufferState.streamOffset;
         state->stream->uiShadow = state->inputBufferState.shadow;
         executorMatchesLegacy = executorDidRefill && legacyNeedsRefill &&
-            state->inputBufferState.startAddress == legacyStartAddress &&
-            state->inputBufferState.currentAddress == (UINTPTR_T)before.pbCurrent &&
+            state->inputBufferState.packetStartIndex == legacyStartIndex &&
+            state->inputBufferState.currentIndex ==
+                (size_t)(before.pbCurrent - state->inputBufferState.buffer) &&
             state->inputBufferState.streamOffset == legacyOffset &&
             state->inputBufferState.shadow == *(U32*)before.pbStart;
         JXRTraceDumpRefillSnapshot(&before, state->stream, TRUE, legacyNeedsRefill,
-            executorDidRefill, executorMatchesLegacy, state->inputBufferState.startAddress,
-            state->inputBufferState.currentAddress, state->inputBufferState.streamOffset,
+            executorDidRefill, executorMatchesLegacy,
+            (UINTPTR_T)(state->inputBufferState.buffer + state->inputBufferState.packetStartIndex),
+            (UINTPTR_T)(state->inputBufferState.buffer + state->inputBufferState.currentIndex),
+            state->inputBufferState.streamOffset,
             state->inputBufferState.shadow, wmpSource.lastReadResult);
         JxrLegacyBitReaderAdapterSyncInputBufferState(state);
     }
@@ -74,17 +84,21 @@ Void JxrLegacyBitReaderAdapterRefillLevel1(CWMImageStrCodec* codec, JxrLegacyBit
 
 Void JxrLegacyBitReaderAdapterSyncInputBufferState(JxrLegacyBitReaderAdapter* state)
 {
-    JxrBitInputBufferStateInit(&state->inputBufferState,
-        (UINTPTR_T)state->stream->pbStart, (UINTPTR_T)state->stream->pbCurrent,
-        (UINTPTR_T)state->stream->iMask, state->stream->offRef, state->stream->uiShadow);
+    U8* buffer = JxrLegacyBitReaderAdapterRingBuffer(state->stream);
+    JxrBitInputBufferStateInit(&state->inputBufferState, buffer, PACKETLENGTH * 2,
+        (size_t)(state->stream->pbStart - buffer),
+        (size_t)(state->stream->pbCurrent - buffer), state->stream->offRef, state->stream->uiShadow);
     JxrBitCursorStateInitFromLegacy(&state->bitCursor, state->stream);
 }
 
 Bool JxrLegacyBitReaderAdapterIsInputBufferStateCurrent(const JxrLegacyBitReaderAdapter* state)
 {
-    return state->inputBufferState.startAddress == (UINTPTR_T)state->stream->pbStart &&
-        state->inputBufferState.currentAddress == (UINTPTR_T)state->stream->pbCurrent &&
-        state->inputBufferState.mask == (UINTPTR_T)state->stream->iMask &&
+    return state->inputBufferState.buffer == JxrLegacyBitReaderAdapterRingBuffer(state->stream) &&
+        state->inputBufferState.length == PACKETLENGTH * 2 &&
+        state->inputBufferState.packetStartIndex ==
+            (size_t)(state->stream->pbStart - state->inputBufferState.buffer) &&
+        state->inputBufferState.currentIndex ==
+            (size_t)(state->stream->pbCurrent - state->inputBufferState.buffer) &&
         state->inputBufferState.streamOffset == state->stream->offRef &&
         state->inputBufferState.shadow == state->stream->uiShadow;
 }

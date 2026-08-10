@@ -4,20 +4,21 @@
 #include "strcodec.h"
 #include "JxrPacketSource.h"
 
-/* Value-based ring-buffer address calculations; no stream I/O yet. */
+/* Managed-style packet state: byte buffer plus explicit ring indices. */
 typedef struct JxrBitInputBufferState {
-    UINTPTR_T startAddress;
-    UINTPTR_T currentAddress;
-    UINTPTR_T mask;
+    U8* buffer;
+    size_t length;
+    size_t packetStartIndex;
+    size_t currentIndex;
     size_t streamOffset;
     U32 shadow;
 } JxrBitInputBufferState;
 
-Void JxrBitInputBufferStateInit(JxrBitInputBufferState* state, UINTPTR_T startAddress,
-    UINTPTR_T currentAddress, UINTPTR_T mask, size_t streamOffset, U32 shadow);
+Void JxrBitInputBufferStateInit(JxrBitInputBufferState* state, U8* buffer, size_t length,
+    size_t packetStartIndex, size_t currentIndex, size_t streamOffset, U32 shadow);
 Bool JxrBitInputBufferStateNeedsRefill(const JxrBitInputBufferState* state, U32 packetLength);
 Void JxrBitInputBufferStateAdvancePacketStart(JxrBitInputBufferState* state, U32 packetLength);
 Bool JxrBitInputBufferStateReadPacket(JxrBitInputBufferState* state, JxrPacketSource* source,
-    U8* destination, U32 packetLength);
+    U32 packetLength);
 
 #endif

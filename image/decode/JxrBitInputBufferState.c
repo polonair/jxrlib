@@ -1,31 +1,35 @@
 #include "JxrBitInputBufferState.h"
 
-Void JxrBitInputBufferStateInit(JxrBitInputBufferState* state, UINTPTR_T startAddress,
-    UINTPTR_T currentAddress, UINTPTR_T mask, size_t streamOffset, U32 shadow)
+Void JxrBitInputBufferStateInit(JxrBitInputBufferState* state, U8* buffer, size_t length,
+    size_t packetStartIndex, size_t currentIndex, size_t streamOffset, U32 shadow)
 {
-    state->startAddress = startAddress;
-    state->currentAddress = currentAddress;
-    state->mask = mask;
+    assert(buffer != NULL && length != 0 && packetStartIndex < length && currentIndex < length);
+    state->buffer = buffer;
+    state->length = length;
+    state->packetStartIndex = packetStartIndex;
+    state->currentIndex = currentIndex;
     state->streamOffset = streamOffset;
     state->shadow = shadow;
 }
 
 Bool JxrBitInputBufferStateNeedsRefill(const JxrBitInputBufferState* state, U32 packetLength)
 {
-    return ((state->startAddress ^ state->currentAddress) & packetLength) != 0;
+    return ((state->packetStartIndex ^ state->currentIndex) & packetLength) != 0;
 }
 
 Void JxrBitInputBufferStateAdvancePacketStart(JxrBitInputBufferState* state, U32 packetLength)
 {
-    state->startAddress = (state->startAddress + packetLength) & state->mask;
+    state->packetStartIndex = (state->packetStartIndex + packetLength) % state->length;
 }
 
 Bool JxrBitInputBufferStateReadPacket(JxrBitInputBufferState* state, JxrPacketSource* source,
-    U8* destination, U32 packetLength)
+    U32 packetLength)
 {
     U32 shadow;
-    if (!JxrPacketSourceRead(source, state->streamOffset, destination, packetLength)) return FALSE;
-    memcpy(&shadow, destination, sizeof(shadow));
+    assert(state->packetStartIndex + packetLength <= state->length);
+    if (!JxrPacketSourceRead(source, state->streamOffset,
+        state->buffer + state->packetStartIndex, packetLength)) return FALSE;
+    memcpy(&shadow, state->buffer + state->packetStartIndex, sizeof(shadow));
     state->shadow = shadow;
     state->streamOffset += packetLength;
     JxrBitInputBufferStateAdvancePacketStart(state, packetLength);

@@ -5,6 +5,6 @@
 
 /* Managed-style packet refill: explicit state, source and destination. */
 Bool JxrPacketExecutorTryRefill(JxrBitInputBufferState* state, JxrPacketSource* source,
-    U8* destination, U32 packetLength, Bool* didRefill);
+    U32 packetLength, Bool* didRefill);
 
 #endif

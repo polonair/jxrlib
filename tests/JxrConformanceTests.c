@@ -173,17 +173,17 @@ static int test_coefficient_plane_state_vectors(void)
 static int test_bit_input_buffer_state_vectors(void)
 {
     JxrBitInputBufferState state;
-    const UINTPTR_T ringMask = ~(UINTPTR_T)8192;
+    U8 ring[8192] = { 0 };
 
-    JxrBitInputBufferStateInit(&state, 0x10000000U, 0x10000fffU, ringMask, 4096, 0);
+    JxrBitInputBufferStateInit(&state, ring, sizeof(ring), 0, 4095, 4096, 0);
     if (JxrBitInputBufferStateNeedsRefill(&state, 4096)) return 0;
-    state.currentAddress = 0x10001000U;
+    state.currentIndex = 4096;
     if (!JxrBitInputBufferStateNeedsRefill(&state, 4096)) return 0;
     JxrBitInputBufferStateAdvancePacketStart(&state, 4096);
-    if (state.startAddress != 0x10001000U || state.streamOffset != 4096) return 0;
-    JxrBitInputBufferStateInit(&state, 0x00001000U, 0x00001000U, ringMask, 8192, 0x12345678U);
+    if (state.packetStartIndex != 4096 || state.streamOffset != 4096) return 0;
+    JxrBitInputBufferStateInit(&state, ring, sizeof(ring), 4096, 4096, 8192, 0x12345678U);
     JxrBitInputBufferStateAdvancePacketStart(&state, 4096);
-    return state.startAddress == 0x00000000U && state.shadow == 0x12345678U &&
+    return state.packetStartIndex == 0 && state.shadow == 0x12345678U &&
         JxrBitInputBufferStateNeedsRefill(&state, 4096);
 }
 
@@ -197,35 +197,34 @@ static Bool read_fake_packet(Void* context, size_t offset, U8* destination, size
 
 static int test_packet_source_vectors(void)
 {
-    U8 data[8192] = { 0 }, destination[4096];
+    U8 data[8192] = { 0 }, ring[8192] = { 0 };
     JxrFakePacketSource fake = { data, sizeof(data), 0 };
     JxrPacketSource source = { &fake, read_fake_packet };
     JxrBitInputBufferState state;
     data[4096] = 0x78; data[4097] = 0x56; data[4098] = 0x34; data[4099] = 0x12;
-    JxrBitInputBufferStateInit(&state, 0x10000000U, 0x10001000U, ~(UINTPTR_T)8192, 4096, 0);
-    if (!JxrBitInputBufferStateReadPacket(&state, &source, destination, 4096)) return 0;
+    JxrBitInputBufferStateInit(&state, ring, sizeof(ring), 0, 4096, 4096, 0);
+    if (!JxrBitInputBufferStateReadPacket(&state, &source, 4096)) return 0;
     return fake.lastOffset == 4096 && state.streamOffset == 8192 &&
-        state.shadow == 0x12345678U && state.startAddress == 0x10001000U;
+        state.shadow == 0x12345678U && state.packetStartIndex == 4096 && ring[0] == 0x78;
 }
 
 static int test_packet_executor_vectors(void)
 {
-    U8 data[8192] = { 0 }, destination[4096] = { 0 };
+    U8 data[8192] = { 0 }, ring[8192] = { 0 };
     JxrFakePacketSource fake = { data, sizeof(data), 0 };
     JxrPacketSource source = { &fake, read_fake_packet };
     JxrBitInputBufferState state;
     Bool didRefill;
 
-    JxrBitInputBufferStateInit(&state, 0x10000000U, 0x10000000U,
-        ~(UINTPTR_T)8192, 4096, 0x12345678U);
-    if (!JxrPacketExecutorTryRefill(&state, &source, destination, 4096, &didRefill) || didRefill)
+    JxrBitInputBufferStateInit(&state, ring, sizeof(ring), 0, 0, 4096, 0x12345678U);
+    if (!JxrPacketExecutorTryRefill(&state, &source, 4096, &didRefill) || didRefill)
         return 0;
     data[4096] = 0x78; data[4097] = 0x56; data[4098] = 0x34; data[4099] = 0x12;
-    state.currentAddress = 0x10001000U;
-    if (!JxrPacketExecutorTryRefill(&state, &source, destination, 4096, &didRefill) || !didRefill)
+    state.currentIndex = 4096;
+    if (!JxrPacketExecutorTryRefill(&state, &source, 4096, &didRefill) || !didRefill)
         return 0;
-    return fake.lastOffset == 4096 && destination[0] == 0x78 &&
-        state.startAddress == 0x10001000U && state.streamOffset == 8192 &&
+    return fake.lastOffset == 4096 && ring[0] == 0x78 &&
+        state.packetStartIndex == 4096 && state.streamOffset == 8192 &&
         state.shadow == 0x12345678U;
 }
 
@@ -477,23 +476,24 @@ static int test_entropy_reader_state_vectors(void)
 
 static int test_legacy_bit_reader_mirror_vectors(void)
 {
-    BitIOInfo input;
+    union { U64 alignment; U8 bytes[PACKETLENGTH * 2 + sizeof(BitIOInfo)]; } storage;
+    BitIOInfo* input = (BitIOInfo*)(storage.bytes + PACKETLENGTH * 2);
     JxrLegacyBitReaderAdapter adapter;
 
-    memset(&input, 0, sizeof(input));
-    input.pbStart = (U8*)(UINTPTR_T)0x10000000U;
-    input.pbCurrent = (U8*)(UINTPTR_T)0x10001000U;
-    input.iMask = -8192;
-    input.offRef = 4096;
-    input.uiShadow = 0x12345678U;
-    JxrLegacyBitReaderAdapterInit(&adapter, &input);
+    memset(&storage, 0, sizeof(storage));
+    input->pbStart = storage.bytes;
+    input->pbCurrent = storage.bytes + PACKETLENGTH;
+    input->iMask = -8192;
+    input->offRef = 4096;
+    input->uiShadow = 0x12345678U;
+    JxrLegacyBitReaderAdapterInit(&adapter, input);
     if (!JxrLegacyBitReaderAdapterIsInputBufferStateCurrent(&adapter) ||
         !JxrLegacyBitReaderAdapterHasMatchingRefillDecision(&adapter) ||
         !JxrLegacyBitReaderAdapterNeedsRefill(&adapter)) return 0;
-    input.pbStart = (U8*)(UINTPTR_T)0x10001000U;
-    input.pbCurrent = (U8*)(UINTPTR_T)0x10001000U;
-    input.offRef = 8192;
-    input.uiShadow = 0xabcdef01U;
+    input->pbStart = storage.bytes + PACKETLENGTH;
+    input->pbCurrent = storage.bytes + PACKETLENGTH;
+    input->offRef = 8192;
+    input->uiShadow = 0xabcdef01U;
     JxrLegacyBitReaderAdapterSyncInputBufferState(&adapter);
     return JxrLegacyBitReaderAdapterIsInputBufferStateCurrent(&adapter) &&
         JxrLegacyBitReaderAdapterHasMatchingRefillDecision(&adapter) &&
