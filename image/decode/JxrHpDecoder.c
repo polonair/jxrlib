@@ -6,6 +6,7 @@
 #include "JxrCbpPredictor.h"
 #include "JxrHpCoefficientBlockResolver.h"
 #include "JxrEntropyBlockDecoder.h"
+#include "JxrHpBlockDecoder.h"
 #include "JxrEntropyLevelDecoder.h"
 #include "JxrEntropyReader.h"
 
@@ -175,137 +176,6 @@ Void JxrHpDecoderDecodeCbp(JxrDecoderSubbandContext* state)
 }
 
 /*************************************************************************
-    DecodeBlockHighpass :
-*************************************************************************/
-static Int JxrHpDecoderDecodeBlock (const Bool bChroma, struct CAdaptiveHuffman **pAHexpt,
-                       BitIOInfo* pIO, const Int iQP, JxrCoefficientBuffer *coefficients, CAdaptiveScan *pScan)
-{
-    const Int iContextOffset = CTDC + CONTEXTX;
-    UInt  iLoc = 1;
-    Int iSR, iSRn, iIndex, iNumNonzero = 1, iCont, iSign, iLevel;
-    struct CAdaptiveHuffman **pAH1 = pAHexpt + iContextOffset + bChroma * 3;
-    const CAdaptiveScan *pConstScan = (const CAdaptiveScan *) pScan;
-
-    /** first symbol **/
-    iIndex = JxrEntropyBlockDecoderDecodeFirstSymbol(pAH1[0], pIO);
-    iSR = (iIndex & 1);
-    iSRn = iIndex >> 2;
-
-    iCont = iSR & iSRn;
-    iSign = JxrEntropyReaderReadSign(pIO);
-
-    iLevel = (iQP ^ iSign) - iSign;
-    if (iIndex & 2 /* iSL */) {
-        iLevel *= JxrEntropyLevelDecoderDecode (pAHexpt[6 + iContextOffset + iCont], pIO);// ^ iSign) - iSign;
-    }
-    //else {
-    //    iLevel = (1 | iSign); // 0 -> 1; -1 -> -1
-    //}
-    if (iSR == 0) {
-       iLoc += JxrEntropyBlockDecoderDecodeRun(15 - iLoc, pAHexpt[0], pIO);
-    }
-    iLoc &= 0xf;
-    JxrCoefficientBufferSet(coefficients, JxrAdaptiveScanGetCoefficientIndex(pConstScan, iLoc), (PixelI)iLevel);//(PixelI)(iQP * iLevel);
-    JxrAdaptiveScanObserveNonZero(pScan, iLoc);
-    iLoc = (iLoc + 1) & 0xf;
-    //iLoc++;
-
-    while (iSRn != 0) {
-        iSR = iSRn & 1;
-        if (iSR == 0) {
-            iLoc += JxrEntropyBlockDecoderDecodeRun(15 - iLoc, pAHexpt[0], pIO);
-            if (iLoc >= 16)
-                return 16;
-        }
-        iIndex = JxrEntropyBlockDecoderDecodeNextSymbol(iLoc + 1, pAH1[iCont + 1], pIO);
-        iSRn = iIndex >> 1;
-
-        assert (iSRn >= 0 && iSRn < 3);
-        iCont &= iSRn;  /** huge difference! **/
-        iSign = JxrEntropyReaderReadSign(pIO);
-
-        iLevel = (iQP ^ iSign) - iSign;
-        if (iIndex & 1 /* iSL */) {
-            iLevel *= JxrEntropyLevelDecoderDecode (pAHexpt[6 + iContextOffset + iCont], pIO);// ^ iSign) - iSign;
-            //iLevel = (JxrEntropyLevelDecoderDecode (pAHexpt[6 + iContextOffset + iCont], pIO) ^ iSign) - iSign;
-        }
-        //else {
-        //    iLevel = (1 | iSign); // 0 -> 1; -1 -> -1 (was 1 + (iSign * 2))
-        //}
-    JxrCoefficientBufferSet(coefficients, JxrAdaptiveScanGetCoefficientIndex(pConstScan, iLoc), (PixelI)iLevel);//(PixelI)(iQP * iLevel);
-    JxrAdaptiveScanObserveNonZero(pScan, iLoc);
-
-        iLoc = (iLoc + 1) & 0xf;
-        iNumNonzero++;
-    }
-    return iNumNonzero;
-}
-
-/*************************************************************************
-    DecodeBlockAdaptive
-*************************************************************************/
-static Int JxrHpDecoderDecodeBlockAdaptive(Bool bNoSkip, Bool bChroma, CAdaptiveHuffman **pAdHuff,
-                                BitIOInfo *pIO, BitIOInfo *pIOFL,
-                                JxrCoefficientBuffer *coefficients, CAdaptiveScan *pScan,
-                                const Int iModelBits, const Int iTrim, const Int iQP,
-                                const Int *pOrder, const Bool bSkipFlexbits)
-{
-    // const Int iLocation = 1;
-    // const Int iContextOffset = CTDC + CONTEXTX;
-    Int kk, iNumNonzero = 0, iFlex = iModelBits - iTrim;
-
-    if (iFlex < 0 || bSkipFlexbits)
-        iFlex = 0;
-
-    if (bNoSkip) {
-        const Int iQP1 = (iQP << iModelBits);
-        iNumNonzero = JxrHpDecoderDecodeBlock(bChroma, pAdHuff, pIO, iQP1, coefficients, pScan);
-    }
-    if (iFlex) {
-        UInt k;
-        if (iQP + iTrim == 1) { // only iTrim = 0, iQP = 1 is legal
-            assert (iTrim == 0);
-            assert (iQP == 1);
-
-            for (k = 1; k < 16; k++) {
-                PixelI coefficient = JxrCoefficientBufferGet(coefficients, pOrder[k]);
-                if (coefficient < 0) {
-                    Int fine = JxrEntropyReaderRead(pIOFL, iFlex);
-                    JxrCoefficientBufferAdd(coefficients, pOrder[k], (PixelI)(-fine));
-                }
-                else if (coefficient > 0) {
-                    Int fine = JxrEntropyReaderRead(pIOFL, iFlex);
-                    JxrCoefficientBufferAdd(coefficients, pOrder[k], (PixelI)fine);
-                }
-                else {
-                    JxrCoefficientBufferSet(coefficients, pOrder[k], (PixelI)JxrEntropyReaderReadSignedResidual(pIOFL, iFlex));
-                }
-            }
-        }
-        else {
-            const Int iQP1 = iQP << iTrim;
-            for (k = 1; k < 16; k++) {
-                kk = JxrCoefficientBufferGet(coefficients, pOrder[k]);
-                if (kk < 0) {
-                    Int fine = JxrEntropyReaderRead(pIOFL, iFlex);
-                    JxrCoefficientBufferAdd(coefficients, pOrder[k], (PixelI)(-iQP1 * fine));
-                }
-                else if (kk > 0) {
-                    Int fine = JxrEntropyReaderRead(pIOFL, iFlex);
-                    JxrCoefficientBufferAdd(coefficients, pOrder[k], (PixelI)(iQP1 * fine));
-                }
-                else {
-                    JxrCoefficientBufferSet(coefficients, pOrder[k], (PixelI)(iQP1 * JxrEntropyReaderReadSignedResidual(pIOFL, iFlex)));
-                }
-            }
-        }
-    }
-
-    return iNumNonzero;
-}
-
-
-/*************************************************************************
     GetCoeffs
 *************************************************************************/
 static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
@@ -372,9 +242,22 @@ static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
 
                 /** read AC values **/
                 assert (codec->m_Dparam->bSkipFlexbits == 0 || codec->WMISCP.bfBitstreamFormat == FREQUENCY || codec->WMISCP.sbSubband == SB_NO_FLEXBITS);
-                iNumNonZero = JxrHpDecoderDecodeBlockAdaptive((iCBPCY & 1), bChroma, state->huffmanStates,
-                    pIO, pIOFL, &coefficients, pScan, iModelBits, state->trimFlexBits,
-                    iQP, pOrder, codec->m_Dparam->bSkipFlexbits);
+                {
+                    JxrHpBlockDecodingContext blockContext;
+                    blockContext.huffmanStates = state->huffmanStates;
+                    blockContext.highpassInput = pIO;
+                    blockContext.flexbitsInput = pIOFL;
+                    blockContext.coefficientBuffer = &coefficients;
+                    blockContext.scan = pScan;
+                    blockContext.coefficientOrder = pOrder;
+                    blockContext.isChroma = bChroma;
+                    blockContext.hasCoefficients = (iCBPCY & 1) != 0;
+                    blockContext.skipFlexbits = codec->m_Dparam->bSkipFlexbits;
+                    blockContext.modelBits = iModelBits;
+                    blockContext.trimFlexBits = state->trimFlexBits;
+                    blockContext.quantizationParameter = iQP;
+                    iNumNonZero = JxrHpBlockDecoderDecode(&blockContext);
+                }
                 if(iNumNonZero > 16) // something is wrong!
                     return ICERR_ERROR;
                 // shouldn't this be > 15?
