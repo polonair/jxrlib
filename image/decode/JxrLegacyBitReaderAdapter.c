@@ -29,39 +29,35 @@ U32 JxrLegacyBitReaderAdapterRead32(JxrLegacyBitReaderAdapter* state, U32 count)
 
 Void JxrLegacyBitReaderAdapterRefillLevel1(CWMImageStrCodec* codec, JxrLegacyBitReaderAdapter* state)
 {
-    assert(JxrLegacyBitReaderAdapterHasMatchingRefillDecision(state));
+    UNREFERENCED_PARAMETER(codec);
+    /* Direct legacy consumers may have advanced pbCurrent since the last reader call. */
+    JxrLegacyBitReaderAdapterSyncInputBufferState(state);
     if (JxrLegacyBitReaderAdapterNeedsRefill(state)) {
         BitIOInfo before = *state->stream;
+        JxrPacketSource source;
+        JxrWmpPacketSource wmpSource;
+        Bool executorDidRefill;
+        Bool executorMatchesLegacy;
         Bool legacyNeedsRefill = ((((INTPTR_T)before.pbStart ^
             (INTPTR_T)before.pbCurrent) & (UINTPTR_T)PACKETLENGTH) != 0);
-        if (JXRTraceEnabled()) {
-            JxrBitInputBufferState executorState;
-            JxrPacketSource source;
-            JxrWmpPacketSource wmpSource;
-            U8 executorPacket[PACKETLENGTH];
-            Bool executorDidRefill;
-            Bool executorMatchesLegacy;
+        UINTPTR_T legacyStartAddress = (UINTPTR_T)MASKPTR(before.pbStart + PACKETLENGTH, before.iMask);
+        size_t legacyOffset = before.offRef + PACKETLENGTH;
 
-            JxrBitInputBufferStateInit(&executorState, (UINTPTR_T)before.pbStart,
-                (UINTPTR_T)before.pbCurrent, (UINTPTR_T)before.iMask, before.offRef, before.uiShadow);
-            JxrWmpPacketSourceInit(&wmpSource, before.pWS, &source);
-            memcpy(executorPacket, before.pbStart, PACKETLENGTH);
-            JxrPacketExecutorTryRefill(&executorState, &source, executorPacket,
-                PACKETLENGTH, &executorDidRefill);
-            readIS(codec, state->stream);
-            executorMatchesLegacy = executorDidRefill == (before.offRef != state->stream->offRef) &&
-                executorState.startAddress == (UINTPTR_T)state->stream->pbStart &&
-                executorState.currentAddress == (UINTPTR_T)state->stream->pbCurrent &&
-                executorState.streamOffset == state->stream->offRef &&
-                executorState.shadow == state->stream->uiShadow;
-            JXRTraceDumpRefillSnapshot(&before, state->stream, TRUE, legacyNeedsRefill,
-                executorDidRefill, executorMatchesLegacy, executorState.startAddress,
-                executorState.currentAddress, executorState.streamOffset, executorState.shadow,
-                wmpSource.lastReadResult);
-        }
-        else {
-            readIS(codec, state->stream);
-        }
+        JxrWmpPacketSourceInit(&wmpSource, before.pWS, &source);
+        JxrPacketExecutorTryRefill(&state->inputBufferState, &source, before.pbStart,
+            PACKETLENGTH, &executorDidRefill);
+        state->stream->pbStart = (U8*)state->inputBufferState.startAddress;
+        state->stream->offRef = state->inputBufferState.streamOffset;
+        state->stream->uiShadow = state->inputBufferState.shadow;
+        executorMatchesLegacy = executorDidRefill && legacyNeedsRefill &&
+            state->inputBufferState.startAddress == legacyStartAddress &&
+            state->inputBufferState.currentAddress == (UINTPTR_T)before.pbCurrent &&
+            state->inputBufferState.streamOffset == legacyOffset &&
+            state->inputBufferState.shadow == *(U32*)before.pbStart;
+        JXRTraceDumpRefillSnapshot(&before, state->stream, TRUE, legacyNeedsRefill,
+            executorDidRefill, executorMatchesLegacy, state->inputBufferState.startAddress,
+            state->inputBufferState.currentAddress, state->inputBufferState.streamOffset,
+            state->inputBufferState.shadow, wmpSource.lastReadResult);
         JxrLegacyBitReaderAdapterSyncInputBufferState(state);
     }
 }
