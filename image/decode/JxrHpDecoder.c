@@ -20,9 +20,10 @@ extern const int dctIndex[3][16];
 Void JxrHpDecoderDecodeCbp(JxrDecoderSubbandContext* state)
 {
     CWMImageStrCodec* codec = state->codec;
+    JxrDecoderFormatState* format = &state->formatState;
     JxrEntropyBitReader* reader = &state->highpassReader;
-    const COLORFORMAT cf = codec->m_param.cfColorFormat;
-    const Int iChannel = (cf == NCOMPONENT || cf == CMYK) ? (Int) codec->m_param.cNumChannels : 1;
+    const COLORFORMAT cf = JxrDecoderFormatStateGetColorFormat(format);
+    const Int iChannel = (cf == NCOMPONENT || cf == CMYK) ? JxrDecoderFormatStateGetChannelCount(format) : 1;
     Int iCBPCY, iCBPCU , iCBPCV;
     Int k, iBlock, i;
     Int iNumCBP;
@@ -183,12 +184,13 @@ static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
     Int macroblockX, Int macroblockY)
 {
     CWMImageStrCodec* codec = state->codec;
+    JxrDecoderFormatState* format = &state->formatState;
     JxrMacroblockState* macroblock = &state->macroblockState;
-    CWMITile* pTile = codec->pTile + codec->cTileColumn;
+    CWMITile* pTile = JxrDecoderFormatStateGetCurrentTile(format);
     JxrEntropyBitReader* highpassReader = &state->highpassReader;
     JxrEntropyBitReader* flexbitsReader = &state->flexbitsReader;
-    const COLORFORMAT cf = codec->m_param.cfColorFormat;
-    const Int iChannels = (Int) codec->m_param.cNumChannels;
+    const COLORFORMAT cf = JxrDecoderFormatStateGetColorFormat(format);
+    const Int iChannels = JxrDecoderFormatStateGetChannelCount(format);
     const Int iPlanes = (cf == YUV_420 || cf == YUV_422) ? 1 : iChannels;
     Int  iQP;
     JxrAdaptiveScanState* scanState;
@@ -227,7 +229,7 @@ static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
     for (i = 0; i < iPlanes; i++) {
         Int iIndex = 0, iNumNonZero;
 
-        if(codec->WMISCP.sbSubband != SB_NO_FLEXBITS)
+        if (JxrDecoderFormatStateHasFlexbits(format))
             JxrSubbandStreamRefillLevel1(codec, flexbitsReader);
 
         for (iBlock = 0; iBlock < iNBlocks; iBlock++) {
@@ -236,7 +238,7 @@ static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
             if (!JxrEntropyBitReaderSharesStream(highpassReader, flexbitsReader))
                 JxrSubbandStreamRefillLevel2(codec, flexbitsReader);
 
-            iQP = (codec->m_param.bTranscode ? 1 : pTile->pQuantizerHP[iPlanes > 1 ? i : (iBlock > 3 ? (cf == YUV_420 ? iBlock - 3 : iBlock / 2 - 1) : 0)][JxrMacroblockStateGetHighpassQuantizerIndex(macroblock)].iQP);
+            iQP = (JxrDecoderFormatStateIsTranscode(format) ? 1 : pTile->pQuantizerHP[iPlanes > 1 ? i : (iBlock > 3 ? (cf == YUV_420 ? iBlock - 3 : iBlock / 2 - 1) : 0)][JxrMacroblockStateGetHighpassQuantizerIndex(macroblock)].iQP);
 
             for (iSubblock = 0; iSubblock < 4; iSubblock++, iIndex++, iCBPCY >>= 1) {
                 coefficients = JxrHpCoefficientBlockResolverResolve(state, i, iBlock,
@@ -287,18 +289,18 @@ static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
 Int JxrHpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
     Int macroblockX, Int macroblockY)
 {
-    CWMImageStrCodec* codec = state->codec;
     JxrMacroblockState* macroblock = &state->macroblockState;
-    CWMITile* tile = codec->pTile + codec->cTileColumn;
+    JxrDecoderFormatState* format = &state->formatState;
+    CWMITile* tile = JxrDecoderFormatStateGetCurrentTile(format);
     JxrEntropyBitReader* highpassReader = &state->highpassReader;
     Int tableIndex;
 
     /** reset adaptive scan totals **/
-    if (codec->m_bResetRGITotals) {
+    if (JxrDecoderFormatStateShouldResetScan(format)) {
         JxrAdaptiveScanStateResetTotals(&state->horizontalScanState, 16);
         JxrAdaptiveScanStateResetTotals(&state->verticalScanState, 16);
     }
-    if((codec->WMISCP.bfBitstreamFormat != SPATIAL) && (tile->cBitsHP > 0)) { // MB-based HP QP index
+    if (!JxrDecoderFormatStateIsSpatial(format) && tile->cBitsHP > 0) { // MB-based HP QP index
         JxrMacroblockStateSetHighpassQuantizerIndex(macroblock,
             JxrQuantizationIndexReaderDecode(highpassReader, tile->cBitsHP));
         if (JxrMacroblockStateGetHighpassQuantizerIndex(macroblock) >= tile->cNumQPHP)
@@ -315,7 +317,7 @@ Int JxrHpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
     if (JxrHpDecoderDecodeCoefficients(state, macroblockX, macroblockY) != ICERR_OK)
         goto ErrorExit;
 
-    if (codec->m_bResetContext) {
+    if (JxrDecoderFormatStateShouldResetContext(format)) {
         JxrHighpassCbpStateAdapt(&state->highpassCbpState);
         for (tableIndex = 0; tableIndex < CONTEXTX; ++tableIndex) {
             JxrHuffmanStateSetAdapt(&state->huffmanStateSet,

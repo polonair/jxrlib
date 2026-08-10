@@ -17,5 +17,7 @@ Bool JxrDecoderFormatStateHasHighpass(const JxrDecoderFormatState* state);
 CWMITile* JxrDecoderFormatStateGetCurrentTile(const JxrDecoderFormatState* state);
 Bool JxrDecoderFormatStateShouldResetScan(const JxrDecoderFormatState* state);
 Bool JxrDecoderFormatStateShouldResetContext(const JxrDecoderFormatState* state);
+Bool JxrDecoderFormatStateIsTranscode(const JxrDecoderFormatState* state);
+Bool JxrDecoderFormatStateHasFlexbits(const JxrDecoderFormatState* state);
 
 #endif

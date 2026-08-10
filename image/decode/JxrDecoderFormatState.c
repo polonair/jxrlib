@@ -18,3 +18,7 @@ Bool JxrDecoderFormatStateShouldResetScan(const JxrDecoderFormatState* state)
 { return state->nativeCodec->m_bResetRGITotals; }
 Bool JxrDecoderFormatStateShouldResetContext(const JxrDecoderFormatState* state)
 { return state->nativeCodec->m_bResetContext; }
+Bool JxrDecoderFormatStateIsTranscode(const JxrDecoderFormatState* state)
+{ return state->nativeCodec->m_param.bTranscode; }
+Bool JxrDecoderFormatStateHasFlexbits(const JxrDecoderFormatState* state)
+{ return state->nativeCodec->WMISCP.sbSubband != SB_NO_FLEXBITS; }
