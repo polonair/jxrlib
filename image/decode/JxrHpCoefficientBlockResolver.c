@@ -6,15 +6,15 @@ JxrHpBlockAddress JxrHpCoefficientBlockResolverResolveAddress(COLORFORMAT colorF
     JxrHpBlockAddress address;
 
     address.planeIndex = plane;
-    address.coefficientOffset = (size_t)blkOffset[coefficientIndex & 15];
+    address.coefficientOffset = blkOffset[coefficientIndex & 15];
     if (block >= 4) {
         if (colorFormat == YUV_420) {
             address.planeIndex = block - 3;
-            address.coefficientOffset = (size_t)blkOffsetUV[subblock];
+            address.coefficientOffset = blkOffsetUV[subblock];
         }
         else {
             address.planeIndex = 1 + (1 & (block >> 1));
-            address.coefficientOffset = (size_t)((block & 1) * 32 + blkOffsetUV_422[subblock]);
+            address.coefficientOffset = (block & 1) * 32 + blkOffsetUV_422[subblock];
         }
     }
     return address;

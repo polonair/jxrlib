@@ -1,8 +1,6 @@
 #ifndef JXR_COEFFICIENT_BUFFER_H
 #define JXR_COEFFICIENT_BUFFER_H
 
-#include <stddef.h>
-
 #include "windowsmediaphoto.h"
 
 /*
@@ -12,14 +10,14 @@
  */
 typedef struct JxrCoefficientBuffer {
     PixelI* values;
-    size_t offset;
-    size_t count;
+    Int offset;
+    Int count;
 } JxrCoefficientBuffer;
 
-JxrCoefficientBuffer JxrCoefficientBufferCreate(PixelI* values, size_t offset, size_t count);
-PixelI JxrCoefficientBufferGet(const JxrCoefficientBuffer* buffer, size_t index);
-Void JxrCoefficientBufferSet(JxrCoefficientBuffer* buffer, size_t index, PixelI value);
-Void JxrCoefficientBufferAdd(JxrCoefficientBuffer* buffer, size_t index, PixelI value);
+JxrCoefficientBuffer JxrCoefficientBufferCreate(PixelI* values, Int offset, Int count);
+PixelI JxrCoefficientBufferGet(const JxrCoefficientBuffer* buffer, Int index);
+Void JxrCoefficientBufferSet(JxrCoefficientBuffer* buffer, Int index, PixelI value);
+Void JxrCoefficientBufferAdd(JxrCoefficientBuffer* buffer, Int index, PixelI value);
 Void JxrCoefficientBufferClear(JxrCoefficientBuffer* buffer);
 
 #endif

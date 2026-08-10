@@ -715,6 +715,10 @@ static int test_hp_coefficient_block_resolver(void)
     JxrCoefficientPlaneStateInit(&state.coefficientPlanes, codec.p1MBbuffer, YUV_444, 3);
     address = JxrHpCoefficientBlockResolverResolveAddress(YUV_444, 1, 0, 0, 2);
     if (address.planeIndex != 1 || address.coefficientOffset != 16) return 0;
+    address = JxrHpCoefficientBlockResolverResolveAddress(YUV_444, 0, 0, 0, 15);
+    if (address.planeIndex != 0 || address.coefficientOffset != 240) return 0;
+    block = JxrHpCoefficientBlockResolverResolve(&state, 0, 0, 0, 15);
+    if (block.values != plane0 || block.offset != 240 || block.count != 16) return 0;
     block = JxrHpCoefficientBlockResolverResolve(&state, 1, 0, 0, 2);
     if (block.values != plane1 || block.offset != 16 || block.count != 16)
         return 0;

@@ -1,6 +1,6 @@
 #include "JxrCoefficientPlaneState.h"
 
-static size_t JxrCoefficientPlaneStateGetFormatLength(COLORFORMAT colorFormat, Int plane)
+static Int JxrCoefficientPlaneStateGetFormatLength(COLORFORMAT colorFormat, Int plane)
 {
     if (plane == 0 || (colorFormat != YUV_420 && colorFormat != YUV_422))
         return 256;
@@ -29,15 +29,16 @@ PixelI* JxrCoefficientPlaneStateGetPlane(const JxrCoefficientPlaneState* state, 
     return state->planes[plane];
 }
 
-size_t JxrCoefficientPlaneStateGetLength(const JxrCoefficientPlaneState* state, Int plane)
+Int JxrCoefficientPlaneStateGetLength(const JxrCoefficientPlaneState* state, Int plane)
 {
     assert(plane >= 0 && plane < state->planeCount);
     return state->lengths[plane];
 }
 
 JxrCoefficientBuffer JxrCoefficientPlaneStateGetBlock(const JxrCoefficientPlaneState* state,
-    Int plane, size_t offset, size_t count)
+    Int plane, Int offset, Int count)
 {
+    assert(offset >= 0 && count >= 0);
     assert(offset <= JxrCoefficientPlaneStateGetLength(state, plane));
     assert(count <= JxrCoefficientPlaneStateGetLength(state, plane) - offset);
     return JxrCoefficientBufferCreate(JxrCoefficientPlaneStateGetPlane(state, plane), offset, count);

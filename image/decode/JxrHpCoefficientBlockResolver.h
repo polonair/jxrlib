@@ -6,7 +6,7 @@
 
 typedef struct JxrHpBlockAddress {
     Int planeIndex;
-    size_t coefficientOffset;
+    Int coefficientOffset;
 } JxrHpBlockAddress;
 
 JxrHpBlockAddress JxrHpCoefficientBlockResolverResolveAddress(COLORFORMAT colorFormat,
