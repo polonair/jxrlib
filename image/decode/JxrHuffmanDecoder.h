@@ -2,6 +2,7 @@
 #define JXR_HUFFMAN_DECODER_H
 
 #include "strcodec.h"
+#include "JxrEntropyReader.h"
 
 enum {
     JXR_HUFFMAN_ROOT_BITS = 5,
@@ -15,6 +16,8 @@ typedef struct JxrHuffmanTable {
 
 JxrHuffmanTable JxrHuffmanTableCreate(const short* entries);
 Int JxrHuffmanTableGetEntry(const JxrHuffmanTable* table, UInt index);
+Int JxrHuffmanDecoderDecodeSymbolReader(const JxrHuffmanTable* table, JxrEntropyBitReader* input);
+Int JxrHuffmanDecoderDecodeShortSymbolReader(const JxrHuffmanTable* table, JxrEntropyBitReader* input);
 Int JxrHuffmanDecoderDecodeSymbol(const JxrHuffmanTable* table, BitIOInfo* input);
 Int JxrHuffmanDecoderDecodeShortSymbol(const JxrHuffmanTable* table, BitIOInfo* input);
 

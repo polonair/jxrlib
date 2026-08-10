@@ -3,7 +3,7 @@
 #include "JxrEntropyLevelDecoder.h"
 #include "JxrEntropyReader.h"
 
-Int JxrEntropyBlockDecoderDecodeRun(Int maximumRun, CAdaptiveHuffman* state, BitIOInfo* input)
+Int JxrEntropyBlockDecoderDecodeRunReader(Int maximumRun, CAdaptiveHuffman* state, JxrEntropyBitReader* input)
 {
     static const Int remap[] = { 1,2,3,5,7, 1,2,3,5,7, 1,2,3,4,5 };
     Int tableIndex;
@@ -11,40 +11,62 @@ Int JxrEntropyBlockDecoderDecodeRun(Int maximumRun, CAdaptiveHuffman* state, Bit
     Int run;
 
     if (maximumRun < 5) {
-        if (maximumRun == 1 || JxrEntropyReaderReadFlag(input)) return 1;
-        if (maximumRun == 2 || JxrEntropyReaderReadFlag(input)) return 2;
-        if (maximumRun == 3 || JxrEntropyReaderReadFlag(input)) return 3;
+        if (maximumRun == 1 || JxrEntropyBitReaderReadFlag(input)) return 1;
+        if (maximumRun == 2 || JxrEntropyBitReaderReadFlag(input)) return 2;
+        if (maximumRun == 3 || JxrEntropyBitReaderReadFlag(input)) return 3;
         return 4;
     }
 
-    tableIndex = JxrAdaptiveHuffmanDecodeShortTable(state->m_hufDecTable, input);
+    tableIndex = JxrAdaptiveHuffmanDecodeShortTableReader(state->m_hufDecTable, input);
     tableIndex += gSignificantRunBin[maximumRun] * 5;
     run = remap[tableIndex];
     fixedBitCount = gSignificantRunFixedLength[tableIndex];
-    if (fixedBitCount) run += (Int)JxrEntropyReaderRead(input, fixedBitCount);
+    if (fixedBitCount) run += (Int)JxrEntropyBitReaderRead(input, fixedBitCount);
     return run;
+}
+
+Int JxrEntropyBlockDecoderDecodeFirstSymbolReader(CAdaptiveHuffman* state, JxrEntropyBitReader* input)
+{
+    return JxrAdaptiveHuffmanDecodeReader(state, input);
+}
+
+Int JxrEntropyBlockDecoderDecodeNextSymbolReader(Int coefficientPosition,
+    CAdaptiveHuffman* state, JxrEntropyBitReader* input)
+{
+    Int symbol;
+    if (coefficientPosition < 15) {
+        symbol = JxrAdaptiveHuffmanDecodeShortTableReader(state->m_hufDecTable, input);
+        JxrAdaptiveHuffmanObserve(state, symbol);
+        return symbol;
+    }
+    if (coefficientPosition == 15) {
+        if (!JxrEntropyBitReaderReadFlag(input)) return 0;
+        if (!JxrEntropyBitReaderReadFlag(input)) return 2;
+        return 1 + 2 * (Int)JxrEntropyBitReaderReadFlag(input);
+    }
+    return (Int)JxrEntropyBitReaderRead(input, 1);
+}
+
+Int JxrEntropyBlockDecoderDecodeRun(Int maximumRun, CAdaptiveHuffman* state, BitIOInfo* input)
+{
+    JxrEntropyBitReader reader;
+    JxrEntropyBitReaderInit(&reader, input);
+    return JxrEntropyBlockDecoderDecodeRunReader(maximumRun, state, &reader);
 }
 
 Int JxrEntropyBlockDecoderDecodeFirstSymbol(CAdaptiveHuffman* state, BitIOInfo* input)
 {
-    return JxrAdaptiveHuffmanDecode(state, input);
+    JxrEntropyBitReader reader;
+    JxrEntropyBitReaderInit(&reader, input);
+    return JxrEntropyBlockDecoderDecodeFirstSymbolReader(state, &reader);
 }
 
 Int JxrEntropyBlockDecoderDecodeNextSymbol(Int coefficientPosition,
     CAdaptiveHuffman* state, BitIOInfo* input)
 {
-    Int symbol;
-    if (coefficientPosition < 15) {
-        symbol = JxrAdaptiveHuffmanDecodeShortTable(state->m_hufDecTable, input);
-        JxrAdaptiveHuffmanObserve(state, symbol);
-        return symbol;
-    }
-    if (coefficientPosition == 15) {
-        if (!JxrEntropyReaderReadFlag(input)) return 0;
-        if (!JxrEntropyReaderReadFlag(input)) return 2;
-        return 1 + 2 * (Int)JxrEntropyReaderReadFlag(input);
-    }
-    return (Int)JxrEntropyReaderRead(input, 1);
+    JxrEntropyBitReader reader;
+    JxrEntropyBitReaderInit(&reader, input);
+    return JxrEntropyBlockDecoderDecodeNextSymbolReader(coefficientPosition, state, &reader);
 }
 
 Int JxrEntropyBlockDecoderDecodeLowpassBlock(Bool isChroma, Int* runLevelPairs,

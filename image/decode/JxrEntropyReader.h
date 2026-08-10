@@ -12,6 +12,7 @@ Void JxrEntropyBitReaderInit(JxrEntropyBitReader* state, BitIOInfo* legacyStream
 U32 JxrEntropyBitReaderPeek(JxrEntropyBitReader* state, U32 count);
 Void JxrEntropyBitReaderConsume(JxrEntropyBitReader* state, U32 count);
 U32 JxrEntropyBitReaderRead(JxrEntropyBitReader* state, U32 count);
+U32 JxrEntropyBitReaderReadLong(JxrEntropyBitReader* state, U32 count);
 U32 JxrEntropyBitReaderReadFlag(JxrEntropyBitReader* state);
 I32 JxrEntropyBitReaderReadSign(JxrEntropyBitReader* state);
 I32 JxrEntropyBitReaderDecodeSignedResidualValue(U32 encodedValue);

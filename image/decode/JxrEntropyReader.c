@@ -20,6 +20,11 @@ U32 JxrEntropyBitReaderRead(JxrEntropyBitReader* state, U32 count)
     return getBit16(state->legacyStream, count);
 }
 
+U32 JxrEntropyBitReaderReadLong(JxrEntropyBitReader* state, U32 count)
+{
+    return getBit32(state->legacyStream, count);
+}
+
 U32 JxrEntropyBitReaderReadFlag(JxrEntropyBitReader* state)
 {
     return JxrEntropyBitReaderRead(state, 1);

@@ -2,18 +2,32 @@
 #include "JxrEntropyReader.h"
 #include "JxrHuffmanDecoder.h"
 
-Int JxrAdaptiveHuffmanDecode(CAdaptiveHuffman* state, BitIOInfo* input)
+Int JxrAdaptiveHuffmanDecodeReader(CAdaptiveHuffman* state, JxrEntropyBitReader* input)
 {
     JxrHuffmanTable table = JxrHuffmanTableCreate(state->m_hufDecTable);
-    Int symbol = JxrHuffmanDecoderDecodeSymbol(&table, input);
+    Int symbol = JxrHuffmanDecoderDecodeSymbolReader(&table, input);
     JxrAdaptiveHuffmanObserve(state, symbol);
     return symbol;
 }
 
-Int JxrAdaptiveHuffmanDecodeShortTable(const short* table, BitIOInfo* input)
+Int JxrAdaptiveHuffmanDecodeShortTableReader(const short* table, JxrEntropyBitReader* input)
 {
     JxrHuffmanTable huffmanTable = JxrHuffmanTableCreate(table);
-    return JxrHuffmanDecoderDecodeShortSymbol(&huffmanTable, input);
+    return JxrHuffmanDecoderDecodeShortSymbolReader(&huffmanTable, input);
+}
+
+Int JxrAdaptiveHuffmanDecode(CAdaptiveHuffman* state, BitIOInfo* input)
+{
+    JxrEntropyBitReader reader;
+    JxrEntropyBitReaderInit(&reader, input);
+    return JxrAdaptiveHuffmanDecodeReader(state, &reader);
+}
+
+Int JxrAdaptiveHuffmanDecodeShortTable(const short* table, BitIOInfo* input)
+{
+    JxrEntropyBitReader reader;
+    JxrEntropyBitReaderInit(&reader, input);
+    return JxrAdaptiveHuffmanDecodeShortTableReader(table, &reader);
 }
 
 Void JxrAdaptiveHuffmanObserve(CAdaptiveHuffman* state, Int symbol)

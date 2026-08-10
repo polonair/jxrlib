@@ -21,21 +21,21 @@ static Int JxrHpBlockDecoderDecodeEntropyCoefficients(JxrHpBlockDecodingContext*
     I32 sign;
     Int level;
 
-    symbol = JxrEntropyBlockDecoderDecodeFirstSymbol(
-        context->huffmanStates[coefficientContextBase], context->highpassReader->legacyStream);
+    symbol = JxrEntropyBlockDecoderDecodeFirstSymbolReader(
+        context->huffmanStates[coefficientContextBase], context->highpassReader);
     significantRun = symbol & 1;
     remainingSignificantRuns = symbol >> 2;
     continuation = significantRun & remainingSignificantRuns;
     sign = JxrEntropyBitReaderReadSign(context->highpassReader);
     level = JxrHpBlockDecoderApplySign(scaledQuantizationParameter, sign);
     if (symbol & 2) {
-        Int magnitude = JxrEntropyLevelDecoderDecode(
-            context->huffmanStates[6 + CTDC + CONTEXTX + continuation], context->highpassReader->legacyStream);
+        Int magnitude = JxrEntropyLevelDecoderDecodeReader(
+            context->huffmanStates[6 + CTDC + CONTEXTX + continuation], context->highpassReader);
         level *= magnitude;
     }
     if (significantRun == 0) {
-        location += JxrEntropyBlockDecoderDecodeRun(15 - location,
-            context->huffmanStates[0], context->highpassReader->legacyStream);
+        location += JxrEntropyBlockDecoderDecodeRunReader(15 - location,
+            context->huffmanStates[0], context->highpassReader);
     }
     location &= 15;
     JxrCoefficientBufferSet(context->coefficientBuffer,
@@ -46,13 +46,13 @@ static Int JxrHpBlockDecoderDecodeEntropyCoefficients(JxrHpBlockDecodingContext*
     while (remainingSignificantRuns != 0) {
         significantRun = remainingSignificantRuns & 1;
         if (significantRun == 0) {
-            location += JxrEntropyBlockDecoderDecodeRun(15 - location,
-                context->huffmanStates[0], context->highpassReader->legacyStream);
+            location += JxrEntropyBlockDecoderDecodeRunReader(15 - location,
+                context->huffmanStates[0], context->highpassReader);
             if (location >= 16)
                 return 16;
         }
-        symbol = JxrEntropyBlockDecoderDecodeNextSymbol(location + 1,
-            context->huffmanStates[coefficientContextBase + continuation + 1], context->highpassReader->legacyStream);
+        symbol = JxrEntropyBlockDecoderDecodeNextSymbolReader(location + 1,
+            context->huffmanStates[coefficientContextBase + continuation + 1], context->highpassReader);
         remainingSignificantRuns = symbol >> 1;
 
         assert(remainingSignificantRuns >= 0 && remainingSignificantRuns < 3);
@@ -60,8 +60,8 @@ static Int JxrHpBlockDecoderDecodeEntropyCoefficients(JxrHpBlockDecodingContext*
         sign = JxrEntropyBitReaderReadSign(context->highpassReader);
         level = JxrHpBlockDecoderApplySign(scaledQuantizationParameter, sign);
         if (symbol & 1) {
-            Int magnitude = JxrEntropyLevelDecoderDecode(
-                context->huffmanStates[6 + CTDC + CONTEXTX + continuation], context->highpassReader->legacyStream);
+            Int magnitude = JxrEntropyLevelDecoderDecodeReader(
+                context->huffmanStates[6 + CTDC + CONTEXTX + continuation], context->highpassReader);
             level *= magnitude;
         }
         JxrCoefficientBufferSet(context->coefficientBuffer,
