@@ -14,3 +14,7 @@ Bool JxrDecoderFormatStateHasHighpass(const JxrDecoderFormatState* state)
 { return state->nativeCodec->WMISCP.sbSubband != SB_NO_HIGHPASS; }
 CWMITile* JxrDecoderFormatStateGetCurrentTile(const JxrDecoderFormatState* state)
 { return state->nativeCodec->pTile + state->nativeCodec->cTileColumn; }
+Bool JxrDecoderFormatStateShouldResetScan(const JxrDecoderFormatState* state)
+{ return state->nativeCodec->m_bResetRGITotals; }
+Bool JxrDecoderFormatStateShouldResetContext(const JxrDecoderFormatState* state)
+{ return state->nativeCodec->m_bResetContext; }

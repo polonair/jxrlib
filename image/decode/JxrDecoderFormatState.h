@@ -15,5 +15,7 @@ Bool JxrDecoderFormatStateIsSpatial(const JxrDecoderFormatState* state);
 Bool JxrDecoderFormatStateIsDcOnly(const JxrDecoderFormatState* state);
 Bool JxrDecoderFormatStateHasHighpass(const JxrDecoderFormatState* state);
 CWMITile* JxrDecoderFormatStateGetCurrentTile(const JxrDecoderFormatState* state);
+Bool JxrDecoderFormatStateShouldResetScan(const JxrDecoderFormatState* state);
+Bool JxrDecoderFormatStateShouldResetContext(const JxrDecoderFormatState* state);
 
 #endif
