@@ -52,3 +52,8 @@ Void JxrMacroblockStateSetHighpassQuantizerIndex(JxrMacroblockState* state, U8 v
 {
     state->nativeMacroblock->iQIndexHP = value;
 }
+
+I32 JxrMacroblockStateGetOrientation(const JxrMacroblockState* state)
+{
+    return state->nativeMacroblock->iOrientation;
+}

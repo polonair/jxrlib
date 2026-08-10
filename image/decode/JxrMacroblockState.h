@@ -18,5 +18,6 @@ U8 JxrMacroblockStateGetLowpassQuantizerIndex(const JxrMacroblockState* state);
 U8 JxrMacroblockStateGetHighpassQuantizerIndex(const JxrMacroblockState* state);
 Void JxrMacroblockStateSetLowpassQuantizerIndex(JxrMacroblockState* state, U8 value);
 Void JxrMacroblockStateSetHighpassQuantizerIndex(JxrMacroblockState* state, U8 value);
+I32 JxrMacroblockStateGetOrientation(const JxrMacroblockState* state);
 
 #endif

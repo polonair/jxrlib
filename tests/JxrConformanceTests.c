@@ -145,10 +145,12 @@ static int test_macroblock_state_vectors(void)
     JxrMacroblockStateSetDcCoefficient(&state, 1, 5, 42);
     if (JxrMacroblockStateGetDcCoefficient(&state, 1, 5) != 42) return 0;
     JxrMacroblockStateResetQuantizerIndices(&state);
+    macroblock.iOrientation = 1;
     JxrMacroblockStateSetLowpassQuantizerIndex(&state, 3);
     JxrMacroblockStateSetHighpassQuantizerIndex(&state, 7);
     return JxrMacroblockStateGetLowpassQuantizerIndex(&state) == 3 &&
-        JxrMacroblockStateGetHighpassQuantizerIndex(&state) == 7;
+        JxrMacroblockStateGetHighpassQuantizerIndex(&state) == 7 &&
+        JxrMacroblockStateGetOrientation(&state) == 1;
 }
 
 static int test_explicit_entropy_context(void)
