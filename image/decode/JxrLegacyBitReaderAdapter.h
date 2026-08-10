@@ -3,11 +3,13 @@
 
 #include "strcodec.h"
 #include "JxrBitInputBufferState.h"
+#include "JxrBitCursorState.h"
 
 /* The only decoder-facing layer allowed to invoke legacy BitIO macros. */
 typedef struct JxrLegacyBitReaderAdapter {
     BitIOInfo* stream;
     JxrBitInputBufferState inputBufferState;
+    JxrBitCursorState bitCursor;
 } JxrLegacyBitReaderAdapter;
 
 Void JxrLegacyBitReaderAdapterInit(JxrLegacyBitReaderAdapter* state, BitIOInfo* stream);

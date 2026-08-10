@@ -11,18 +11,28 @@ Void JxrLegacyBitReaderAdapterInit(JxrLegacyBitReaderAdapter* state, BitIOInfo* 
 
 U32 JxrLegacyBitReaderAdapterPeek16(JxrLegacyBitReaderAdapter* state, U32 count)
 {
-    return peekBit16(state->stream, count);
+    JxrBitCursorStateInit(&state->bitCursor, state->stream);
+    return JxrBitCursorStatePeek(&state->bitCursor, count);
 }
 
 Void JxrLegacyBitReaderAdapterConsume16(JxrLegacyBitReaderAdapter* state, U32 count)
 {
-    flushBit16(state->stream, count);
+    JxrBitCursorStateInit(&state->bitCursor, state->stream);
+    JxrBitCursorStateConsume(&state->bitCursor, count);
+    state->stream->pbCurrent = (U8*)state->bitCursor.currentAddress;
+    state->stream->uiAccumulator = state->bitCursor.accumulator;
+    state->stream->cBitsUsed = state->bitCursor.usedBits;
     JxrLegacyBitReaderAdapterSyncInputBufferState(state);
 }
 
 U32 JxrLegacyBitReaderAdapterRead32(JxrLegacyBitReaderAdapter* state, U32 count)
 {
-    U32 value = getBit32(state->stream, count);
+    U32 value;
+    JxrBitCursorStateInit(&state->bitCursor, state->stream);
+    value = JxrBitCursorStateReadLong(&state->bitCursor, count);
+    state->stream->pbCurrent = (U8*)state->bitCursor.currentAddress;
+    state->stream->uiAccumulator = state->bitCursor.accumulator;
+    state->stream->cBitsUsed = state->bitCursor.usedBits;
     JxrLegacyBitReaderAdapterSyncInputBufferState(state);
     return value;
 }
@@ -67,6 +77,7 @@ Void JxrLegacyBitReaderAdapterSyncInputBufferState(JxrLegacyBitReaderAdapter* st
     JxrBitInputBufferStateInit(&state->inputBufferState,
         (UINTPTR_T)state->stream->pbStart, (UINTPTR_T)state->stream->pbCurrent,
         (UINTPTR_T)state->stream->iMask, state->stream->offRef, state->stream->uiShadow);
+    JxrBitCursorStateInit(&state->bitCursor, state->stream);
 }
 
 Bool JxrLegacyBitReaderAdapterIsInputBufferStateCurrent(const JxrLegacyBitReaderAdapter* state)

@@ -242,6 +242,9 @@ static int test_bit_cursor_state_vectors(void)
     legacy.uiAccumulator = ((U32)data[0] << 24) | ((U32)data[1] << 16) |
         ((U32)data[2] << 8) | (U32)data[3];
     JxrBitCursorStateInit(&cursor, &legacy);
+    if (JxrBitCursorStatePeek(&cursor, 0) != 0 ||
+        JxrBitCursorStateReadLong(&cursor, 0) != 0 ||
+        !JxrBitCursorStateMatchesLegacy(&cursor, &legacy)) return 0;
     if (JxrBitCursorStatePeek(&cursor, 3) != peekBit16(&legacy, 3) ||
         !JxrBitCursorStateMatchesLegacy(&cursor, &legacy)) return 0;
     JxrBitCursorStateConsume(&cursor, 0);

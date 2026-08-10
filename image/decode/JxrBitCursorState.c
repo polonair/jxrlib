@@ -16,13 +16,17 @@ Void JxrBitCursorStateInit(JxrBitCursorState* state, const BitIOInfo* legacy)
 
 U32 JxrBitCursorStatePeek(const JxrBitCursorState* state, U32 count)
 {
-    assert(count > 0 && count <= 16);
+    assert(count <= 16);
+    if (count == 0)
+        return 0;
     return state->accumulator >> (32 - count);
 }
 
 Void JxrBitCursorStateConsume(JxrBitCursorState* state, U32 count)
 {
     assert(count <= 16);
+    if (count == 0)
+        return;
     state->usedBits += count;
     state->currentAddress = ((state->currentAddress + (state->usedBits >> 3)) & state->mask);
     state->usedBits &= 15;
@@ -33,7 +37,9 @@ Void JxrBitCursorStateConsume(JxrBitCursorState* state, U32 count)
 U32 JxrBitCursorStateReadLong(JxrBitCursorState* state, U32 count)
 {
     U32 value = 0;
-    assert(count > 0 && count <= 32);
+    assert(count <= 32);
+    if (count == 0)
+        return 0;
     if (count > 16) {
         value = JxrBitCursorStatePeek(state, 16);
         JxrBitCursorStateConsume(state, 16);
