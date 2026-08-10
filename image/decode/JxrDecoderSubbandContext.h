@@ -10,7 +10,6 @@
  */
 typedef struct JxrDecoderSubbandContext {
     CWMImageStrCodec* codec;
-    CCodingContext* entropy;
     JxrEntropyBitReader dcReader;
     JxrEntropyBitReader lowpassReader;
     JxrEntropyBitReader highpassReader;

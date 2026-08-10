@@ -242,7 +242,7 @@ static int test_decoder_subband_context(void)
     entropy.m_pIOAC = &highpassInput;
     entropy.m_pIOFL = &flexbitsInput;
     JxrDecoderSubbandContextInit(&state, &codec, &entropy);
-    return state.codec == &codec && state.entropy == &entropy &&
+    return state.codec == &codec &&
         !JxrEntropyBitReaderSharesStream(&state.dcReader, &state.lowpassReader) &&
         !JxrEntropyBitReaderSharesStream(&state.highpassReader, &state.flexbitsReader) &&
         JxrEntropyBitReaderPosition(&state.dcReader) == 0 &&
