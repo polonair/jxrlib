@@ -17,6 +17,16 @@ I32* JxrMacroblockStateGetDcCoefficients(JxrMacroblockState* state, Int channel)
     return state->nativeMacroblock->iBlockDC[channel];
 }
 
+I32 JxrMacroblockStateGetDcCoefficient(const JxrMacroblockState* state, Int channel, Int index)
+{
+    return state->nativeMacroblock->iBlockDC[channel][index];
+}
+
+Void JxrMacroblockStateSetDcCoefficient(JxrMacroblockState* state, Int channel, Int index, I32 value)
+{
+    state->nativeMacroblock->iBlockDC[channel][index] = value;
+}
+
 Void JxrMacroblockStateResetQuantizerIndices(JxrMacroblockState* state)
 {
     state->nativeMacroblock->iQIndexLP = 0;

@@ -142,6 +142,8 @@ static int test_macroblock_state_vectors(void)
     if (JxrMacroblockStateGetDcCoefficients(&state, 0)[0] != 0 ||
         JxrMacroblockStateGetDcCoefficients(&state, 1)[15] != 0 ||
         JxrMacroblockStateGetDcCoefficients(&state, 2)[0] != -1) return 0;
+    JxrMacroblockStateSetDcCoefficient(&state, 1, 5, 42);
+    if (JxrMacroblockStateGetDcCoefficient(&state, 1, 5) != 42) return 0;
     JxrMacroblockStateResetQuantizerIndices(&state);
     JxrMacroblockStateSetLowpassQuantizerIndex(&state, 3);
     JxrMacroblockStateSetHighpassQuantizerIndex(&state, 7);

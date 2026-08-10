@@ -23,21 +23,15 @@ Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
     Int aRLCoeffs[32], iNumNonzero = 0, iIndex = 0;
     Int aLaplacianMean[2] = { 0, 0}, *pLM = aLaplacianMean;
     Int iChannel, iCBP = 0;
-    CWMIMBInfo* pMBInfo = &codec->MBInfo;
-    I32 *aDC[MAX_CHANNELS];
+    JxrMacroblockState* macroblock = &state->macroblockState;
 
     UNREFERENCED_PARAMETER(macroblockX);
     UNREFERENCED_PARAMETER(macroblockY);
 
     JxrSubbandStreamRefillLevel1(codec, reader);
     if((codec->WMISCP.bfBitstreamFormat != SPATIAL) && (codec->pTile[codec->cTileColumn].cBitsLP > 0))  // MB-based LP QP index
-        pMBInfo->iQIndexLP = JxrQuantizationIndexReaderDecode(reader,
-            codec->pTile[codec->cTileColumn].cBitsLP);
-
-    // set arrays
-    for (k = 0; k < (Int) codec->m_param.cNumChannels; k++) {
-        aDC[k & 15] = pMBInfo->iBlockDC[k];
-    }
+        JxrMacroblockStateSetLowpassQuantizerIndex(macroblock,
+            JxrQuantizationIndexReaderDecode(reader, codec->pTile[codec->cTileColumn].cBitsLP));
     /** reset adaptive scan totals **/
     if (codec->m_bResetRGITotals) {
         JxrAdaptiveScanStateResetTotals(scanState, 16);
@@ -72,7 +66,8 @@ Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
     }
 
     for (iChannel = 0; iChannel < iFullPlanes; iChannel++) {
-        JxrCoefficientBuffer coefficients = JxrCoefficientBufferCreate(aDC[iChannel], 0, 16);
+        JxrCoefficientBuffer coefficients = JxrCoefficientBufferCreate(
+            JxrMacroblockStateGetDcCoefficients(macroblock, iChannel), 0, 16);
 
         if (iCBP & 1) {
             iNumNonzero = JxrEntropyBlockDecoderDecodeLowpassBlockReader(iChannel > 0, aRLCoeffs, &state->huffmanStateSet,
@@ -96,7 +91,8 @@ Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
                 }
 
                 for (k = 0; k < iCount; k++) {
-                    aDC[(k & 1) + 1][pRemap[k >> 1]] = aTemp[k];
+                    JxrMacroblockStateSetDcCoefficient(macroblock, (k & 1) + 1,
+                        pRemap[k >> 1], aTemp[k]);
                 }
             }
             else {
@@ -116,8 +112,12 @@ Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
         if (iModelBits) {
             if ((cf == YUV_420 || cf == YUV_422) && iChannel) {
                 for (k = 1; k < (cf == YUV_420 ? 4 : 8); k++) {
-                    aDC[1][k] = JxrLpResidualDecoderDecodeChromaCoefficientReader(aDC[1][k], reader, iModelBits);
-                    aDC[2][k] = JxrLpResidualDecoderDecodeChromaCoefficientReader(aDC[2][k], reader, iModelBits);
+                    I32 chromaU = JxrMacroblockStateGetDcCoefficient(macroblock, 1, k);
+                    I32 chromaV = JxrMacroblockStateGetDcCoefficient(macroblock, 2, k);
+                    JxrMacroblockStateSetDcCoefficient(macroblock, 1, k,
+                        JxrLpResidualDecoderDecodeChromaCoefficientReader(chromaU, reader, iModelBits));
+                    JxrMacroblockStateSetDcCoefficient(macroblock, 2, k,
+                        JxrLpResidualDecoderDecodeChromaCoefficientReader(chromaV, reader, iModelBits));
                 }
             }
             else {
