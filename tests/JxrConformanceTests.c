@@ -703,18 +703,32 @@ static int test_decoder_format_snapshot_vectors(void)
     CWMImageStrCodec codec;
     CWMDecoderParameters parameters;
     CWMITile tiles[2];
+    CWMIQuantizer highpass0[2], highpass1[2], highpass2[2];
     JxrDecoderFormatState state;
 
     memset(&codec, 0, sizeof(codec));
     memset(&parameters, 0, sizeof(parameters));
     memset(tiles, 0, sizeof(tiles));
+    memset(highpass0, 0, sizeof(highpass0));
+    memset(highpass1, 0, sizeof(highpass1));
+    memset(highpass2, 0, sizeof(highpass2));
     codec.m_param.cfColorFormat = YUV_444;
     codec.m_param.cNumChannels = 3;
     codec.m_param.bTranscode = TRUE;
     codec.WMISCP.bfBitstreamFormat = FREQUENCY;
-    codec.WMISCP.sbSubband = SB_DC_ONLY;
+    codec.WMISCP.sbSubband = SB_ALL;
     codec.pTile = tiles;
     codec.cTileColumn = 1;
+    tiles[1].cBitsLP = 2;
+    tiles[1].cBitsHP = 3;
+    tiles[1].cNumQPLP = 2;
+    tiles[1].cNumQPHP = 2;
+    highpass0[1].iQP = 101;
+    highpass1[1].iQP = 202;
+    highpass2[1].iQP = 303;
+    tiles[1].pQuantizerHP[0] = highpass0;
+    tiles[1].pQuantizerHP[1] = highpass1;
+    tiles[1].pQuantizerHP[2] = highpass2;
     codec.m_bResetRGITotals = TRUE;
     codec.m_bResetContext = TRUE;
     parameters.bSkipFlexbits = TRUE;
@@ -724,9 +738,15 @@ static int test_decoder_format_snapshot_vectors(void)
 
     if (JxrDecoderFormatStateGetColorFormat(&state) != YUV_444 ||
         JxrDecoderFormatStateGetChannelCount(&state) != 3 ||
-        !JxrDecoderFormatStateIsDcOnly(&state) ||
+        JxrDecoderFormatStateIsDcOnly(&state) ||
         !JxrDecoderFormatStateHasHighpass(&state) ||
-        JxrDecoderFormatStateGetCurrentTile(&state) != tiles + 1 ||
+        JxrDecoderTileStateGetLowpassQuantizerBits(JxrDecoderFormatStateGetCurrentTile(&state)) != 2 ||
+        JxrDecoderTileStateGetHighpassQuantizerBits(JxrDecoderFormatStateGetCurrentTile(&state)) != 3 ||
+        JxrDecoderTileStateGetLowpassQuantizerCount(JxrDecoderFormatStateGetCurrentTile(&state)) != 2 ||
+        JxrDecoderTileStateGetHighpassQuantizerCount(JxrDecoderFormatStateGetCurrentTile(&state)) != 2 ||
+        JxrDecoderTileStateGetHighpassQuantizerParameter(JxrDecoderFormatStateGetCurrentTile(&state), 0, 1) != 101 ||
+        JxrDecoderTileStateGetHighpassQuantizerParameter(JxrDecoderFormatStateGetCurrentTile(&state), 1, 1) != 202 ||
+        JxrDecoderTileStateGetHighpassQuantizerParameter(JxrDecoderFormatStateGetCurrentTile(&state), 2, 1) != 303 ||
         !JxrDecoderFormatStateShouldResetScan(&state) ||
         !JxrDecoderFormatStateShouldResetContext(&state) ||
         !JxrDecoderFormatStateIsTranscode(&state) ||
@@ -738,13 +758,15 @@ static int test_decoder_format_snapshot_vectors(void)
     codec.m_param.cNumChannels = 1;
     codec.m_param.bTranscode = FALSE;
     codec.cTileColumn = 0;
+    tiles[1].cBitsHP = 0;
     codec.m_bResetRGITotals = FALSE;
     codec.m_bResetContext = FALSE;
     parameters.bSkipFlexbits = FALSE;
     parameters.cThumbnailScale = 1;
     return JxrDecoderFormatStateGetColorFormat(&state) == YUV_444 &&
         JxrDecoderFormatStateGetChannelCount(&state) == 3 &&
-        JxrDecoderFormatStateGetCurrentTile(&state) == tiles + 1 &&
+        JxrDecoderTileStateGetHighpassQuantizerBits(JxrDecoderFormatStateGetCurrentTile(&state)) == 3 &&
+        JxrDecoderTileStateGetHighpassQuantizerParameter(JxrDecoderFormatStateGetCurrentTile(&state), 0, 1) == 101 &&
         JxrDecoderFormatStateIsTranscode(&state) &&
         JxrDecoderFormatStateShouldResetScan(&state) &&
         JxrDecoderFormatStateShouldResetContext(&state) &&

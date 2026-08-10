@@ -2,6 +2,43 @@
 #include "decode.h"
 #include "JxrSubbandStreamRefill.h"
 
+#include <assert.h>
+
+Void JxrDecoderTileStateInit(JxrDecoderTileState* state, const CWMITile* nativeTile)
+{
+    Int channel;
+    state->lowpassQuantizerBits = 0;
+    state->highpassQuantizerBits = 0;
+    state->lowpassQuantizerCount = 0;
+    state->highpassQuantizerCount = 0;
+    for (channel = 0; channel < MAX_CHANNELS; ++channel)
+        state->highpassQuantizers[channel] = NULL;
+    if (nativeTile == NULL) return;
+    state->lowpassQuantizerBits = nativeTile->cBitsLP;
+    state->highpassQuantizerBits = nativeTile->cBitsHP;
+    state->lowpassQuantizerCount = nativeTile->cNumQPLP;
+    state->highpassQuantizerCount = nativeTile->cNumQPHP;
+    for (channel = 0; channel < MAX_CHANNELS; ++channel)
+        state->highpassQuantizers[channel] = nativeTile->pQuantizerHP[channel];
+}
+
+U8 JxrDecoderTileStateGetLowpassQuantizerBits(const JxrDecoderTileState* state)
+{ return state->lowpassQuantizerBits; }
+U8 JxrDecoderTileStateGetHighpassQuantizerBits(const JxrDecoderTileState* state)
+{ return state->highpassQuantizerBits; }
+U8 JxrDecoderTileStateGetLowpassQuantizerCount(const JxrDecoderTileState* state)
+{ return state->lowpassQuantizerCount; }
+U8 JxrDecoderTileStateGetHighpassQuantizerCount(const JxrDecoderTileState* state)
+{ return state->highpassQuantizerCount; }
+Int JxrDecoderTileStateGetHighpassQuantizerParameter(const JxrDecoderTileState* state,
+    Int plane, Int quantizerIndex)
+{
+    assert(plane >= 0 && plane < MAX_CHANNELS);
+    assert(quantizerIndex >= 0 && quantizerIndex < state->highpassQuantizerCount);
+    assert(state->highpassQuantizers[plane] != NULL);
+    return state->highpassQuantizers[plane][quantizerIndex].iQP;
+}
+
 Void JxrDecoderFormatStateInit(JxrDecoderFormatState* state, CWMImageStrCodec* nativeCodec)
 {
     state->nativeCodec = nativeCodec;
@@ -10,7 +47,7 @@ Void JxrDecoderFormatStateInit(JxrDecoderFormatState* state, CWMImageStrCodec* n
     state->isSpatial = FALSE;
     state->isDcOnly = FALSE;
     state->hasHighpass = FALSE;
-    state->currentTile = NULL;
+    JxrDecoderTileStateInit(&state->currentTile, NULL);
     state->shouldResetScan = FALSE;
     state->shouldResetContext = FALSE;
     state->isTranscode = FALSE;
@@ -25,7 +62,8 @@ Void JxrDecoderFormatStateInit(JxrDecoderFormatState* state, CWMImageStrCodec* n
     state->isDcOnly = nativeCodec->WMISCP.sbSubband == SB_DC_ONLY;
     state->hasHighpass = nativeCodec->WMISCP.sbSubband != SB_NO_HIGHPASS;
     if (nativeCodec->pTile != NULL)
-        state->currentTile = nativeCodec->pTile + nativeCodec->cTileColumn;
+        JxrDecoderTileStateInit(&state->currentTile,
+            nativeCodec->pTile + nativeCodec->cTileColumn);
     state->shouldResetScan = nativeCodec->m_bResetRGITotals;
     state->shouldResetContext = nativeCodec->m_bResetContext;
     state->isTranscode = nativeCodec->m_param.bTranscode;
@@ -48,8 +86,8 @@ Bool JxrDecoderFormatStateIsDcOnly(const JxrDecoderFormatState* state)
 { return state->isDcOnly; }
 Bool JxrDecoderFormatStateHasHighpass(const JxrDecoderFormatState* state)
 { return state->hasHighpass; }
-CWMITile* JxrDecoderFormatStateGetCurrentTile(const JxrDecoderFormatState* state)
-{ return state->currentTile; }
+const JxrDecoderTileState* JxrDecoderFormatStateGetCurrentTile(const JxrDecoderFormatState* state)
+{ return &state->currentTile; }
 Bool JxrDecoderFormatStateShouldResetScan(const JxrDecoderFormatState* state)
 { return state->shouldResetScan; }
 Bool JxrDecoderFormatStateShouldResetContext(const JxrDecoderFormatState* state)

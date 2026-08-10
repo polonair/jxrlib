@@ -10,7 +10,7 @@
 Int JxrDcDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, Int macroblockY)
 {
     JxrDecoderFormatState* format = &state->formatState;
-    CWMITile* tile = JxrDecoderFormatStateGetCurrentTile(format);
+    const JxrDecoderTileState* tile = JxrDecoderFormatStateGetCurrentTile(format);
     JxrMacroblockState* macroblock = &state->macroblockState;
     const COLORFORMAT colorFormat = JxrDecoderFormatStateGetColorFormat(format);
     const Int channelCount = JxrDecoderFormatStateGetChannelCount(format);
@@ -34,18 +34,19 @@ Int JxrDcDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, 
     JxrMacroblockStateResetQuantizerIndices(macroblock);
 
     if (JxrDecoderFormatStateIsSpatial(format) && !JxrDecoderFormatStateIsDcOnly(format)) {
-        if (tile->cBitsLP > 0) JxrMacroblockStateSetLowpassQuantizerIndex(macroblock,
-            JxrQuantizationIndexReaderDecode(reader, tile->cBitsLP));
-        if (JxrDecoderFormatStateHasHighpass(format) && tile->cBitsHP > 0) {
+        if (JxrDecoderTileStateGetLowpassQuantizerBits(tile) > 0) JxrMacroblockStateSetLowpassQuantizerIndex(macroblock,
+            JxrQuantizationIndexReaderDecode(reader, JxrDecoderTileStateGetLowpassQuantizerBits(tile)));
+        if (JxrDecoderFormatStateHasHighpass(format) && JxrDecoderTileStateGetHighpassQuantizerBits(tile) > 0) {
             JxrMacroblockStateSetHighpassQuantizerIndex(macroblock,
-                JxrQuantizationIndexReaderDecode(reader, tile->cBitsHP));
+                JxrQuantizationIndexReaderDecode(reader, JxrDecoderTileStateGetHighpassQuantizerBits(tile)));
         }
     }
-    if (tile->cBitsHP == 0 && tile->cNumQPHP > 1)
+    if (JxrDecoderTileStateGetHighpassQuantizerBits(tile) == 0 &&
+        JxrDecoderTileStateGetHighpassQuantizerCount(tile) > 1)
         JxrMacroblockStateSetHighpassQuantizerIndex(macroblock,
             JxrMacroblockStateGetLowpassQuantizerIndex(macroblock));
-    if (JxrMacroblockStateGetLowpassQuantizerIndex(macroblock) >= tile->cNumQPLP ||
-        JxrMacroblockStateGetHighpassQuantizerIndex(macroblock) >= tile->cNumQPHP) return ICERR_ERROR;
+    if (JxrMacroblockStateGetLowpassQuantizerIndex(macroblock) >= JxrDecoderTileStateGetLowpassQuantizerCount(tile) ||
+        JxrMacroblockStateGetHighpassQuantizerIndex(macroblock) >= JxrDecoderTileStateGetHighpassQuantizerCount(tile)) return ICERR_ERROR;
 
     if (colorFormat == Y_ONLY || colorFormat == CMYK || colorFormat == NCOMPONENT) {
         for (channel = 0; channel < channelCount; ++channel) {

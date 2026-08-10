@@ -185,7 +185,7 @@ static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
 {
     JxrDecoderFormatState* format = &state->formatState;
     JxrMacroblockState* macroblock = &state->macroblockState;
-    CWMITile* pTile = JxrDecoderFormatStateGetCurrentTile(format);
+    const JxrDecoderTileState* tile = JxrDecoderFormatStateGetCurrentTile(format);
     JxrEntropyBitReader* highpassReader = &state->highpassReader;
     JxrEntropyBitReader* flexbitsReader = &state->flexbitsReader;
     const COLORFORMAT cf = JxrDecoderFormatStateGetColorFormat(format);
@@ -238,7 +238,11 @@ static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
             if (!JxrEntropyBitReaderSharesStream(highpassReader, flexbitsReader))
                 if (!JxrDecoderFormatStateRefillLevel2(format, flexbitsReader)) return ICERR_ERROR;
 
-            iQP = (JxrDecoderFormatStateIsTranscode(format) ? 1 : pTile->pQuantizerHP[iPlanes > 1 ? i : (iBlock > 3 ? (cf == YUV_420 ? iBlock - 3 : iBlock / 2 - 1) : 0)][JxrMacroblockStateGetHighpassQuantizerIndex(macroblock)].iQP);
+            iQP = JxrDecoderFormatStateIsTranscode(format) ? 1 :
+                JxrDecoderTileStateGetHighpassQuantizerParameter(tile,
+                    iPlanes > 1 ? i : (iBlock > 3 ?
+                    (cf == YUV_420 ? iBlock - 3 : iBlock / 2 - 1) : 0),
+                    JxrMacroblockStateGetHighpassQuantizerIndex(macroblock));
 
             for (iSubblock = 0; iSubblock < 4; iSubblock++, iIndex++, iCBPCY >>= 1) {
                 coefficients = JxrHpCoefficientBlockResolverResolve(state, i, iBlock,
@@ -291,7 +295,7 @@ Int JxrHpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
 {
     JxrMacroblockState* macroblock = &state->macroblockState;
     JxrDecoderFormatState* format = &state->formatState;
-    CWMITile* tile = JxrDecoderFormatStateGetCurrentTile(format);
+    const JxrDecoderTileState* tile = JxrDecoderFormatStateGetCurrentTile(format);
     JxrEntropyBitReader* highpassReader = &state->highpassReader;
     Int tableIndex;
 
@@ -300,13 +304,17 @@ Int JxrHpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
         JxrAdaptiveScanStateResetTotals(&state->horizontalScanState, 16);
         JxrAdaptiveScanStateResetTotals(&state->verticalScanState, 16);
     }
-    if (!JxrDecoderFormatStateIsSpatial(format) && tile->cBitsHP > 0) { // MB-based HP QP index
+    if (!JxrDecoderFormatStateIsSpatial(format) &&
+        JxrDecoderTileStateGetHighpassQuantizerBits(tile) > 0) { // MB-based HP QP index
         JxrMacroblockStateSetHighpassQuantizerIndex(macroblock,
-            JxrQuantizationIndexReaderDecode(highpassReader, tile->cBitsHP));
-        if (JxrMacroblockStateGetHighpassQuantizerIndex(macroblock) >= tile->cNumQPHP)
+            JxrQuantizationIndexReaderDecode(highpassReader,
+                JxrDecoderTileStateGetHighpassQuantizerBits(tile)));
+        if (JxrMacroblockStateGetHighpassQuantizerIndex(macroblock) >=
+            JxrDecoderTileStateGetHighpassQuantizerCount(tile))
             goto ErrorExit;
     }
-    else if(tile->cBitsHP == 0 && tile->cNumQPHP > 1) // use LP QP
+    else if(JxrDecoderTileStateGetHighpassQuantizerBits(tile) == 0 &&
+        JxrDecoderTileStateGetHighpassQuantizerCount(tile) > 1) // use LP QP
         JxrMacroblockStateSetHighpassQuantizerIndex(macroblock,
             JxrMacroblockStateGetLowpassQuantizerIndex(macroblock));
 

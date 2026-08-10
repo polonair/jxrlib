@@ -13,7 +13,7 @@ Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
         Int macroblockX, Int macroblockY)
 {
     JxrDecoderFormatState* format = &state->formatState;
-    CWMITile* tile = JxrDecoderFormatStateGetCurrentTile(format);
+    const JxrDecoderTileState* tile = JxrDecoderFormatStateGetCurrentTile(format);
     const COLORFORMAT cf = JxrDecoderFormatStateGetColorFormat(format);
     const Int iChannels = JxrDecoderFormatStateGetChannelCount(format);
     const Int iFullPlanes = (cf == YUV_420 || cf == YUV_422) ? 2 : iChannels;
@@ -30,9 +30,9 @@ Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
     UNREFERENCED_PARAMETER(macroblockY);
 
     if (!JxrDecoderFormatStateRefillLevel1(format, reader)) return ICERR_ERROR;
-    if(!JxrDecoderFormatStateIsSpatial(format) && tile->cBitsLP > 0)  // MB-based LP QP index
+    if(!JxrDecoderFormatStateIsSpatial(format) && JxrDecoderTileStateGetLowpassQuantizerBits(tile) > 0)  // MB-based LP QP index
         JxrMacroblockStateSetLowpassQuantizerIndex(macroblock,
-            JxrQuantizationIndexReaderDecode(reader, tile->cBitsLP));
+            JxrQuantizationIndexReaderDecode(reader, JxrDecoderTileStateGetLowpassQuantizerBits(tile)));
     /** reset adaptive scan totals **/
     if (JxrDecoderFormatStateShouldResetScan(format)) {
         JxrAdaptiveScanStateResetTotals(scanState, 16);
