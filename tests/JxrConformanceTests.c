@@ -12,6 +12,7 @@
 #include "JxrLowpassCbpState.h"
 #include "JxrMacroblockCbpState.h"
 #include "JxrAdaptiveModelState.h"
+#include "JxrHuffmanStateSet.h"
 #include "JxrBitMath.h"
 #include "JxrDecoderSubbandContext.h"
 #include "JxrHpCoefficientBlockResolver.h"
@@ -92,6 +93,23 @@ static int test_adaptive_model_state_vectors(void)
     UpdateModelMB(YUV_444, 3, expectedMeans, &expected.m_aModelLP);
     JxrAdaptiveModelStateUpdateForMacroblock(&state, YUV_444, 3, actualMeans);
     return memcmp(&actual.m_aModelLP, &expected.m_aModelLP, sizeof(CAdaptiveModel)) == 0;
+}
+
+static int test_huffman_state_set_vectors(void)
+{
+    CAdaptiveHuffman huffman;
+    CAdaptiveHuffman* states[8] = { 0 };
+    Int delta[2] = { 3, 7 };
+    JxrHuffmanStateSet stateSet;
+
+    memset(&huffman, 0, sizeof(huffman));
+    huffman.m_iDiscriminant = 5;
+    huffman.m_pDelta = delta;
+    states[3] = &huffman;
+    JxrHuffmanStateSetInit(&stateSet, states);
+    if (JxrHuffmanStateSetGet(&stateSet, 3) != &huffman) return 0;
+    JxrHuffmanStateSetObserve(&stateSet, 3, 1);
+    return huffman.m_iDiscriminant == 12;
 }
 
 static int test_explicit_entropy_context(void)
@@ -318,7 +336,7 @@ static int test_decoder_subband_context(void)
         JxrAdaptiveModelStateGetFlcBits(&state.dcModelState, 0) == entropy.m_aModelDC.m_iFlcBits[0] &&
         JxrAdaptiveModelStateGetFlcBits(&state.lowpassModelState, 0) == entropy.m_aModelLP.m_iFlcBits[0] &&
         JxrAdaptiveModelStateGetFlcBits(&state.highpassModelState, 0) == entropy.m_aModelAC.m_iFlcBits[0] &&
-        state.huffmanStates == entropy.m_pAHexpt &&
+        JxrHuffmanStateSetGet(&state.huffmanStateSet, 0) == entropy.m_pAHexpt[0] &&
         state.cbpHuffman == entropy.m_pAdaptHuffCBPCY &&
         state.cbpCountHuffman == entropy.m_pAdaptHuffCBPCY1 &&
         state.highpassCbpModel == &entropy.m_aCBPModel &&
@@ -427,6 +445,7 @@ int main(int argc, char** argv)
         { "bit_io_vectors", test_bit_io_vectors },
         { "adaptive_state", test_adaptive_state },
         { "adaptive_model_state_vectors", test_adaptive_model_state_vectors },
+        { "huffman_state_set_vectors", test_huffman_state_set_vectors },
         { "explicit_entropy_context", test_explicit_entropy_context },
         { "adaptive_scan_vectors", test_adaptive_scan_vectors },
         { "coefficient_buffer_vectors", test_coefficient_buffer_vectors },

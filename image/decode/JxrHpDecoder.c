@@ -29,7 +29,7 @@ Void JxrHpDecoderDecodeCbp(JxrDecoderSubbandContext* state)
     Bool bIsChroma;
     CAdaptiveHuffman* pAHCBP = state->cbpHuffman;
     CAdaptiveHuffman* pAHCBP1 = state->cbpCountHuffman;
-    CAdaptiveHuffman* pAHex1 = state->huffmanStates[1];
+    CAdaptiveHuffman* pAHex1 = JxrHuffmanStateSetGet(&state->huffmanStateSet, 1);
 
     JxrSubbandStreamRefillLevel1(codec, reader);
 
@@ -245,7 +245,7 @@ static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
                 assert (codec->m_Dparam->bSkipFlexbits == 0 || codec->WMISCP.bfBitstreamFormat == FREQUENCY || codec->WMISCP.sbSubband == SB_NO_FLEXBITS);
                 {
                     JxrHpBlockDecodingContext blockContext;
-                    blockContext.huffmanStates = state->huffmanStates;
+                    blockContext.huffmanStateSet = &state->huffmanStateSet;
                     blockContext.highpassReader = highpassReader;
                     blockContext.flexbitsReader = flexbitsReader;
                     blockContext.coefficientBuffer = &coefficients;
@@ -315,7 +315,8 @@ Int JxrHpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
         JxrAdaptiveHuffmanAdapt(state->cbpHuffman);
         JxrAdaptiveHuffmanAdapt(state->cbpCountHuffman);
         for (tableIndex = 0; tableIndex < CONTEXTX; ++tableIndex) {
-            JxrAdaptiveHuffmanAdapt(state->huffmanStates[tableIndex + CONTEXTX + CTDC]);
+            JxrHuffmanStateSetAdapt(&state->huffmanStateSet,
+                tableIndex + CONTEXTX + CTDC);
         }
     }
 

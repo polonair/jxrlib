@@ -70,7 +70,7 @@ Int JxrEntropyBlockDecoderDecodeNextSymbol(Int coefficientPosition,
 }
 
 Int JxrEntropyBlockDecoderDecodeLowpassBlockReader(Bool isChroma, Int* runLevelPairs,
-    CAdaptiveHuffman** huffmanStates, Int contextOffset, JxrEntropyBitReader* input, Int startPosition)
+    JxrHuffmanStateSet* huffmanStateSet, Int contextOffset, JxrEntropyBitReader* input, Int startPosition)
 {
     Int significantRun;
     Int remainingSymbols;
@@ -78,15 +78,17 @@ Int JxrEntropyBlockDecoderDecodeLowpassBlockReader(Bool isChroma, Int* runLevelP
     Int nonZeroCount = 1;
     Int context;
     Int sign;
-    CAdaptiveHuffman** symbolStates = huffmanStates + contextOffset + isChroma * 3;
+    Int symbolStateIndex = contextOffset + isChroma * 3;
 
-    symbol = JxrEntropyBlockDecoderDecodeFirstSymbolReader(symbolStates[0], input);
+    symbol = JxrEntropyBlockDecoderDecodeFirstSymbolReader(
+        JxrHuffmanStateSetGet(huffmanStateSet, symbolStateIndex), input);
     significantRun = symbol & 1;
     remainingSymbols = symbol >> 2;
     context = significantRun & remainingSymbols;
     sign = JxrEntropyBitReaderReadSign(input);
     if (symbol & 2) {
-        Int magnitude = JxrEntropyLevelDecoderDecodeReader(huffmanStates[6 + contextOffset + context], input);
+        Int magnitude = JxrEntropyLevelDecoderDecodeReader(
+            JxrHuffmanStateSetGet(huffmanStateSet, 6 + contextOffset + context), input);
         runLevelPairs[1] = sign ? -magnitude : magnitude;
     }
     else {
@@ -94,23 +96,27 @@ Int JxrEntropyBlockDecoderDecodeLowpassBlockReader(Bool isChroma, Int* runLevelP
     }
 
     runLevelPairs[0] = 0;
-    if (!significantRun) runLevelPairs[0] = JxrEntropyBlockDecoderDecodeRunReader(15 - startPosition, huffmanStates[0], input);
+    if (!significantRun) runLevelPairs[0] = JxrEntropyBlockDecoderDecodeRunReader(15 - startPosition,
+        JxrHuffmanStateSetGet(huffmanStateSet, 0), input);
     startPosition += runLevelPairs[0] + 1;
 
     while (remainingSymbols) {
         significantRun = remainingSymbols & 1;
         runLevelPairs[nonZeroCount * 2] = 0;
         if (!significantRun) {
-            runLevelPairs[nonZeroCount * 2] = JxrEntropyBlockDecoderDecodeRunReader(15 - startPosition, huffmanStates[0], input);
+            runLevelPairs[nonZeroCount * 2] = JxrEntropyBlockDecoderDecodeRunReader(15 - startPosition,
+                JxrHuffmanStateSetGet(huffmanStateSet, 0), input);
         }
         startPosition += runLevelPairs[nonZeroCount * 2] + 1;
-        symbol = JxrEntropyBlockDecoderDecodeNextSymbolReader(startPosition, symbolStates[context + 1], input);
+        symbol = JxrEntropyBlockDecoderDecodeNextSymbolReader(startPosition,
+            JxrHuffmanStateSetGet(huffmanStateSet, symbolStateIndex + context + 1), input);
         remainingSymbols = symbol >> 1;
         assert(remainingSymbols >= 0 && remainingSymbols < 3);
         context &= remainingSymbols;
         sign = JxrEntropyBitReaderReadSign(input);
         if (symbol & 1) {
-            Int magnitude = JxrEntropyLevelDecoderDecodeReader(huffmanStates[6 + contextOffset + context], input);
+            Int magnitude = JxrEntropyLevelDecoderDecodeReader(
+                JxrHuffmanStateSetGet(huffmanStateSet, 6 + contextOffset + context), input);
             runLevelPairs[nonZeroCount * 2 + 1] = sign ? -magnitude : magnitude;
         }
         else {
@@ -125,7 +131,9 @@ Int JxrEntropyBlockDecoderDecodeLowpassBlock(Bool isChroma, Int* runLevelPairs,
     CAdaptiveHuffman** huffmanStates, Int contextOffset, BitIOInfo* input, Int startPosition)
 {
     JxrEntropyBitReader reader;
+    JxrHuffmanStateSet huffmanStateSet;
     JxrEntropyBitReaderInit(&reader, input);
+    JxrHuffmanStateSetInit(&huffmanStateSet, huffmanStates);
     return JxrEntropyBlockDecoderDecodeLowpassBlockReader(isChroma, runLevelPairs,
-        huffmanStates, contextOffset, &reader, startPosition);
+        &huffmanStateSet, contextOffset, &reader, startPosition);
 }

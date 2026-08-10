@@ -75,7 +75,7 @@ Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
         JxrCoefficientBuffer coefficients = JxrCoefficientBufferCreate(aDC[iChannel], 0, 16);
 
         if (iCBP & 1) {
-            iNumNonzero = JxrEntropyBlockDecoderDecodeLowpassBlockReader(iChannel > 0, aRLCoeffs, state->huffmanStates,
+            iNumNonzero = JxrEntropyBlockDecoderDecodeLowpassBlockReader(iChannel > 0, aRLCoeffs, &state->huffmanStateSet,
                 CTDC, reader, 1 + 9 * ((cf == YUV_420) && (iChannel == 1))
                 + ((cf == YUV_422) && (iChannel == 1)));
 
@@ -138,7 +138,7 @@ Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
 
     if (codec->m_bResetContext) {
         for (k = 0; k < CONTEXTX + CTDC; ++k) {
-            JxrAdaptiveHuffmanAdapt(state->huffmanStates[k]);
+            JxrHuffmanStateSetAdapt(&state->huffmanStateSet, k);
         }
     }
 

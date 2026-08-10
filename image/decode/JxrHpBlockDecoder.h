@@ -4,9 +4,10 @@
 #include "JxrAdaptiveScan.h"
 #include "JxrCoefficientBuffer.h"
 #include "JxrEntropyReader.h"
+#include "JxrHuffmanStateSet.h"
 
 typedef struct JxrHpBlockDecodingContext {
-    CAdaptiveHuffman** huffmanStates;
+    JxrHuffmanStateSet* huffmanStateSet;
     JxrEntropyBitReader* highpassReader;
     JxrEntropyBitReader* flexbitsReader;
     JxrCoefficientBuffer* coefficientBuffer;

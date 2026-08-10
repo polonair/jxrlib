@@ -49,7 +49,8 @@ Int JxrDcDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, 
         for (channel = 0; channel < channelCount; ++channel) {
             luminance = 0;
             if (JxrEntropyBitReaderReadFlag(reader)) {
-                luminance = JxrEntropyLevelDecoderDecodeReader(state->huffmanStates[3], reader) - 1;
+                luminance = JxrEntropyLevelDecoderDecodeReader(
+                    JxrHuffmanStateSetGet(&state->huffmanStateSet, 3), reader) - 1;
                 *currentMean += 1;
             }
             if (modelBits) luminance = (luminance << modelBits) | (Int)JxrEntropyBitReaderRead(reader, modelBits);
@@ -60,7 +61,7 @@ Int JxrDcDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, 
         }
     }
     else {
-        significantFlags = state->huffmanStates[2];
+        significantFlags = JxrHuffmanStateSetGet(&state->huffmanStateSet, 2);
         {
             JxrHuffmanTable table = JxrHuffmanTableCreate(significantFlags->m_hufDecTable);
             index = JxrHuffmanDecoderDecodeSymbolReader(&table, reader);
@@ -69,19 +70,19 @@ Int JxrDcDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, 
         chromaU = (index >> 1) & 1;
         chromaV = index & 1;
 
-        if (luminance) { luminance = JxrEntropyLevelDecoderDecodeReader(state->huffmanStates[3], reader) - 1; *currentMean += 1; }
+        if (luminance) { luminance = JxrEntropyLevelDecoderDecodeReader(JxrHuffmanStateSetGet(&state->huffmanStateSet, 3), reader) - 1; *currentMean += 1; }
         if (modelBits) luminance = (luminance << modelBits) | (Int)JxrEntropyBitReaderRead(reader, modelBits);
         if (luminance && JxrEntropyBitReaderReadFlag(reader)) luminance = -luminance;
         macroblock->iBlockDC[0][0] = luminance;
 
         currentMean = laplacianMean + 1;
         modelBits = JxrAdaptiveModelStateGetFlcBits(&state->dcModelState, 1);
-        if (chromaU) { chromaU = JxrEntropyLevelDecoderDecodeReader(state->huffmanStates[4], reader) - 1; *currentMean += 1; }
+        if (chromaU) { chromaU = JxrEntropyLevelDecoderDecodeReader(JxrHuffmanStateSetGet(&state->huffmanStateSet, 4), reader) - 1; *currentMean += 1; }
         if (modelBits) chromaU = (chromaU << modelBits) | (Int)JxrEntropyBitReaderRead(reader, modelBits);
         if (chromaU && JxrEntropyBitReaderReadFlag(reader)) chromaU = -chromaU;
         macroblock->iBlockDC[1][0] = chromaU;
 
-        if (chromaV) { chromaV = JxrEntropyLevelDecoderDecodeReader(state->huffmanStates[4], reader) - 1; *currentMean += 1; }
+        if (chromaV) { chromaV = JxrEntropyLevelDecoderDecodeReader(JxrHuffmanStateSetGet(&state->huffmanStateSet, 4), reader) - 1; *currentMean += 1; }
         if (modelBits) chromaV = (chromaV << modelBits) | (Int)JxrEntropyBitReaderRead(reader, modelBits);
         if (chromaV && JxrEntropyBitReaderReadFlag(reader)) chromaV = -chromaV;
         macroblock->iBlockDC[2][0] = chromaV;
@@ -93,7 +94,7 @@ Int JxrDcDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, 
         codec->WMISCP.sbSubband == SB_DC_ONLY) && codec->m_bResetContext) {
         Int tableIndex;
         for (tableIndex = 2; tableIndex < 5; ++tableIndex) {
-            JxrAdaptiveHuffmanAdapt(state->huffmanStates[tableIndex]);
+            JxrHuffmanStateSetAdapt(&state->huffmanStateSet, tableIndex);
         }
     }
     return ICERR_OK;
