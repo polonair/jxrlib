@@ -411,6 +411,7 @@ static int test_legacy_bit_reader_mirror_vectors(void)
     input.uiShadow = 0x12345678U;
     JxrLegacyBitReaderAdapterInit(&adapter, &input);
     if (!JxrLegacyBitReaderAdapterIsInputBufferStateCurrent(&adapter) ||
+        !JxrLegacyBitReaderAdapterHasMatchingRefillDecision(&adapter) ||
         !JxrLegacyBitReaderAdapterNeedsRefill(&adapter)) return 0;
     input.pbStart = (U8*)(UINTPTR_T)0x10001000U;
     input.pbCurrent = (U8*)(UINTPTR_T)0x10001000U;
@@ -418,6 +419,7 @@ static int test_legacy_bit_reader_mirror_vectors(void)
     input.uiShadow = 0xabcdef01U;
     JxrLegacyBitReaderAdapterSyncInputBufferState(&adapter);
     return JxrLegacyBitReaderAdapterIsInputBufferStateCurrent(&adapter) &&
+        JxrLegacyBitReaderAdapterHasMatchingRefillDecision(&adapter) &&
         !JxrLegacyBitReaderAdapterNeedsRefill(&adapter);
 }
 

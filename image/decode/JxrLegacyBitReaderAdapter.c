@@ -14,15 +14,19 @@ U32 JxrLegacyBitReaderAdapterPeek16(JxrLegacyBitReaderAdapter* state, U32 count)
 Void JxrLegacyBitReaderAdapterConsume16(JxrLegacyBitReaderAdapter* state, U32 count)
 {
     flushBit16(state->stream, count);
+    JxrLegacyBitReaderAdapterSyncInputBufferState(state);
 }
 
 U32 JxrLegacyBitReaderAdapterRead32(JxrLegacyBitReaderAdapter* state, U32 count)
 {
-    return getBit32(state->stream, count);
+    U32 value = getBit32(state->stream, count);
+    JxrLegacyBitReaderAdapterSyncInputBufferState(state);
+    return value;
 }
 
 Void JxrLegacyBitReaderAdapterRefillLevel1(CWMImageStrCodec* codec, JxrLegacyBitReaderAdapter* state)
 {
+    assert(JxrLegacyBitReaderAdapterHasMatchingRefillDecision(state));
     if (JxrLegacyBitReaderAdapterNeedsRefill(state)) {
         readIS(codec, state->stream);
         JxrLegacyBitReaderAdapterSyncInputBufferState(state);
@@ -48,6 +52,13 @@ Bool JxrLegacyBitReaderAdapterIsInputBufferStateCurrent(const JxrLegacyBitReader
 Bool JxrLegacyBitReaderAdapterNeedsRefill(const JxrLegacyBitReaderAdapter* state)
 {
     return JxrBitInputBufferStateNeedsRefill(&state->inputBufferState, PACKETLENGTH);
+}
+
+Bool JxrLegacyBitReaderAdapterHasMatchingRefillDecision(const JxrLegacyBitReaderAdapter* state)
+{
+    Bool legacyNeedsRefill = ((((INTPTR_T)state->stream->pbStart ^
+        (INTPTR_T)state->stream->pbCurrent) & (UINTPTR_T)PACKETLENGTH) != 0);
+    return legacyNeedsRefill == JxrLegacyBitReaderAdapterNeedsRefill(state);
 }
 
 Void JxrLegacyBitReaderAdapterRefillLevel2(CWMImageStrCodec* codec, JxrLegacyBitReaderAdapter* state)
