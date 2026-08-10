@@ -173,6 +173,33 @@ static int test_entropy_reader_signed_residual_vectors(void)
         JxrEntropyBitReaderDecodeSignedResidualValue(15) == -7;
 }
 
+static int test_entropy_reader_state_vectors(void)
+{
+    U8 data[2] = { 0, 0 };
+    BitIOInfo input;
+    JxrEntropyBitReader reader;
+    JxrEntropyBitReader sameStreamReader;
+
+    memset(&input, 0, sizeof(input));
+    input.uiAccumulator = 0xa0000000U;
+    input.iMask = -2;
+    input.pbCurrent = data;
+    JxrEntropyBitReaderInit(&reader, &input);
+    JxrEntropyBitReaderInit(&sameStreamReader, &input);
+
+    if (JxrEntropyBitReaderPeek(&reader, 4) != 10 ||
+        JxrEntropyBitReaderPosition(&reader) != 0 ||
+        JxrEntropyBitReaderHasError(&reader)) return 0;
+    if (JxrEntropyBitReaderRead(&reader, 4) != 10 ||
+        JxrEntropyBitReaderPosition(&reader) != 4) return 0;
+    JxrEntropyBitReaderConsume(&reader, 2);
+    if (JxrEntropyBitReaderPosition(&reader) != 6 ||
+        !JxrEntropyBitReaderSharesStream(&reader, &sameStreamReader)) return 0;
+    return JxrEntropyBitReaderPeek(&reader, 17) == 0 &&
+        JxrEntropyBitReaderHasError(&reader) &&
+        JxrEntropyBitReaderPosition(&reader) == 6;
+}
+
 static int test_hp_coefficient_block_resolver(void)
 {
     CWMImageStrCodec codec;
@@ -218,8 +245,8 @@ static int test_decoder_subband_context(void)
     return state.codec == &codec && state.entropy == &entropy &&
         state.dcInput == &dcInput && state.lowpassInput == &lowpassInput &&
         state.highpassInput == &highpassInput && state.flexbitsInput == &flexbitsInput &&
-        state.dcReader.legacyStream == &dcInput && state.lowpassReader.legacyStream == &lowpassInput &&
-        state.highpassReader.legacyStream == &highpassInput && state.flexbitsReader.legacyStream == &flexbitsInput &&
+        !JxrEntropyBitReaderSharesStream(&state.dcReader, &state.lowpassReader) &&
+        !JxrEntropyBitReaderSharesStream(&state.highpassReader, &state.flexbitsReader) &&
         state.dcModel == &entropy.m_aModelDC && state.lowpassModel == &entropy.m_aModelLP &&
         state.highpassModel == &entropy.m_aModelAC && state.huffmanStates == entropy.m_pAHexpt &&
         state.cbpHuffman == entropy.m_pAdaptHuffCBPCY &&
@@ -335,6 +362,7 @@ int main(int argc, char** argv)
         { "lp_residual_vectors", test_lp_residual_vectors },
         { "bit_math_vectors", test_bit_math_vectors },
         { "entropy_reader_signed_residual_vectors", test_entropy_reader_signed_residual_vectors },
+        { "entropy_reader_state_vectors", test_entropy_reader_state_vectors },
         { "hp_coefficient_block_resolver", test_hp_coefficient_block_resolver },
         { "decoder_subband_context", test_decoder_subband_context },
         { "minimal_fixture", test_minimal_fixture },

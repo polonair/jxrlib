@@ -232,7 +232,7 @@ static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
         for (iBlock = 0; iBlock < iNBlocks; iBlock++) {
 
             JxrSubbandStreamRefillLevel2(codec, highpassReader);
-            if (highpassReader->legacyStream != flexbitsReader->legacyStream)
+            if (!JxrEntropyBitReaderSharesStream(highpassReader, flexbitsReader))
                 JxrSubbandStreamRefillLevel2(codec, flexbitsReader);
 
             iQP = (codec->m_param.bTranscode ? 1 : pTile->pQuantizerHP[iPlanes > 1 ? i : (iBlock > 3 ? (cf == YUV_420 ? iBlock - 3 : iBlock / 2 - 1) : 0)][codec->MBInfo.iQIndexHP].iQP);

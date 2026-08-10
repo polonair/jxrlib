@@ -2,10 +2,10 @@
 
 Void JxrSubbandStreamRefillLevel1(CWMImageStrCodec* codec, JxrEntropyBitReader* reader)
 {
-    readIS_L1(codec, reader->legacyStream);
+    JxrLegacyBitReaderAdapterRefillLevel1(codec, &reader->adapter);
 }
 
 Void JxrSubbandStreamRefillLevel2(CWMImageStrCodec* codec, JxrEntropyBitReader* reader)
 {
-    readIS_L2(codec, reader->legacyStream);
+    JxrLegacyBitReaderAdapterRefillLevel2(codec, &reader->adapter);
 }

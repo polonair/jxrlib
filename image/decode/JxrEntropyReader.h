@@ -1,11 +1,13 @@
 #ifndef JXR_ENTROPY_READER_H
 #define JXR_ENTROPY_READER_H
 
-#include "strcodec.h"
+#include "JxrLegacyBitReaderAdapter.h"
 
 /* Explicit decoder-facing reader API; BitIOInfo remains inside the adapter. */
 typedef struct JxrEntropyBitReader {
-    BitIOInfo* legacyStream;
+    JxrLegacyBitReaderAdapter adapter;
+    U32 positionBits;
+    Bool hasError;
 } JxrEntropyBitReader;
 
 Void JxrEntropyBitReaderInit(JxrEntropyBitReader* state, BitIOInfo* legacyStream);
@@ -17,6 +19,10 @@ U32 JxrEntropyBitReaderReadFlag(JxrEntropyBitReader* state);
 I32 JxrEntropyBitReaderReadSign(JxrEntropyBitReader* state);
 I32 JxrEntropyBitReaderDecodeSignedResidualValue(U32 encodedValue);
 I32 JxrEntropyBitReaderReadSignedResidual(JxrEntropyBitReader* state, U32 count);
+U32 JxrEntropyBitReaderPosition(const JxrEntropyBitReader* state);
+Bool JxrEntropyBitReaderHasError(const JxrEntropyBitReader* state);
+Bool JxrEntropyBitReaderSharesStream(const JxrEntropyBitReader* left,
+    const JxrEntropyBitReader* right);
 
 /* Compatibility wrappers for decoder code not yet migrated to the reader object. */
 U32 JxrEntropyReaderPeek(BitIOInfo* state, U32 count);
