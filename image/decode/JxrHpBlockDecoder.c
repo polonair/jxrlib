@@ -22,20 +22,20 @@ static Int JxrHpBlockDecoderDecodeEntropyCoefficients(JxrHpBlockDecodingContext*
     Int level;
 
     symbol = JxrEntropyBlockDecoderDecodeFirstSymbol(
-        context->huffmanStates[coefficientContextBase], context->highpassInput);
+        context->huffmanStates[coefficientContextBase], context->highpassReader->legacyStream);
     significantRun = symbol & 1;
     remainingSignificantRuns = symbol >> 2;
     continuation = significantRun & remainingSignificantRuns;
-    sign = JxrEntropyReaderReadSign(context->highpassInput);
+    sign = JxrEntropyBitReaderReadSign(context->highpassReader);
     level = JxrHpBlockDecoderApplySign(scaledQuantizationParameter, sign);
     if (symbol & 2) {
         Int magnitude = JxrEntropyLevelDecoderDecode(
-            context->huffmanStates[6 + CTDC + CONTEXTX + continuation], context->highpassInput);
+            context->huffmanStates[6 + CTDC + CONTEXTX + continuation], context->highpassReader->legacyStream);
         level *= magnitude;
     }
     if (significantRun == 0) {
         location += JxrEntropyBlockDecoderDecodeRun(15 - location,
-            context->huffmanStates[0], context->highpassInput);
+            context->huffmanStates[0], context->highpassReader->legacyStream);
     }
     location &= 15;
     JxrCoefficientBufferSet(context->coefficientBuffer,
@@ -47,21 +47,21 @@ static Int JxrHpBlockDecoderDecodeEntropyCoefficients(JxrHpBlockDecodingContext*
         significantRun = remainingSignificantRuns & 1;
         if (significantRun == 0) {
             location += JxrEntropyBlockDecoderDecodeRun(15 - location,
-                context->huffmanStates[0], context->highpassInput);
+                context->huffmanStates[0], context->highpassReader->legacyStream);
             if (location >= 16)
                 return 16;
         }
         symbol = JxrEntropyBlockDecoderDecodeNextSymbol(location + 1,
-            context->huffmanStates[coefficientContextBase + continuation + 1], context->highpassInput);
+            context->huffmanStates[coefficientContextBase + continuation + 1], context->highpassReader->legacyStream);
         remainingSignificantRuns = symbol >> 1;
 
         assert(remainingSignificantRuns >= 0 && remainingSignificantRuns < 3);
         continuation &= remainingSignificantRuns;
-        sign = JxrEntropyReaderReadSign(context->highpassInput);
+        sign = JxrEntropyBitReaderReadSign(context->highpassReader);
         level = JxrHpBlockDecoderApplySign(scaledQuantizationParameter, sign);
         if (symbol & 1) {
             Int magnitude = JxrEntropyLevelDecoderDecode(
-                context->huffmanStates[6 + CTDC + CONTEXTX + continuation], context->highpassInput);
+                context->huffmanStates[6 + CTDC + CONTEXTX + continuation], context->highpassReader->legacyStream);
             level *= magnitude;
         }
         JxrCoefficientBufferSet(context->coefficientBuffer,
@@ -83,16 +83,16 @@ static Void JxrHpBlockDecoderDecodeFlexbits(JxrHpBlockDecodingContext* context, 
             Int coefficientIndex = context->coefficientOrder[index];
             PixelI coefficient = JxrCoefficientBufferGet(context->coefficientBuffer, coefficientIndex);
             if (coefficient < 0) {
-                Int fine = JxrEntropyReaderRead(context->flexbitsInput, flexbitCount);
+                Int fine = JxrEntropyBitReaderRead(context->flexbitsReader, flexbitCount);
                 JxrCoefficientBufferAdd(context->coefficientBuffer, coefficientIndex, (PixelI)(-fine));
             }
             else if (coefficient > 0) {
-                Int fine = JxrEntropyReaderRead(context->flexbitsInput, flexbitCount);
+                Int fine = JxrEntropyBitReaderRead(context->flexbitsReader, flexbitCount);
                 JxrCoefficientBufferAdd(context->coefficientBuffer, coefficientIndex, (PixelI)fine);
             }
             else {
                 JxrCoefficientBufferSet(context->coefficientBuffer, coefficientIndex,
-                    (PixelI)JxrEntropyReaderReadSignedResidual(context->flexbitsInput, flexbitCount));
+                    (PixelI)JxrEntropyBitReaderReadSignedResidual(context->flexbitsReader, flexbitCount));
             }
         }
     }
@@ -102,19 +102,19 @@ static Void JxrHpBlockDecoderDecodeFlexbits(JxrHpBlockDecodingContext* context, 
             Int coefficientIndex = context->coefficientOrder[index];
             Int coefficient = JxrCoefficientBufferGet(context->coefficientBuffer, coefficientIndex);
             if (coefficient < 0) {
-                Int fine = JxrEntropyReaderRead(context->flexbitsInput, flexbitCount);
+                Int fine = JxrEntropyBitReaderRead(context->flexbitsReader, flexbitCount);
                 JxrCoefficientBufferAdd(context->coefficientBuffer, coefficientIndex,
                     (PixelI)(-flexbitQuantizationParameter * fine));
             }
             else if (coefficient > 0) {
-                Int fine = JxrEntropyReaderRead(context->flexbitsInput, flexbitCount);
+                Int fine = JxrEntropyBitReaderRead(context->flexbitsReader, flexbitCount);
                 JxrCoefficientBufferAdd(context->coefficientBuffer, coefficientIndex,
                     (PixelI)(flexbitQuantizationParameter * fine));
             }
             else {
                 JxrCoefficientBufferSet(context->coefficientBuffer, coefficientIndex,
                     (PixelI)(flexbitQuantizationParameter *
-                        JxrEntropyReaderReadSignedResidual(context->flexbitsInput, flexbitCount)));
+                        JxrEntropyBitReaderReadSignedResidual(context->flexbitsReader, flexbitCount)));
             }
         }
     }

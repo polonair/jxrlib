@@ -11,6 +11,7 @@
 #include "JxrLpResidualDecoder.h"
 #include "JxrDecoderSubbandContext.h"
 #include "JxrHpCoefficientBlockResolver.h"
+#include "JxrEntropyReader.h"
 #ifdef _WIN32
 #include <direct.h>
 #include <io.h>
@@ -142,6 +143,16 @@ static int test_lp_residual_vectors(void)
         JxrLpResidualDecoderCombineNonZero(-1, 2, 2) == -6 &&
         JxrLpResidualDecoderCombineSignedMagnitude(2, 1, 2) == 9 &&
         JxrLpResidualDecoderCombineSignedMagnitude(-2, 1, 2) == -9;
+}
+
+static int test_entropy_reader_signed_residual_vectors(void)
+{
+    return JxrEntropyBitReaderDecodeSignedResidualValue(0) == 0 &&
+        JxrEntropyBitReaderDecodeSignedResidualValue(1) == 0 &&
+        JxrEntropyBitReaderDecodeSignedResidualValue(2) == 1 &&
+        JxrEntropyBitReaderDecodeSignedResidualValue(3) == -1 &&
+        JxrEntropyBitReaderDecodeSignedResidualValue(14) == 7 &&
+        JxrEntropyBitReaderDecodeSignedResidualValue(15) == -7;
 }
 
 static int test_hp_coefficient_block_resolver(void)
@@ -302,6 +313,7 @@ int main(int argc, char** argv)
         { "coefficient_buffer_vectors", test_coefficient_buffer_vectors },
         { "huffman_decoder_vectors", test_huffman_decoder_vectors },
         { "lp_residual_vectors", test_lp_residual_vectors },
+        { "entropy_reader_signed_residual_vectors", test_entropy_reader_signed_residual_vectors },
         { "hp_coefficient_block_resolver", test_hp_coefficient_block_resolver },
         { "decoder_subband_context", test_decoder_subband_context },
         { "minimal_fixture", test_minimal_fixture },

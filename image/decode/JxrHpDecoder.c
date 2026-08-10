@@ -185,6 +185,8 @@ static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
     CWMITile* pTile = codec->pTile + codec->cTileColumn;
     BitIOInfo* pIO = state->highpassInput;
     BitIOInfo* pIOFL = state->flexbitsInput;
+    JxrEntropyBitReader highpassReader;
+    JxrEntropyBitReader flexbitsReader;
     const COLORFORMAT cf = codec->m_param.cfColorFormat;
     const Int iChannels = (Int) codec->m_param.cNumChannels;
     const Int iPlanes = (cf == YUV_420 || cf == YUV_422) ? 1 : iChannels;
@@ -204,6 +206,8 @@ static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
 
     UNREFERENCED_PARAMETER(macroblockX);
     UNREFERENCED_PARAMETER(macroblockY);
+    JxrEntropyBitReaderInit(&highpassReader, pIO);
+    JxrEntropyBitReaderInit(&flexbitsReader, pIOFL);
 
     /** set scan arrays and other MB level constants **/
     if (iOrient == 1) {
@@ -245,8 +249,8 @@ static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
                 {
                     JxrHpBlockDecodingContext blockContext;
                     blockContext.huffmanStates = state->huffmanStates;
-                    blockContext.highpassInput = pIO;
-                    blockContext.flexbitsInput = pIOFL;
+                    blockContext.highpassReader = &highpassReader;
+                    blockContext.flexbitsReader = &flexbitsReader;
                     blockContext.coefficientBuffer = &coefficients;
                     blockContext.scan = pScan;
                     blockContext.coefficientOrder = pOrder;

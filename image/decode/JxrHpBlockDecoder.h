@@ -3,11 +3,12 @@
 
 #include "JxrAdaptiveScan.h"
 #include "JxrCoefficientBuffer.h"
+#include "JxrEntropyReader.h"
 
 typedef struct JxrHpBlockDecodingContext {
     CAdaptiveHuffman** huffmanStates;
-    BitIOInfo* highpassInput;
-    BitIOInfo* flexbitsInput;
+    JxrEntropyBitReader* highpassReader;
+    JxrEntropyBitReader* flexbitsReader;
     JxrCoefficientBuffer* coefficientBuffer;
     CAdaptiveScan* scan;
     const Int* coefficientOrder;
