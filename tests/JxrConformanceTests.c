@@ -698,6 +698,7 @@ static int test_hp_coefficient_block_resolver(void)
     JxrDecoderSubbandContext state;
     PixelI plane0[256], plane1[256], plane2[256];
     JxrCoefficientBuffer block;
+    JxrHpBlockAddress address;
 
     memset(&codec, 0, sizeof(codec));
     memset(&state, 0, sizeof(state));
@@ -708,16 +709,25 @@ static int test_hp_coefficient_block_resolver(void)
     JxrCoefficientPlaneStateInit(&state.coefficientPlanes, codec.p1MBbuffer);
 
     codec.m_param.cfColorFormat = YUV_444;
+    JxrDecoderFormatStateInit(&state.formatState, &codec);
+    address = JxrHpCoefficientBlockResolverResolveAddress(YUV_444, 1, 0, 0, 2);
+    if (address.planeIndex != 1 || address.coefficientOffset != 16) return 0;
     block = JxrHpCoefficientBlockResolverResolve(&state, 1, 0, 0, 2);
     if (block.values != plane1 || block.offset != 16 || block.count != 16)
         return 0;
 
     codec.m_param.cfColorFormat = YUV_420;
+    JxrDecoderFormatStateInit(&state.formatState, &codec);
+    address = JxrHpCoefficientBlockResolverResolveAddress(YUV_420, 0, 4, 1, 0);
+    if (address.planeIndex != 1 || address.coefficientOffset != 32) return 0;
     block = JxrHpCoefficientBlockResolverResolve(&state, 0, 4, 1, 0);
     if (block.values != plane1 || block.offset != 32 || block.count != 16)
         return 0;
 
     codec.m_param.cfColorFormat = YUV_422;
+    JxrDecoderFormatStateInit(&state.formatState, &codec);
+    address = JxrHpCoefficientBlockResolverResolveAddress(YUV_422, 0, 5, 1, 0);
+    if (address.planeIndex != 1 || address.coefficientOffset != 96) return 0;
     block = JxrHpCoefficientBlockResolverResolve(&state, 0, 5, 1, 0);
     return block.values == plane1 && block.offset == 96 && block.count == 16;
 }

@@ -1,24 +1,33 @@
 #include "JxrHpCoefficientBlockResolver.h"
 
+JxrHpBlockAddress JxrHpCoefficientBlockResolverResolveAddress(COLORFORMAT colorFormat,
+    Int plane, Int block, Int subblock, Int coefficientIndex)
+{
+    JxrHpBlockAddress address;
+
+    address.planeIndex = plane;
+    address.coefficientOffset = (size_t)blkOffset[coefficientIndex & 15];
+    if (block >= 4) {
+        if (colorFormat == YUV_420) {
+            address.planeIndex = block - 3;
+            address.coefficientOffset = (size_t)blkOffsetUV[subblock];
+        }
+        else {
+            address.planeIndex = 1 + (1 & (block >> 1));
+            address.coefficientOffset = (size_t)((block & 1) * 32 + blkOffsetUV_422[subblock]);
+        }
+    }
+    return address;
+}
+
 JxrCoefficientBuffer JxrHpCoefficientBlockResolverResolve(
     const JxrDecoderSubbandContext* state, Int plane, Int block,
     Int subblock, Int coefficientIndex)
 {
-    CWMImageStrCodec* codec = state->codec;
-    const COLORFORMAT colorFormat = codec->m_param.cfColorFormat;
-    Int bufferIndex = plane;
-    size_t offset = (size_t)blkOffset[coefficientIndex & 15];
+    JxrHpBlockAddress address = JxrHpCoefficientBlockResolverResolveAddress(
+        JxrDecoderFormatStateGetColorFormat(&state->formatState), plane, block,
+        subblock, coefficientIndex);
 
-    if (block >= 4) {
-        if (colorFormat == YUV_420) {
-            bufferIndex = block - 3;
-            offset = (size_t)blkOffsetUV[subblock];
-        }
-        else {
-            bufferIndex = 1 + (1 & (block >> 1));
-            offset = (size_t)((block & 1) * 32 + blkOffsetUV_422[subblock]);
-        }
-    }
-
-    return JxrCoefficientPlaneStateGetBlock(&state->coefficientPlanes, bufferIndex, offset, 16);
+    return JxrCoefficientPlaneStateGetBlock(&state->coefficientPlanes,
+        address.planeIndex, address.coefficientOffset, 16);
 }
