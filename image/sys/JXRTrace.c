@@ -12,6 +12,7 @@
 #endif
 
 static char g_szTraceDirectory[1024] = {0};
+static size_t g_cRefillSnapshots = 0;
 
 static Void JXRTraceMakePath(char* szPath, size_t cchPath, const char* szFile)
 {
@@ -23,11 +24,13 @@ Void JXRTraceConfigure(const char* szDirectory)
     if (NULL == szDirectory || 0 == szDirectory[0])
     {
         g_szTraceDirectory[0] = 0;
+        g_cRefillSnapshots = 0;
         return;
     }
 
     strncpy(g_szTraceDirectory, szDirectory, sizeof(g_szTraceDirectory) - 1);
     g_szTraceDirectory[sizeof(g_szTraceDirectory) - 1] = 0;
+    g_cRefillSnapshots = 0;
     JXR_MKDIR(g_szTraceDirectory);
 }
 
@@ -89,6 +92,31 @@ Void JXRTraceCopyFile(const char* szSourceFile, const char* szTraceFile)
         fwrite(buffer, 1, cbRead, pDestination);
     fclose(pDestination);
     fclose(pSource);
+}
+
+Void JXRTraceDumpRefillSnapshot(const BitIOInfo* before, const BitIOInfo* after,
+    Bool explicitNeedsRefill, Bool legacyNeedsRefill)
+{
+    char szPath[1200];
+    FILE* pFile;
+    Bool didRefill;
+    const U8* packet;
+    if (!JXRTraceEnabled()) return;
+    didRefill = before->offRef != after->offRef;
+    packet = before->pbStart;
+    JXRTraceMakePath(szPath, sizeof(szPath), "decoder-refill-snapshots.jsonl");
+    pFile = fopen(szPath, "ab");
+    if (NULL == pFile) return;
+    fprintf(pFile,
+        "{\"sequence\":%lu,\"explicit_needs_refill\":%s,\"legacy_needs_refill\":%s,\"did_refill\":%s,\"packet_first4\":[%u,%u,%u,%u],\"before\":{\"start\":\"%p\",\"current\":\"%p\",\"offset\":%lu,\"bits_used\":%u,\"shadow\":%u},"
+        "\"after\":{\"start\":\"%p\",\"current\":\"%p\",\"offset\":%lu,\"bits_used\":%u,\"shadow\":%u}}\n",
+        (unsigned long)g_cRefillSnapshots++, explicitNeedsRefill ? "true" : "false",
+        legacyNeedsRefill ? "true" : "false", didRefill ? "true" : "false",
+        didRefill ? (unsigned)packet[0] : 0, didRefill ? (unsigned)packet[1] : 0,
+        didRefill ? (unsigned)packet[2] : 0, didRefill ? (unsigned)packet[3] : 0,
+        before->pbStart, before->pbCurrent, (unsigned long)before->offRef, (unsigned)before->cBitsUsed, (unsigned)before->uiShadow,
+        after->pbStart, after->pbCurrent, (unsigned long)after->offRef, (unsigned)after->cBitsUsed, (unsigned)after->uiShadow);
+    fclose(pFile);
 }
 
 static Void JXRTraceWriteValues(FILE* pFile, const PixelI* pValues)

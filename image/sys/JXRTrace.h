@@ -18,5 +18,7 @@ size_t JXRTraceBitPosition(const BitIOInfo* pIO, Bool bWrite);
 Void JXRTraceDumpBitRange(const char* szMode, const char* szPacket, Int iMBX, Int iMBY,
     size_t cbitStart, size_t cbitEnd);
 Void JXRTraceCopyFile(const char* szSourceFile, const char* szTraceFile);
+Void JXRTraceDumpRefillSnapshot(const BitIOInfo* before, const BitIOInfo* after,
+    Bool explicitNeedsRefill, Bool legacyNeedsRefill);
 
 #endif

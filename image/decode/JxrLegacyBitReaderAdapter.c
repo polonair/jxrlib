@@ -1,4 +1,5 @@
 #include "JxrLegacyBitReaderAdapter.h"
+#include "JXRTrace.h"
 
 Void JxrLegacyBitReaderAdapterInit(JxrLegacyBitReaderAdapter* state, BitIOInfo* stream)
 {
@@ -28,7 +29,11 @@ Void JxrLegacyBitReaderAdapterRefillLevel1(CWMImageStrCodec* codec, JxrLegacyBit
 {
     assert(JxrLegacyBitReaderAdapterHasMatchingRefillDecision(state));
     if (JxrLegacyBitReaderAdapterNeedsRefill(state)) {
+        BitIOInfo before = *state->stream;
+        Bool legacyNeedsRefill = ((((INTPTR_T)before.pbStart ^
+            (INTPTR_T)before.pbCurrent) & (UINTPTR_T)PACKETLENGTH) != 0);
         readIS(codec, state->stream);
+        JXRTraceDumpRefillSnapshot(&before, state->stream, TRUE, legacyNeedsRefill);
         JxrLegacyBitReaderAdapterSyncInputBufferState(state);
     }
 }
