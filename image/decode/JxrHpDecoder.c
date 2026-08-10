@@ -168,10 +168,10 @@ Void JxrHpDecoderDecodeCbp(JxrDecoderSubbandContext* state)
             }
         }
 
-        state->differentialCbp[i] = iCBPCY;
+        JxrMacroblockCbpStateSetDifferential(&state->macroblockCbpState, i, iCBPCY);
         if (cf == YUV_420 || cf == YUV_444 || cf == YUV_422) {
-            state->differentialCbp[1] = iCBPCU;
-            state->differentialCbp[2] = iCBPCV;
+            JxrMacroblockCbpStateSetDifferential(&state->macroblockCbpState, 1, iCBPCU);
+            JxrMacroblockCbpStateSetDifferential(&state->macroblockCbpState, 2, iCBPCV);
         }
     }
 }
@@ -199,9 +199,9 @@ static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
     const Int iOrient = codec->MBInfo.iOrientation;
     Bool bChroma = FALSE;
 
-    Int iCBPCU = state->cbp[1];
-    Int iCBPCV = state->cbp[2];
-    Int iCBPCY = state->cbp[0];
+    Int iCBPCU = JxrMacroblockCbpStateGetCbp(&state->macroblockCbpState, 1);
+    Int iCBPCV = JxrMacroblockCbpStateGetCbp(&state->macroblockCbpState, 2);
+    Int iCBPCY = JxrMacroblockCbpStateGetCbp(&state->macroblockCbpState, 0);
 
     UNREFERENCED_PARAMETER(macroblockX);
     UNREFERENCED_PARAMETER(macroblockY);
@@ -271,7 +271,8 @@ static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
             }
         }
 
-        iCBPCY = state->cbp[(i + 1) & 0xf];
+        iCBPCY = JxrMacroblockCbpStateGetCbp(&state->macroblockCbpState,
+            (i + 1) & 0xf);
         assert (MAX_CHANNELS == 16);
     }
 

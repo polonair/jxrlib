@@ -21,6 +21,6 @@ Void JxrDecoderSubbandContextInit(JxrDecoderSubbandContext* state,
     state->lowpassScan = entropy->m_aScanLowpass;
     state->horizontalScan = entropy->m_aScanHoriz;
     state->verticalScan = entropy->m_aScanVert;
-    state->cbp = codec->MBInfo.iCBP;
-    state->differentialCbp = codec->MBInfo.iDiffCBP;
+    JxrMacroblockCbpStateInit(&state->macroblockCbpState, codec->MBInfo.iCBP,
+        codec->MBInfo.iDiffCBP);
 }

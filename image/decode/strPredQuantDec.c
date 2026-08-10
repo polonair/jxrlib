@@ -541,29 +541,29 @@ Void JxrCbpPredictorDecode(JxrDecoderSubbandContext* state)
     const size_t macroblockY = codec->cRow;
 
     for (channel = 0; channel < channelCount; ++channel) {
-        Int cbp = predCBPCDec(codec, state->differentialCbp[channel], macroblockX, macroblockY,
+        Int cbp = predCBPCDec(codec, JxrMacroblockCbpStateGetDifferential(&state->macroblockCbpState, (Int)channel), macroblockX, macroblockY,
             channel, state->highpassCbpModel);
-        state->cbp[channel] = cbp;
+        JxrMacroblockCbpStateSetCbp(&state->macroblockCbpState, (Int)channel, cbp);
         JxrCbpPredictorSetCurrentCbp(codec, channel, macroblockX, cbp);
     }
 
     if (cf == YUV_422) {
-        Int cbpU = predCBPC422Dec(codec, state->differentialCbp[1], macroblockX, macroblockY,
+        Int cbpU = predCBPC422Dec(codec, JxrMacroblockCbpStateGetDifferential(&state->macroblockCbpState, 1), macroblockX, macroblockY,
             1, state->highpassCbpModel);
-        Int cbpV = predCBPC422Dec(codec, state->differentialCbp[2], macroblockX, macroblockY,
+        Int cbpV = predCBPC422Dec(codec, JxrMacroblockCbpStateGetDifferential(&state->macroblockCbpState, 2), macroblockX, macroblockY,
             2, state->highpassCbpModel);
-        state->cbp[1] = cbpU;
-        state->cbp[2] = cbpV;
+        JxrMacroblockCbpStateSetCbp(&state->macroblockCbpState, 1, cbpU);
+        JxrMacroblockCbpStateSetCbp(&state->macroblockCbpState, 2, cbpV);
         JxrCbpPredictorSetCurrentCbp(codec, 1, macroblockX, cbpU);
         JxrCbpPredictorSetCurrentCbp(codec, 2, macroblockX, cbpV);
     }
     else if (cf == YUV_420) {
-        Int cbpU = predCBPC420Dec(codec, state->differentialCbp[1], macroblockX, macroblockY,
+        Int cbpU = predCBPC420Dec(codec, JxrMacroblockCbpStateGetDifferential(&state->macroblockCbpState, 1), macroblockX, macroblockY,
             1, state->highpassCbpModel);
-        Int cbpV = predCBPC420Dec(codec, state->differentialCbp[2], macroblockX, macroblockY,
+        Int cbpV = predCBPC420Dec(codec, JxrMacroblockCbpStateGetDifferential(&state->macroblockCbpState, 2), macroblockX, macroblockY,
             2, state->highpassCbpModel);
-        state->cbp[1] = cbpU;
-        state->cbp[2] = cbpV;
+        JxrMacroblockCbpStateSetCbp(&state->macroblockCbpState, 1, cbpU);
+        JxrMacroblockCbpStateSetCbp(&state->macroblockCbpState, 2, cbpV);
         JxrCbpPredictorSetCurrentCbp(codec, 1, macroblockX, cbpU);
         JxrCbpPredictorSetCurrentCbp(codec, 2, macroblockX, cbpV);
     }

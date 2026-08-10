@@ -10,6 +10,7 @@
 #include "JxrHuffmanDecoder.h"
 #include "JxrLpResidualDecoder.h"
 #include "JxrLowpassCbpState.h"
+#include "JxrMacroblockCbpState.h"
 #include "JxrBitMath.h"
 #include "JxrDecoderSubbandContext.h"
 #include "JxrHpCoefficientBlockResolver.h"
@@ -167,6 +168,29 @@ static int test_lowpass_cbp_state_vectors(void)
         JxrLowpassCbpStateGetMaxCount(&state) == 7;
 }
 
+static int test_macroblock_cbp_state_vectors(void)
+{
+    Int cbp[16] = { 0 };
+    Int differential[16] = { 0 };
+    JxrMacroblockCbpState state;
+
+    JxrMacroblockCbpStateInit(&state, cbp, differential);
+    JxrMacroblockCbpStateSetCbp(&state, 0, 0x1234);
+    JxrMacroblockCbpStateSetCbp(&state, 1, 0x3f);
+    JxrMacroblockCbpStateSetCbp(&state, 2, 0x55);
+    JxrMacroblockCbpStateSetCbp(&state, 15, 0x7a);
+    JxrMacroblockCbpStateSetDifferential(&state, 0, 0x4321);
+    JxrMacroblockCbpStateSetDifferential(&state, 1, 0x2a);
+    JxrMacroblockCbpStateSetDifferential(&state, 2, 0x15);
+    return JxrMacroblockCbpStateGetCbp(&state, 0) == 0x1234 &&
+        JxrMacroblockCbpStateGetCbp(&state, 1) == 0x3f &&
+        JxrMacroblockCbpStateGetCbp(&state, 2) == 0x55 &&
+        JxrMacroblockCbpStateGetCbp(&state, 15) == 0x7a &&
+        JxrMacroblockCbpStateGetDifferential(&state, 0) == 0x4321 &&
+        JxrMacroblockCbpStateGetDifferential(&state, 1) == 0x2a &&
+        JxrMacroblockCbpStateGetDifferential(&state, 2) == 0x15;
+}
+
 static int test_bit_math_vectors(void)
 {
     const U32 value = 0x12345678U;
@@ -279,8 +303,9 @@ static int test_decoder_subband_context(void)
         JxrLowpassCbpStateGetZeroCount(&state.lowpassCbpState) == entropy.m_iCBPCountZero &&
         JxrLowpassCbpStateGetMaxCount(&state.lowpassCbpState) == entropy.m_iCBPCountMax &&
         state.lowpassScan == entropy.m_aScanLowpass && state.horizontalScan == entropy.m_aScanHoriz &&
-        state.verticalScan == entropy.m_aScanVert && state.cbp == codec.MBInfo.iCBP &&
-        state.differentialCbp == codec.MBInfo.iDiffCBP;
+        state.verticalScan == entropy.m_aScanVert &&
+        JxrMacroblockCbpStateGetCbp(&state.macroblockCbpState, 0) == codec.MBInfo.iCBP[0] &&
+        JxrMacroblockCbpStateGetDifferential(&state.macroblockCbpState, 0) == codec.MBInfo.iDiffCBP[0];
 }
 
 static int test_minimal_fixture(void)
@@ -384,6 +409,7 @@ int main(int argc, char** argv)
         { "huffman_decoder_vectors", test_huffman_decoder_vectors },
         { "lp_residual_vectors", test_lp_residual_vectors },
         { "lowpass_cbp_state_vectors", test_lowpass_cbp_state_vectors },
+        { "macroblock_cbp_state_vectors", test_macroblock_cbp_state_vectors },
         { "bit_math_vectors", test_bit_math_vectors },
         { "entropy_reader_signed_residual_vectors", test_entropy_reader_signed_residual_vectors },
         { "entropy_reader_state_vectors", test_entropy_reader_state_vectors },

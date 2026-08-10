@@ -4,6 +4,7 @@
 #include "strcodec.h"
 #include "JxrEntropyReader.h"
 #include "JxrLowpassCbpState.h"
+#include "JxrMacroblockCbpState.h"
 
 /*
  * Explicit view of the legacy state consumed by one macroblock subband
@@ -27,8 +28,7 @@ typedef struct JxrDecoderSubbandContext {
     CAdaptiveScan* lowpassScan;
     CAdaptiveScan* horizontalScan;
     CAdaptiveScan* verticalScan;
-    Int* cbp;
-    Int* differentialCbp;
+    JxrMacroblockCbpState macroblockCbpState;
 } JxrDecoderSubbandContext;
 
 Void JxrDecoderSubbandContextInit(JxrDecoderSubbandContext* state,
