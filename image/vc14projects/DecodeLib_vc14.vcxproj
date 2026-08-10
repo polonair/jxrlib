@@ -176,6 +176,7 @@
     <ClCompile Include="..\decode\JxrEntropyReader.c" />
     <ClCompile Include="..\decode\JxrLegacyBitReaderAdapter.c" />
     <ClCompile Include="..\decode\JxrLegacyBitIoBridge.c" />
+    <ClCompile Include="..\decode\JxrSharedBitReaderState.c" />
     <ClCompile Include="..\decode\JxrAdaptiveHuffman.c" />
     <ClCompile Include="..\decode\JxrEntropyLevelDecoder.c" />
     <ClCompile Include="..\decode\JxrDcDecoder.c" />

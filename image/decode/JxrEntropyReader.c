@@ -1,10 +1,5 @@
 #include "JxrEntropyReader.h"
 
-Void JxrSharedBitReaderStateInit(JxrSharedBitReaderState* state, BitIOInfo* legacyStream)
-{
-    JxrLegacyBitReaderAdapterInit(&state->adapter, legacyStream);
-}
-
 Void JxrEntropyBitReaderInitShared(JxrEntropyBitReader* state, JxrSharedBitReaderState* sharedState)
 {
     state->sharedState = sharedState;
@@ -24,7 +19,7 @@ U32 JxrEntropyBitReaderPeek(JxrEntropyBitReader* state, U32 count)
         state->hasError = TRUE;
         return 0;
     }
-    return JxrLegacyBitReaderAdapterPeek16(&state->sharedState->adapter, count);
+    return JxrSharedBitReaderStatePeek(state->sharedState, count);
 }
 
 Void JxrEntropyBitReaderConsume(JxrEntropyBitReader* state, U32 count)
@@ -33,7 +28,7 @@ Void JxrEntropyBitReaderConsume(JxrEntropyBitReader* state, U32 count)
         state->hasError = TRUE;
         return;
     }
-    JxrLegacyBitReaderAdapterConsume16(&state->sharedState->adapter, count);
+    JxrSharedBitReaderStateConsume(state->sharedState, count);
     state->positionBits += count;
 }
 
@@ -51,7 +46,7 @@ U32 JxrEntropyBitReaderReadLong(JxrEntropyBitReader* state, U32 count)
         return 0;
     }
     state->positionBits += count;
-    return JxrLegacyBitReaderAdapterRead32(&state->sharedState->adapter, count);
+    return JxrSharedBitReaderStateReadLong(state->sharedState, count);
 }
 
 U32 JxrEntropyBitReaderReadFlag(JxrEntropyBitReader* state)
@@ -94,8 +89,7 @@ Bool JxrEntropyBitReaderSharesStream(const JxrEntropyBitReader* left,
     const JxrEntropyBitReader* right)
 {
     return left->sharedState == right->sharedState ||
-        JxrLegacyBitReaderAdapterSharesStream(&left->sharedState->adapter,
-            &right->sharedState->adapter);
+        JxrSharedBitReaderStateSharesStream(left->sharedState, right->sharedState);
 }
 
 U32 JxrEntropyReaderPeek(BitIOInfo* state, U32 count)

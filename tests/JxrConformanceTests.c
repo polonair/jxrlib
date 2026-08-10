@@ -25,6 +25,7 @@
 #include "JxrDecoderSubbandContext.h"
 #include "JxrHpCoefficientBlockResolver.h"
 #include "JxrEntropyReader.h"
+#include "JxrLegacyBitReaderAdapter.h"
 #ifdef _WIN32
 #include <direct.h>
 #include <io.h>
