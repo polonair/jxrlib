@@ -334,9 +334,11 @@ Int JxrHpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
     }
 
     JxrMacroblockStateCommitToNative(macroblock);
+    JxrMacroblockCbpStateCommitToNative(&state->macroblockCbpState);
     return ICERR_OK;
 ErrorExit:
     JxrMacroblockStateCommitToNative(macroblock);
+    JxrMacroblockCbpStateCommitToNative(&state->macroblockCbpState);
     return ICERR_ERROR;
 }
 

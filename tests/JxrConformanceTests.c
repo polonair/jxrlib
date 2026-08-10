@@ -539,13 +539,23 @@ static int test_macroblock_cbp_state_vectors(void)
     JxrMacroblockCbpStateSetDifferential(&state, 0, 0x4321);
     JxrMacroblockCbpStateSetDifferential(&state, 1, 0x2a);
     JxrMacroblockCbpStateSetDifferential(&state, 2, 0x15);
-    return JxrMacroblockCbpStateGetCbp(&state, 0) == 0x1234 &&
-        JxrMacroblockCbpStateGetCbp(&state, 1) == 0x3f &&
-        JxrMacroblockCbpStateGetCbp(&state, 2) == 0x55 &&
-        JxrMacroblockCbpStateGetCbp(&state, 15) == 0x7a &&
-        JxrMacroblockCbpStateGetDifferential(&state, 0) == 0x4321 &&
-        JxrMacroblockCbpStateGetDifferential(&state, 1) == 0x2a &&
-        JxrMacroblockCbpStateGetDifferential(&state, 2) == 0x15;
+    if (JxrMacroblockCbpStateGetCbp(&state, 0) != 0x1234 ||
+        JxrMacroblockCbpStateGetCbp(&state, 1) != 0x3f ||
+        JxrMacroblockCbpStateGetCbp(&state, 2) != 0x55 ||
+        JxrMacroblockCbpStateGetCbp(&state, 15) != 0x7a ||
+        JxrMacroblockCbpStateGetDifferential(&state, 0) != 0x4321 ||
+        JxrMacroblockCbpStateGetDifferential(&state, 1) != 0x2a ||
+        JxrMacroblockCbpStateGetDifferential(&state, 2) != 0x15 || cbp[0] != 0)
+        return 0;
+    JxrMacroblockCbpStateCommitToNative(&state);
+    if (cbp[0] != 0x1234 || cbp[1] != 0x3f || cbp[2] != 0x55 || cbp[15] != 0x7a ||
+        differential[0] != 0x4321 || differential[1] != 0x2a || differential[2] != 0x15)
+        return 0;
+    cbp[0] = 7;
+    differential[0] = 9;
+    JxrMacroblockCbpStateLoadFromNative(&state);
+    return JxrMacroblockCbpStateGetCbp(&state, 0) == 7 &&
+        JxrMacroblockCbpStateGetDifferential(&state, 0) == 9;
 }
 
 static int test_bit_math_vectors(void)
