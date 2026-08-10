@@ -16,6 +16,7 @@
 #include "JxrAdaptiveScanState.h"
 #include "JxrHighpassCbpState.h"
 #include "JxrMacroblockState.h"
+#include "JxrCoefficientPlaneState.h"
 #include "JxrBitMath.h"
 #include "JxrDecoderSubbandContext.h"
 #include "JxrHpCoefficientBlockResolver.h"
@@ -151,6 +152,19 @@ static int test_macroblock_state_vectors(void)
     return JxrMacroblockStateGetLowpassQuantizerIndex(&state) == 3 &&
         JxrMacroblockStateGetHighpassQuantizerIndex(&state) == 7 &&
         JxrMacroblockStateGetOrientation(&state) == 1;
+}
+
+static int test_coefficient_plane_state_vectors(void)
+{
+    PixelI plane0[32], plane1[32];
+    PixelI* planes[2] = { plane0, plane1 };
+    JxrCoefficientPlaneState state;
+    JxrCoefficientBuffer block;
+
+    JxrCoefficientPlaneStateInit(&state, planes);
+    block = JxrCoefficientPlaneStateGetBlock(&state, 1, 4, 16);
+    return JxrCoefficientPlaneStateGetPlane(&state, 0) == plane0 &&
+        block.values == plane1 && block.offset == 4 && block.count == 16;
 }
 
 static int test_explicit_entropy_context(void)
@@ -358,6 +372,7 @@ static int test_hp_coefficient_block_resolver(void)
     codec.p1MBbuffer[1] = plane1;
     codec.p1MBbuffer[2] = plane2;
     state.codec = &codec;
+    JxrCoefficientPlaneStateInit(&state.coefficientPlanes, codec.p1MBbuffer);
 
     codec.m_param.cfColorFormat = YUV_444;
     block = JxrHpCoefficientBlockResolverResolve(&state, 1, 0, 0, 2);
@@ -510,6 +525,7 @@ int main(int argc, char** argv)
         { "huffman_state_set_vectors", test_huffman_state_set_vectors },
         { "highpass_cbp_state_vectors", test_highpass_cbp_state_vectors },
         { "macroblock_state_vectors", test_macroblock_state_vectors },
+        { "coefficient_plane_state_vectors", test_coefficient_plane_state_vectors },
         { "explicit_entropy_context", test_explicit_entropy_context },
         { "adaptive_scan_vectors", test_adaptive_scan_vectors },
         { "adaptive_scan_state_vectors", test_adaptive_scan_state_vectors },

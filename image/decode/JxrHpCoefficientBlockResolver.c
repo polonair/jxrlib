@@ -20,5 +20,5 @@ JxrCoefficientBuffer JxrHpCoefficientBlockResolverResolve(
         }
     }
 
-    return JxrCoefficientBufferCreate(codec->p1MBbuffer[bufferIndex], offset, 16);
+    return JxrCoefficientPlaneStateGetBlock(&state->coefficientPlanes, bufferIndex, offset, 16);
 }
