@@ -18,6 +18,7 @@
 #include "JxrMacroblockState.h"
 #include "JxrCoefficientPlaneState.h"
 #include "JxrBitInputBufferState.h"
+#include "JxrBitCursorState.h"
 #include "JxrPacketExecutor.h"
 #include "JxrBitMath.h"
 #include "JxrDecoderSubbandContext.h"
@@ -226,6 +227,42 @@ static int test_packet_executor_vectors(void)
     return fake.lastOffset == 4096 && destination[0] == 0x78 &&
         state.startAddress == 0x10001000U && state.streamOffset == 8192 &&
         state.shadow == 0x12345678U;
+}
+
+static int test_bit_cursor_state_vectors(void)
+{
+    U8 data[64] = { 0xb1, 0xab, 0xcd, 0xf0, 0x12, 0x34, 0x56, 0x78 };
+    BitIOInfo legacy;
+    JxrBitCursorState cursor;
+    U32 legacyValue;
+
+    memset(&legacy, 0, sizeof(legacy));
+    legacy.pbCurrent = data;
+    legacy.iMask = ~(UINTPTR_T)1;
+    legacy.uiAccumulator = ((U32)data[0] << 24) | ((U32)data[1] << 16) |
+        ((U32)data[2] << 8) | (U32)data[3];
+    JxrBitCursorStateInit(&cursor, &legacy);
+    if (JxrBitCursorStatePeek(&cursor, 3) != peekBit16(&legacy, 3) ||
+        !JxrBitCursorStateMatchesLegacy(&cursor, &legacy)) return 0;
+    JxrBitCursorStateConsume(&cursor, 0);
+    flushBit16(&legacy, 0);
+    if (!JxrBitCursorStateMatchesLegacy(&cursor, &legacy)) return 0;
+    JxrBitCursorStateConsume(&cursor, 3);
+    flushBit16(&legacy, 3);
+    if (!JxrBitCursorStateMatchesLegacy(&cursor, &legacy)) return 0;
+    if (JxrBitCursorStatePeek(&cursor, 13) != peekBit16(&legacy, 13)) return 0;
+    JxrBitCursorStateConsume(&cursor, 5);
+    flushBit16(&legacy, 5);
+    if (!JxrBitCursorStateMatchesLegacy(&cursor, &legacy)) return 0;
+    JxrBitCursorStateConsume(&cursor, 8);
+    flushBit16(&legacy, 8);
+    if (!JxrBitCursorStateMatchesLegacy(&cursor, &legacy)) return 0;
+    legacyValue = getBit32(&legacy, 17);
+    if (JxrBitCursorStateReadLong(&cursor, 17) != legacyValue ||
+        !JxrBitCursorStateMatchesLegacy(&cursor, &legacy)) return 0;
+    legacyValue = getBit32(&legacy, 32);
+    return JxrBitCursorStateReadLong(&cursor, 32) == legacyValue &&
+        JxrBitCursorStateMatchesLegacy(&cursor, &legacy);
 }
 
 static int test_explicit_entropy_context(void)
@@ -615,6 +652,7 @@ int main(int argc, char** argv)
         { "bit_input_buffer_state_vectors", test_bit_input_buffer_state_vectors },
         { "packet_source_vectors", test_packet_source_vectors },
         { "packet_executor_vectors", test_packet_executor_vectors },
+        { "bit_cursor_state_vectors", test_bit_cursor_state_vectors },
         { "explicit_entropy_context", test_explicit_entropy_context },
         { "adaptive_scan_vectors", test_adaptive_scan_vectors },
         { "adaptive_scan_state_vectors", test_adaptive_scan_state_vectors },
