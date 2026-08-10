@@ -4,6 +4,7 @@ Void JxrDecoderSubbandContextInit(JxrDecoderSubbandContext* state,
     CWMImageStrCodec* codec, CCodingContext* entropy)
 {
     state->codec = codec;
+    JxrMacroblockStateInit(&state->macroblockState, &codec->MBInfo);
     JxrEntropyBitReaderInit(&state->dcReader, entropy->m_pIODC);
     JxrEntropyBitReaderInit(&state->lowpassReader, entropy->m_pIOLP);
     JxrEntropyBitReaderInit(&state->highpassReader, entropy->m_pIOAC);

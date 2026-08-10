@@ -15,6 +15,7 @@
 #include "JxrHuffmanStateSet.h"
 #include "JxrAdaptiveScanState.h"
 #include "JxrHighpassCbpState.h"
+#include "JxrMacroblockState.h"
 #include "JxrBitMath.h"
 #include "JxrDecoderSubbandContext.h"
 #include "JxrHpCoefficientBlockResolver.h"
@@ -128,6 +129,24 @@ static int test_highpass_cbp_state_vectors(void)
     return JxrHighpassCbpStateGetPatternHuffman(&state) == &pattern &&
         JxrHighpassCbpStateGetCountHuffman(&state) == &count &&
         JxrHighpassCbpStateGetPredictionModel(&state) == &model;
+}
+
+static int test_macroblock_state_vectors(void)
+{
+    CWMIMBInfo macroblock;
+    JxrMacroblockState state;
+
+    memset(&macroblock, 0xff, sizeof(macroblock));
+    JxrMacroblockStateInit(&state, &macroblock);
+    JxrMacroblockStateClearDc(&state, 2);
+    if (JxrMacroblockStateGetDcCoefficients(&state, 0)[0] != 0 ||
+        JxrMacroblockStateGetDcCoefficients(&state, 1)[15] != 0 ||
+        JxrMacroblockStateGetDcCoefficients(&state, 2)[0] != -1) return 0;
+    JxrMacroblockStateResetQuantizerIndices(&state);
+    JxrMacroblockStateSetLowpassQuantizerIndex(&state, 3);
+    JxrMacroblockStateSetHighpassQuantizerIndex(&state, 7);
+    return JxrMacroblockStateGetLowpassQuantizerIndex(&state) == 3 &&
+        JxrMacroblockStateGetHighpassQuantizerIndex(&state) == 7;
 }
 
 static int test_explicit_entropy_context(void)
@@ -486,6 +505,7 @@ int main(int argc, char** argv)
         { "adaptive_model_state_vectors", test_adaptive_model_state_vectors },
         { "huffman_state_set_vectors", test_huffman_state_set_vectors },
         { "highpass_cbp_state_vectors", test_highpass_cbp_state_vectors },
+        { "macroblock_state_vectors", test_macroblock_state_vectors },
         { "explicit_entropy_context", test_explicit_entropy_context },
         { "adaptive_scan_vectors", test_adaptive_scan_vectors },
         { "adaptive_scan_state_vectors", test_adaptive_scan_state_vectors },

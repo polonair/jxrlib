@@ -9,6 +9,7 @@
 #include "JxrHuffmanStateSet.h"
 #include "JxrAdaptiveScanState.h"
 #include "JxrHighpassCbpState.h"
+#include "JxrMacroblockState.h"
 
 /*
  * Explicit view of the legacy state consumed by one macroblock subband
@@ -16,6 +17,7 @@
  */
 typedef struct JxrDecoderSubbandContext {
     CWMImageStrCodec* codec;
+    JxrMacroblockState macroblockState;
     JxrEntropyBitReader dcReader;
     JxrEntropyBitReader lowpassReader;
     JxrEntropyBitReader highpassReader;
