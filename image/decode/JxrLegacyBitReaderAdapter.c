@@ -3,6 +3,7 @@
 Void JxrLegacyBitReaderAdapterInit(JxrLegacyBitReaderAdapter* state, BitIOInfo* stream)
 {
     state->stream = stream;
+    JxrLegacyBitReaderAdapterSyncInputBufferState(state);
 }
 
 U32 JxrLegacyBitReaderAdapterPeek16(JxrLegacyBitReaderAdapter* state, U32 count)
@@ -23,6 +24,23 @@ U32 JxrLegacyBitReaderAdapterRead32(JxrLegacyBitReaderAdapter* state, U32 count)
 Void JxrLegacyBitReaderAdapterRefillLevel1(CWMImageStrCodec* codec, JxrLegacyBitReaderAdapter* state)
 {
     readIS(codec, state->stream);
+    JxrLegacyBitReaderAdapterSyncInputBufferState(state);
+}
+
+Void JxrLegacyBitReaderAdapterSyncInputBufferState(JxrLegacyBitReaderAdapter* state)
+{
+    JxrBitInputBufferStateInit(&state->inputBufferState,
+        (UINTPTR_T)state->stream->pbStart, (UINTPTR_T)state->stream->pbCurrent,
+        (UINTPTR_T)state->stream->iMask, state->stream->offRef, state->stream->uiShadow);
+}
+
+Bool JxrLegacyBitReaderAdapterIsInputBufferStateCurrent(const JxrLegacyBitReaderAdapter* state)
+{
+    return state->inputBufferState.startAddress == (UINTPTR_T)state->stream->pbStart &&
+        state->inputBufferState.currentAddress == (UINTPTR_T)state->stream->pbCurrent &&
+        state->inputBufferState.mask == (UINTPTR_T)state->stream->iMask &&
+        state->inputBufferState.streamOffset == state->stream->offRef &&
+        state->inputBufferState.shadow == state->stream->uiShadow;
 }
 
 Void JxrLegacyBitReaderAdapterRefillLevel2(CWMImageStrCodec* codec, JxrLegacyBitReaderAdapter* state)

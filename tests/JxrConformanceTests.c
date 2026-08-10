@@ -377,6 +377,29 @@ static int test_entropy_reader_state_vectors(void)
         JxrEntropyBitReaderPosition(&reader) == 6;
 }
 
+static int test_legacy_bit_reader_mirror_vectors(void)
+{
+    BitIOInfo input;
+    JxrLegacyBitReaderAdapter adapter;
+
+    memset(&input, 0, sizeof(input));
+    input.pbStart = (U8*)(UINTPTR_T)0x10000000U;
+    input.pbCurrent = (U8*)(UINTPTR_T)0x10001000U;
+    input.iMask = -8192;
+    input.offRef = 4096;
+    input.uiShadow = 0x12345678U;
+    JxrLegacyBitReaderAdapterInit(&adapter, &input);
+    if (!JxrLegacyBitReaderAdapterIsInputBufferStateCurrent(&adapter) ||
+        !JxrBitInputBufferStateNeedsRefill(&adapter.inputBufferState, 4096)) return 0;
+    input.pbStart = (U8*)(UINTPTR_T)0x10001000U;
+    input.pbCurrent = (U8*)(UINTPTR_T)0x10001000U;
+    input.offRef = 8192;
+    input.uiShadow = 0xabcdef01U;
+    JxrLegacyBitReaderAdapterSyncInputBufferState(&adapter);
+    return JxrLegacyBitReaderAdapterIsInputBufferStateCurrent(&adapter) &&
+        !JxrBitInputBufferStateNeedsRefill(&adapter.inputBufferState, 4096);
+}
+
 static int test_hp_coefficient_block_resolver(void)
 {
     CWMImageStrCodec codec;
@@ -556,6 +579,7 @@ int main(int argc, char** argv)
         { "bit_math_vectors", test_bit_math_vectors },
         { "entropy_reader_signed_residual_vectors", test_entropy_reader_signed_residual_vectors },
         { "entropy_reader_state_vectors", test_entropy_reader_state_vectors },
+        { "legacy_bit_reader_mirror_vectors", test_legacy_bit_reader_mirror_vectors },
         { "hp_coefficient_block_resolver", test_hp_coefficient_block_resolver },
         { "decoder_subband_context", test_decoder_subband_context },
         { "minimal_fixture", test_minimal_fixture },
