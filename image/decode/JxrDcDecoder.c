@@ -5,6 +5,7 @@
 #include "JxrAdaptiveHuffman.h"
 #include "JxrHuffmanDecoder.h"
 #include "JxrQuantizationIndexReader.h"
+#include "JxrSubbandStreamRefill.h"
 
 Int JxrDcDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, Int macroblockY)
 {
@@ -13,7 +14,6 @@ Int JxrDcDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, 
     CWMIMBInfo* macroblock = &codec->MBInfo;
     const COLORFORMAT colorFormat = codec->m_param.cfColorFormat;
     const Int channelCount = (Int)codec->m_param.cNumChannels;
-    BitIOInfo* input = state->dcInput;
     JxrEntropyBitReader* reader = &state->dcReader;
     Int index;
     Int channel;
@@ -32,7 +32,7 @@ Int JxrDcDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, 
         memset(macroblock->iBlockDC[channel], 0, 16 * sizeof(I32));
     }
 
-    readIS_L1(codec, input);
+    JxrSubbandStreamRefillLevel1(codec, reader);
     macroblock->iQIndexLP = 0;
     macroblock->iQIndexHP = 0;
 

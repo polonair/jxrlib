@@ -186,6 +186,7 @@
     <ClCompile Include="..\decode\JxrLpResidualDecoder.c" />
     <ClCompile Include="..\decode\JxrDecoderSubbandContext.c" />
     <ClCompile Include="..\decode\JxrQuantizationIndexReader.c" />
+    <ClCompile Include="..\decode\JxrSubbandStreamRefill.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\sys\common.h" />

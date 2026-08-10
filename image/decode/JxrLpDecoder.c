@@ -7,6 +7,7 @@
 #include "JxrLpResidualDecoder.h"
 #include "JxrAdaptiveHuffman.h"
 #include "JxrQuantizationIndexReader.h"
+#include "JxrSubbandStreamRefill.h"
 
 Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
         Int macroblockX, Int macroblockY)
@@ -17,7 +18,6 @@ Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
     const Int iFullPlanes = (cf == YUV_420 || cf == YUV_422) ? 2 : iChannels;
     Int k;
     CAdaptiveScan* pScan = state->lowpassScan;
-    BitIOInfo* pIO = state->lowpassInput;
     JxrEntropyBitReader* reader = &state->lowpassReader;
     Int iModelBits = state->lowpassModel->m_iFlcBits[0];
     Int aRLCoeffs[32], iNumNonzero = 0, iIndex = 0;
@@ -29,7 +29,7 @@ Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
     UNREFERENCED_PARAMETER(macroblockX);
     UNREFERENCED_PARAMETER(macroblockY);
 
-    readIS_L1(codec, pIO);
+    JxrSubbandStreamRefillLevel1(codec, reader);
     if((codec->WMISCP.bfBitstreamFormat != SPATIAL) && (codec->pTile[codec->cTileColumn].cBitsLP > 0))  // MB-based LP QP index
         pMBInfo->iQIndexLP = JxrQuantizationIndexReaderDecode(reader,
             codec->pTile[codec->cTileColumn].cBitsLP);

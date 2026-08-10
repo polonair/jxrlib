@@ -10,6 +10,7 @@
 #include "JxrEntropyLevelDecoder.h"
 #include "JxrEntropyReader.h"
 #include "JxrQuantizationIndexReader.h"
+#include "JxrSubbandStreamRefill.h"
 
 extern const int dctIndex[3][16];
 
@@ -19,7 +20,6 @@ extern const int dctIndex[3][16];
 Void JxrHpDecoderDecodeCbp(JxrDecoderSubbandContext* state)
 {
     CWMImageStrCodec* codec = state->codec;
-    BitIOInfo* pIO = state->highpassInput;
     JxrEntropyBitReader* reader = &state->highpassReader;
     const COLORFORMAT cf = codec->m_param.cfColorFormat;
     const Int iChannel = (cf == NCOMPONENT || cf == CMYK) ? (Int) codec->m_param.cNumChannels : 1;
@@ -31,7 +31,7 @@ Void JxrHpDecoderDecodeCbp(JxrDecoderSubbandContext* state)
     CAdaptiveHuffman* pAHCBP1 = state->cbpCountHuffman;
     CAdaptiveHuffman* pAHex1 = state->huffmanStates[1];
 
-    readIS_L1(codec, pIO);
+    JxrSubbandStreamRefillLevel1(codec, reader);
 
     for (i = 0; i < iChannel; i++) {
 
@@ -184,8 +184,6 @@ static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
 {
     CWMImageStrCodec* codec = state->codec;
     CWMITile* pTile = codec->pTile + codec->cTileColumn;
-    BitIOInfo* pIO = state->highpassInput;
-    BitIOInfo* pIOFL = state->flexbitsInput;
     JxrEntropyBitReader* highpassReader = &state->highpassReader;
     JxrEntropyBitReader* flexbitsReader = &state->flexbitsReader;
     const COLORFORMAT cf = codec->m_param.cfColorFormat;
@@ -229,13 +227,13 @@ static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
         Int iIndex = 0, iNumNonZero;
 
         if(codec->WMISCP.sbSubband != SB_NO_FLEXBITS)
-            readIS_L1(codec, pIOFL);
+            JxrSubbandStreamRefillLevel1(codec, flexbitsReader);
 
         for (iBlock = 0; iBlock < iNBlocks; iBlock++) {
 
-            readIS_L2(codec, pIO);
-            if (pIO != pIOFL)
-                readIS_L2(codec, pIOFL);
+            JxrSubbandStreamRefillLevel2(codec, highpassReader);
+            if (highpassReader->legacyStream != flexbitsReader->legacyStream)
+                JxrSubbandStreamRefillLevel2(codec, flexbitsReader);
 
             iQP = (codec->m_param.bTranscode ? 1 : pTile->pQuantizerHP[iPlanes > 1 ? i : (iBlock > 3 ? (cf == YUV_420 ? iBlock - 3 : iBlock / 2 - 1) : 0)][codec->MBInfo.iQIndexHP].iQP);
 
