@@ -11,6 +11,7 @@
 #include "JxrHighpassCbpState.h"
 #include "JxrMacroblockState.h"
 #include "JxrCoefficientPlaneState.h"
+#include "JxrDecoderFormatState.h"
 
 /*
  * Explicit view of the legacy state consumed by one macroblock subband
@@ -18,6 +19,7 @@
  */
 typedef struct JxrDecoderSubbandContext {
     CWMImageStrCodec* codec;
+    JxrDecoderFormatState formatState;
     JxrMacroblockState macroblockState;
     JxrCoefficientPlaneState coefficientPlanes;
     JxrEntropyBitReader dcReader;

@@ -193,6 +193,7 @@
     <ClCompile Include="..\decode\JxrHighpassCbpState.c" />
     <ClCompile Include="..\decode\JxrMacroblockState.c" />
     <ClCompile Include="..\decode\JxrCoefficientPlaneState.c" />
+    <ClCompile Include="..\decode\JxrDecoderFormatState.c" />
     <ClCompile Include="..\decode\JxrDecoderSubbandContext.c" />
     <ClCompile Include="..\decode\JxrQuantizationIndexReader.c" />
     <ClCompile Include="..\decode\JxrSubbandStreamRefill.c" />

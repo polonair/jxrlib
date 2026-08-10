@@ -10,10 +10,11 @@
 Int JxrDcDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, Int macroblockY)
 {
     CWMImageStrCodec* codec = state->codec;
-    CWMITile* tile = codec->pTile + codec->cTileColumn;
+    JxrDecoderFormatState* format = &state->formatState;
+    CWMITile* tile = JxrDecoderFormatStateGetCurrentTile(format);
     JxrMacroblockState* macroblock = &state->macroblockState;
-    const COLORFORMAT colorFormat = codec->m_param.cfColorFormat;
-    const Int channelCount = (Int)codec->m_param.cNumChannels;
+    const COLORFORMAT colorFormat = JxrDecoderFormatStateGetColorFormat(format);
+    const Int channelCount = JxrDecoderFormatStateGetChannelCount(format);
     JxrEntropyBitReader* reader = &state->dcReader;
     Int index;
     Int channel;
@@ -33,10 +34,10 @@ Int JxrDcDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, 
     JxrSubbandStreamRefillLevel1(codec, reader);
     JxrMacroblockStateResetQuantizerIndices(macroblock);
 
-    if (codec->WMISCP.bfBitstreamFormat == SPATIAL && codec->WMISCP.sbSubband != SB_DC_ONLY) {
+    if (JxrDecoderFormatStateIsSpatial(format) && !JxrDecoderFormatStateIsDcOnly(format)) {
         if (tile->cBitsLP > 0) JxrMacroblockStateSetLowpassQuantizerIndex(macroblock,
             JxrQuantizationIndexReaderDecode(reader, tile->cBitsLP));
-        if (codec->WMISCP.sbSubband != SB_NO_HIGHPASS && tile->cBitsHP > 0) {
+        if (JxrDecoderFormatStateHasHighpass(format) && tile->cBitsHP > 0) {
             JxrMacroblockStateSetHighpassQuantizerIndex(macroblock,
                 JxrQuantizationIndexReaderDecode(reader, tile->cBitsHP));
         }
@@ -93,7 +94,7 @@ Int JxrDcDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, 
     JxrAdaptiveModelStateUpdateForMacroblock(&state->dcModelState, colorFormat,
         channelCount, laplacianMean);
     if (((!(codec->WMISCP.bfBitstreamFormat != FREQUENCY || codec->m_Dparam->cThumbnailScale < 16)) ||
-        codec->WMISCP.sbSubband == SB_DC_ONLY) && codec->m_bResetContext) {
+        JxrDecoderFormatStateIsDcOnly(format)) && codec->m_bResetContext) {
         Int tableIndex;
         for (tableIndex = 2; tableIndex < 5; ++tableIndex) {
             JxrHuffmanStateSetAdapt(&state->huffmanStateSet, tableIndex);
