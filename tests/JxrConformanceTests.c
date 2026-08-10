@@ -11,6 +11,7 @@
 #include "JxrLpResidualDecoder.h"
 #include "JxrLowpassCbpState.h"
 #include "JxrMacroblockCbpState.h"
+#include "JxrAdaptiveModelState.h"
 #include "JxrBitMath.h"
 #include "JxrDecoderSubbandContext.h"
 #include "JxrHpCoefficientBlockResolver.h"
@@ -71,6 +72,26 @@ static int test_adaptive_state(void)
     UpdateModelMB(Y_ONLY, 1, mean, &context.m_aModelDC);
     UpdateModelMB(Y_ONLY, 1, mean, &context.m_aModelLP);
     return context.m_aModelDC.m_iFlcBits[0] == 7 && context.m_aModelLP.m_iFlcBits[0] == 3;
+}
+
+static int test_adaptive_model_state_vectors(void)
+{
+    CCodingContext expected;
+    CCodingContext actual;
+    Int expectedMeans[2] = { 3, 7 };
+    Int actualMeans[2] = { 3, 7 };
+    JxrAdaptiveModelState state;
+
+    memset(&expected, 0, sizeof(expected));
+    memset(&actual, 0, sizeof(actual));
+    ResetCodingContext(&expected);
+    ResetCodingContext(&actual);
+    JxrAdaptiveModelStateInit(&state, &actual.m_aModelLP);
+    if (JxrAdaptiveModelStateGetFlcBits(&state, 0) != expected.m_aModelLP.m_iFlcBits[0] ||
+        JxrAdaptiveModelStateGetFlcBits(&state, 1) != expected.m_aModelLP.m_iFlcBits[1]) return 0;
+    UpdateModelMB(YUV_444, 3, expectedMeans, &expected.m_aModelLP);
+    JxrAdaptiveModelStateUpdateForMacroblock(&state, YUV_444, 3, actualMeans);
+    return memcmp(&actual.m_aModelLP, &expected.m_aModelLP, sizeof(CAdaptiveModel)) == 0;
 }
 
 static int test_explicit_entropy_context(void)
@@ -294,8 +315,10 @@ static int test_decoder_subband_context(void)
         JxrEntropyBitReaderPosition(&state.lowpassReader) == 0 &&
         !JxrEntropyBitReaderHasError(&state.highpassReader) &&
         !JxrEntropyBitReaderHasError(&state.flexbitsReader) &&
-        state.dcModel == &entropy.m_aModelDC && state.lowpassModel == &entropy.m_aModelLP &&
-        state.highpassModel == &entropy.m_aModelAC && state.huffmanStates == entropy.m_pAHexpt &&
+        JxrAdaptiveModelStateGetFlcBits(&state.dcModelState, 0) == entropy.m_aModelDC.m_iFlcBits[0] &&
+        JxrAdaptiveModelStateGetFlcBits(&state.lowpassModelState, 0) == entropy.m_aModelLP.m_iFlcBits[0] &&
+        JxrAdaptiveModelStateGetFlcBits(&state.highpassModelState, 0) == entropy.m_aModelAC.m_iFlcBits[0] &&
+        state.huffmanStates == entropy.m_pAHexpt &&
         state.cbpHuffman == entropy.m_pAdaptHuffCBPCY &&
         state.cbpCountHuffman == entropy.m_pAdaptHuffCBPCY1 &&
         state.highpassCbpModel == &entropy.m_aCBPModel &&
@@ -403,6 +426,7 @@ int main(int argc, char** argv)
         { "smoke", test_smoke },
         { "bit_io_vectors", test_bit_io_vectors },
         { "adaptive_state", test_adaptive_state },
+        { "adaptive_model_state_vectors", test_adaptive_model_state_vectors },
         { "explicit_entropy_context", test_explicit_entropy_context },
         { "adaptive_scan_vectors", test_adaptive_scan_vectors },
         { "coefficient_buffer_vectors", test_coefficient_buffer_vectors },

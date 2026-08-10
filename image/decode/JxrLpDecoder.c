@@ -19,7 +19,7 @@ Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
     Int k;
     CAdaptiveScan* pScan = state->lowpassScan;
     JxrEntropyBitReader* reader = &state->lowpassReader;
-    Int iModelBits = state->lowpassModel->m_iFlcBits[0];
+    Int iModelBits = JxrAdaptiveModelStateGetFlcBits(&state->lowpassModelState, 0);
     Int aRLCoeffs[32], iNumNonzero = 0, iIndex = 0;
     Int aLaplacianMean[2] = { 0, 0}, *pLM = aLaplacianMean;
     Int iChannel, iCBP = 0;
@@ -128,12 +128,13 @@ Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
             }
         }
         pLM = aLaplacianMean + 1;
-        iModelBits = state->lowpassModel->m_iFlcBits[1];
+        iModelBits = JxrAdaptiveModelStateGetFlcBits(&state->lowpassModelState, 1);
 
         iCBP >>= 1;
     }
 
-    UpdateModelMB(cf, iChannels, aLaplacianMean, state->lowpassModel);
+    JxrAdaptiveModelStateUpdateForMacroblock(&state->lowpassModelState, cf,
+        iChannels, aLaplacianMean);
 
     if (codec->m_bResetContext) {
         for (k = 0; k < CONTEXTX + CTDC; ++k) {

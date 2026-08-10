@@ -187,6 +187,7 @@
     <ClCompile Include="..\decode\JxrLpResidualDecoder.c" />
     <ClCompile Include="..\decode\JxrLowpassCbpState.c" />
     <ClCompile Include="..\decode\JxrMacroblockCbpState.c" />
+    <ClCompile Include="..\decode\JxrAdaptiveModelState.c" />
     <ClCompile Include="..\decode\JxrDecoderSubbandContext.c" />
     <ClCompile Include="..\decode\JxrQuantizationIndexReader.c" />
     <ClCompile Include="..\decode\JxrSubbandStreamRefill.c" />

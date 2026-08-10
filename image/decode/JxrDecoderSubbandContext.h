@@ -5,6 +5,7 @@
 #include "JxrEntropyReader.h"
 #include "JxrLowpassCbpState.h"
 #include "JxrMacroblockCbpState.h"
+#include "JxrAdaptiveModelState.h"
 
 /*
  * Explicit view of the legacy state consumed by one macroblock subband
@@ -16,9 +17,9 @@ typedef struct JxrDecoderSubbandContext {
     JxrEntropyBitReader lowpassReader;
     JxrEntropyBitReader highpassReader;
     JxrEntropyBitReader flexbitsReader;
-    CAdaptiveModel* dcModel;
-    CAdaptiveModel* lowpassModel;
-    CAdaptiveModel* highpassModel;
+    JxrAdaptiveModelState dcModelState;
+    JxrAdaptiveModelState lowpassModelState;
+    JxrAdaptiveModelState highpassModelState;
     CAdaptiveHuffman** huffmanStates;
     CAdaptiveHuffman* cbpHuffman;
     CAdaptiveHuffman* cbpCountHuffman;

@@ -19,7 +19,7 @@ Int JxrDcDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, 
     Int channel;
     Int laplacianMean[2] = { 0, 0 };
     Int* currentMean = laplacianMean;
-    Int modelBits = state->dcModel->m_iFlcBits[0];
+    Int modelBits = JxrAdaptiveModelStateGetFlcBits(&state->dcModelState, 0);
     CAdaptiveHuffman* significantFlags;
     Int luminance;
     Int chromaU;
@@ -56,7 +56,7 @@ Int JxrDcDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, 
             if (luminance && JxrEntropyBitReaderReadFlag(reader)) luminance = -luminance;
             macroblock->iBlockDC[channel][0] = luminance;
             currentMean = laplacianMean + 1;
-            modelBits = state->dcModel->m_iFlcBits[1];
+            modelBits = JxrAdaptiveModelStateGetFlcBits(&state->dcModelState, 1);
         }
     }
     else {
@@ -75,7 +75,7 @@ Int JxrDcDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, 
         macroblock->iBlockDC[0][0] = luminance;
 
         currentMean = laplacianMean + 1;
-        modelBits = state->dcModel->m_iFlcBits[1];
+        modelBits = JxrAdaptiveModelStateGetFlcBits(&state->dcModelState, 1);
         if (chromaU) { chromaU = JxrEntropyLevelDecoderDecodeReader(state->huffmanStates[4], reader) - 1; *currentMean += 1; }
         if (modelBits) chromaU = (chromaU << modelBits) | (Int)JxrEntropyBitReaderRead(reader, modelBits);
         if (chromaU && JxrEntropyBitReaderReadFlag(reader)) chromaU = -chromaU;
@@ -87,7 +87,8 @@ Int JxrDcDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, 
         macroblock->iBlockDC[2][0] = chromaV;
     }
 
-    UpdateModelMB(colorFormat, channelCount, laplacianMean, state->dcModel);
+    JxrAdaptiveModelStateUpdateForMacroblock(&state->dcModelState, colorFormat,
+        channelCount, laplacianMean);
     if (((!(codec->WMISCP.bfBitstreamFormat != FREQUENCY || codec->m_Dparam->cThumbnailScale < 16)) ||
         codec->WMISCP.sbSubband == SB_DC_ONLY) && codec->m_bResetContext) {
         Int tableIndex;

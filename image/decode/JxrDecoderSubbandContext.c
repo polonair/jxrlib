@@ -8,9 +8,9 @@ Void JxrDecoderSubbandContextInit(JxrDecoderSubbandContext* state,
     JxrEntropyBitReaderInit(&state->lowpassReader, entropy->m_pIOLP);
     JxrEntropyBitReaderInit(&state->highpassReader, entropy->m_pIOAC);
     JxrEntropyBitReaderInit(&state->flexbitsReader, entropy->m_pIOFL);
-    state->dcModel = &entropy->m_aModelDC;
-    state->lowpassModel = &entropy->m_aModelLP;
-    state->highpassModel = &entropy->m_aModelAC;
+    JxrAdaptiveModelStateInit(&state->dcModelState, &entropy->m_aModelDC);
+    JxrAdaptiveModelStateInit(&state->lowpassModelState, &entropy->m_aModelLP);
+    JxrAdaptiveModelStateInit(&state->highpassModelState, &entropy->m_aModelAC);
     state->huffmanStates = entropy->m_pAHexpt;
     state->cbpHuffman = entropy->m_pAdaptHuffCBPCY;
     state->cbpCountHuffman = entropy->m_pAdaptHuffCBPCY1;

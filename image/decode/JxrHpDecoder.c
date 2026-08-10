@@ -193,7 +193,7 @@ static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
     CAdaptiveScan *pScan;
     JxrCoefficientBuffer coefficients;
     Int i, iBlock, iSubblock, iNBlocks = 4;
-    Int iModelBits = state->highpassModel->m_iFlcBits[0];
+    Int iModelBits = JxrAdaptiveModelStateGetFlcBits(&state->highpassModelState, 0);
     Int aLaplacianMean[2] = { 0, 0}, *pLM = aLaplacianMean + 0;
     const Int *pOrder = dctIndex[0];
     const Int iOrient = codec->MBInfo.iOrientation;
@@ -265,7 +265,7 @@ static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
                 (*pLM) += iNumNonZero;
             }
             if (iBlock == 3) {
-                iModelBits = state->highpassModel->m_iFlcBits[1];
+                iModelBits = JxrAdaptiveModelStateGetFlcBits(&state->highpassModelState, 1);
                 pLM = aLaplacianMean + 1;
                 bChroma = TRUE;
             }
@@ -277,7 +277,8 @@ static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
     }
 
     /** update model at end of MB **/
-    UpdateModelMB(cf, iChannels, aLaplacianMean, state->highpassModel);
+    JxrAdaptiveModelStateUpdateForMacroblock(&state->highpassModelState, cf,
+        iChannels, aLaplacianMean);
     return ICERR_OK;
 }
 
