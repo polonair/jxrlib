@@ -18,6 +18,7 @@
 #include "JxrMacroblockState.h"
 #include "JxrCoefficientPlaneState.h"
 #include "JxrBitInputBufferState.h"
+#include "JxrPacketExecutor.h"
 #include "JxrBitMath.h"
 #include "JxrDecoderSubbandContext.h"
 #include "JxrHpCoefficientBlockResolver.h"
@@ -204,6 +205,27 @@ static int test_packet_source_vectors(void)
     if (!JxrBitInputBufferStateReadPacket(&state, &source, destination, 4096)) return 0;
     return fake.lastOffset == 4096 && state.streamOffset == 8192 &&
         state.shadow == 0x12345678U && state.startAddress == 0x10001000U;
+}
+
+static int test_packet_executor_vectors(void)
+{
+    U8 data[8192] = { 0 }, destination[4096] = { 0 };
+    JxrFakePacketSource fake = { data, sizeof(data), 0 };
+    JxrPacketSource source = { &fake, read_fake_packet };
+    JxrBitInputBufferState state;
+    Bool didRefill;
+
+    JxrBitInputBufferStateInit(&state, 0x10000000U, 0x10000000U,
+        ~(UINTPTR_T)8192, 4096, 0x12345678U);
+    if (!JxrPacketExecutorTryRefill(&state, &source, destination, 4096, &didRefill) || didRefill)
+        return 0;
+    data[4096] = 0x78; data[4097] = 0x56; data[4098] = 0x34; data[4099] = 0x12;
+    state.currentAddress = 0x10001000U;
+    if (!JxrPacketExecutorTryRefill(&state, &source, destination, 4096, &didRefill) || !didRefill)
+        return 0;
+    return fake.lastOffset == 4096 && destination[0] == 0x78 &&
+        state.startAddress == 0x10001000U && state.streamOffset == 8192 &&
+        state.shadow == 0x12345678U;
 }
 
 static int test_explicit_entropy_context(void)
@@ -592,6 +614,7 @@ int main(int argc, char** argv)
         { "coefficient_plane_state_vectors", test_coefficient_plane_state_vectors },
         { "bit_input_buffer_state_vectors", test_bit_input_buffer_state_vectors },
         { "packet_source_vectors", test_packet_source_vectors },
+        { "packet_executor_vectors", test_packet_executor_vectors },
         { "explicit_entropy_context", test_explicit_entropy_context },
         { "adaptive_scan_vectors", test_adaptive_scan_vectors },
         { "adaptive_scan_state_vectors", test_adaptive_scan_state_vectors },

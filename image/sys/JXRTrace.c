@@ -95,7 +95,10 @@ Void JXRTraceCopyFile(const char* szSourceFile, const char* szTraceFile)
 }
 
 Void JXRTraceDumpRefillSnapshot(const BitIOInfo* before, const BitIOInfo* after,
-    Bool explicitNeedsRefill, Bool legacyNeedsRefill)
+    Bool adapterNeedsRefill, Bool legacyNeedsRefill, Bool executorDidRefill,
+    Bool executorMatchesLegacy, UINTPTR_T executorStartAddress,
+    UINTPTR_T executorCurrentAddress, size_t executorOffset, U32 executorShadow,
+    ERR executorReadResult)
 {
     char szPath[1200];
     FILE* pFile;
@@ -108,14 +111,17 @@ Void JXRTraceDumpRefillSnapshot(const BitIOInfo* before, const BitIOInfo* after,
     pFile = fopen(szPath, "ab");
     if (NULL == pFile) return;
     fprintf(pFile,
-        "{\"sequence\":%lu,\"explicit_needs_refill\":%s,\"legacy_needs_refill\":%s,\"did_refill\":%s,\"packet_first4\":[%u,%u,%u,%u],\"before\":{\"start\":\"%p\",\"current\":\"%p\",\"offset\":%lu,\"bits_used\":%u,\"shadow\":%u},"
-        "\"after\":{\"start\":\"%p\",\"current\":\"%p\",\"offset\":%lu,\"bits_used\":%u,\"shadow\":%u}}\n",
-        (unsigned long)g_cRefillSnapshots++, explicitNeedsRefill ? "true" : "false",
-        legacyNeedsRefill ? "true" : "false", didRefill ? "true" : "false",
+        "{\"sequence\":%lu,\"adapter_needs_refill\":%s,\"legacy_needs_refill\":%s,\"executor_did_refill\":%s,\"executor_read_result\":%d,\"did_refill\":%s,\"executor_matches_legacy\":%s,\"packet_first4\":[%u,%u,%u,%u],\"before\":{\"start\":\"%p\",\"current\":\"%p\",\"offset\":%lu,\"bits_used\":%u,\"shadow\":%u},"
+        "\"after\":{\"start\":\"%p\",\"current\":\"%p\",\"offset\":%lu,\"bits_used\":%u,\"shadow\":%u},"
+        "\"executor_after\":{\"start\":\"%p\",\"current\":\"%p\",\"offset\":%lu,\"shadow\":%u}}\n",
+        (unsigned long)g_cRefillSnapshots++, adapterNeedsRefill ? "true" : "false",
+        legacyNeedsRefill ? "true" : "false", executorDidRefill ? "true" : "false",
+        (int)executorReadResult, didRefill ? "true" : "false", executorMatchesLegacy ? "true" : "false",
         didRefill ? (unsigned)packet[0] : 0, didRefill ? (unsigned)packet[1] : 0,
         didRefill ? (unsigned)packet[2] : 0, didRefill ? (unsigned)packet[3] : 0,
         before->pbStart, before->pbCurrent, (unsigned long)before->offRef, (unsigned)before->cBitsUsed, (unsigned)before->uiShadow,
-        after->pbStart, after->pbCurrent, (unsigned long)after->offRef, (unsigned)after->cBitsUsed, (unsigned)after->uiShadow);
+        after->pbStart, after->pbCurrent, (unsigned long)after->offRef, (unsigned)after->cBitsUsed, (unsigned)after->uiShadow,
+        (Void*)executorStartAddress, (Void*)executorCurrentAddress, (unsigned long)executorOffset, (unsigned)executorShadow);
     fclose(pFile);
 }
 
