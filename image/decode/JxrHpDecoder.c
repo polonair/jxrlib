@@ -20,7 +20,7 @@ Void JxrHpDecoderDecodeCbp(JxrDecoderSubbandContext* state)
 {
     CWMImageStrCodec* codec = state->codec;
     BitIOInfo* pIO = state->highpassInput;
-    JxrEntropyBitReader reader;
+    JxrEntropyBitReader* reader = &state->highpassReader;
     const COLORFORMAT cf = codec->m_param.cfColorFormat;
     const Int iChannel = (cf == NCOMPONENT || cf == CMYK) ? (Int) codec->m_param.cNumChannels : 1;
     Int iCBPCY, iCBPCU , iCBPCV;
@@ -32,31 +32,30 @@ Void JxrHpDecoderDecodeCbp(JxrDecoderSubbandContext* state)
     CAdaptiveHuffman* pAHex1 = state->huffmanStates[1];
 
     readIS_L1(codec, pIO);
-    JxrEntropyBitReaderInit(&reader, pIO);
 
     for (i = 0; i < iChannel; i++) {
 
         iCBPCY = iCBPCU = iCBPCV = 0;
-        iNumCBP = JxrAdaptiveHuffmanDecodeShortTableReader(pAHCBP1->m_hufDecTable, &reader);
+        iNumCBP = JxrAdaptiveHuffmanDecodeShortTableReader(pAHCBP1->m_hufDecTable, reader);
         JxrAdaptiveHuffmanObserve(pAHCBP1, iNumCBP);
 
         switch (iNumCBP) {
             case 2:
-                iNumCBP = JxrEntropyBitReaderRead(&reader, 2);
+                iNumCBP = JxrEntropyBitReaderRead(reader, 2);
                 if (iNumCBP == 0)
                     iNumCBP = 3;
                 else if (iNumCBP == 1)
                     iNumCBP = 5;
                 else {
                     static const Int aTab[] = { 6, 9, 10, 12 };
-                    iNumCBP = aTab[iNumCBP * 2 + JxrEntropyBitReaderReadFlag(&reader) - 4];
+                    iNumCBP = aTab[iNumCBP * 2 + JxrEntropyBitReaderReadFlag(reader) - 4];
                 }
                 break;
             case 1:
-                iNumCBP = 1 << JxrEntropyBitReaderRead(&reader, 2);
+                iNumCBP = 1 << JxrEntropyBitReaderRead(reader, 2);
                 break;
             case 3:
-                iNumCBP = 0xf ^ (1 << JxrEntropyBitReaderRead(&reader, 2));
+                iNumCBP = 0xf ^ (1 << JxrEntropyBitReaderRead(reader, 2));
                 break;
             case 4:
                 iNumCBP = 0xf;
@@ -67,27 +66,27 @@ Void JxrHpDecoderDecodeCbp(JxrDecoderSubbandContext* state)
                 static const UInt gFLC0[] = { 0,2,1,2,2,0 };
                 static const UInt gOff0[] = { 0,4,2,8,12,1 };
                 static const UInt gOut0[] = { 0,15,3,12, 1,2,4,8, 5,6,9,10, 7,11,13,14 };
-                Int iNumBlockCBP = JxrAdaptiveHuffmanDecodeReader(pAHCBP, &reader);
+                Int iNumBlockCBP = JxrAdaptiveHuffmanDecodeReader(pAHCBP, reader);
                 unsigned int val = (unsigned int) iNumBlockCBP + 1, iCode1;
 
                 /* Observation is performed by JxrAdaptiveHuffmanDecode. */
                 iNumBlockCBP = 0;
 
                 if (val >= 6) { // chroma present
-                    if (JxrEntropyBitReaderReadFlag(&reader)) {
+                    if (JxrEntropyBitReaderReadFlag(reader)) {
                         iNumBlockCBP = 0x10;
                     }
-                    else if (JxrEntropyBitReaderReadFlag(&reader)) {
+                    else if (JxrEntropyBitReaderReadFlag(reader)) {
                         iNumBlockCBP = 0x20;
                     }
                     else {
                         iNumBlockCBP = 0x30;
                     }
                     if (val == 9) {
-                        if (JxrEntropyBitReaderReadFlag(&reader)) {
+                        if (JxrEntropyBitReaderReadFlag(reader)) {
                             // do nothing
                         }
-                        else if (JxrEntropyBitReaderReadFlag(&reader)) {
+                        else if (JxrEntropyBitReaderReadFlag(reader)) {
                             val = 10;
                         }
                         else {
@@ -98,7 +97,7 @@ Void JxrHpDecoderDecodeCbp(JxrDecoderSubbandContext* state)
                 }
                 iCode1 = gOff0[val];
                 if (gFLC0[val]) {
-                    iCode1 += JxrEntropyBitReaderRead(&reader, gFLC0[val]);
+                    iCode1 += JxrEntropyBitReaderRead(reader, gFLC0[val]);
                 }
                 iNumBlockCBP += gOut0[iCode1];
 
@@ -108,24 +107,24 @@ Void JxrHpDecoderDecodeCbp(JxrDecoderSubbandContext* state)
                         for (k = 0; k < 2; k++) {
                             bIsChroma = ((iNumBlockCBP>>(k+4)) & 0x01);
                             if (bIsChroma) { // U is present in block
-                                Int iCode = JxrAdaptiveHuffmanDecodeShortTableReader(pAHex1->m_hufDecTable, &reader);
+                                Int iCode = JxrAdaptiveHuffmanDecodeShortTableReader(pAHex1->m_hufDecTable, reader);
                                 switch (iCode) {
                             case 1:
-                                iCode = JxrEntropyBitReaderRead(&reader, 2);
+                                iCode = JxrEntropyBitReaderRead(reader, 2);
                                 if (iCode == 0)
                                     iCode = 3;
                                 else if (iCode == 1)
                                     iCode = 5;
                                 else {
                                     static const Int aTab[] = { 6, 9, 10, 12 };
-                                    iCode = aTab[iCode * 2 + JxrEntropyBitReaderReadFlag(&reader) - 4];
+                                    iCode = aTab[iCode * 2 + JxrEntropyBitReaderReadFlag(reader) - 4];
                                 }
                                 break;
                             case 0:
-                                iCode = 1 << JxrEntropyBitReaderRead(&reader, 2);
+                                iCode = 1 << JxrEntropyBitReaderRead(reader, 2);
                                 break;
                             case 2:
-                                iCode = 0xf ^ (1 << JxrEntropyBitReaderRead(&reader, 2));
+                                iCode = 0xf ^ (1 << JxrEntropyBitReaderRead(reader, 2));
                                 break;
                             case 3:
                                 iCode = 0xf;
@@ -150,10 +149,10 @@ Void JxrHpDecoderDecodeCbp(JxrDecoderSubbandContext* state)
                             Int iCode = 5;
                             const Int iShift[4] = {0, 1, 4, 5};
                             if((iNumBlockCBP >> (k + 4)) & 0x01) {
-                                if(JxrEntropyBitReaderReadFlag(&reader)) {
+                                if(JxrEntropyBitReaderReadFlag(reader)) {
                                     iCode = 1;
                                 }
-                                else if(JxrEntropyBitReaderReadFlag(&reader)){
+                                else if(JxrEntropyBitReaderReadFlag(reader)){
                                     iCode = 4;
                                 }
                                 iCode <<= iShift[iBlock];
@@ -187,8 +186,8 @@ static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
     CWMITile* pTile = codec->pTile + codec->cTileColumn;
     BitIOInfo* pIO = state->highpassInput;
     BitIOInfo* pIOFL = state->flexbitsInput;
-    JxrEntropyBitReader highpassReader;
-    JxrEntropyBitReader flexbitsReader;
+    JxrEntropyBitReader* highpassReader = &state->highpassReader;
+    JxrEntropyBitReader* flexbitsReader = &state->flexbitsReader;
     const COLORFORMAT cf = codec->m_param.cfColorFormat;
     const Int iChannels = (Int) codec->m_param.cNumChannels;
     const Int iPlanes = (cf == YUV_420 || cf == YUV_422) ? 1 : iChannels;
@@ -208,8 +207,6 @@ static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
 
     UNREFERENCED_PARAMETER(macroblockX);
     UNREFERENCED_PARAMETER(macroblockY);
-    JxrEntropyBitReaderInit(&highpassReader, pIO);
-    JxrEntropyBitReaderInit(&flexbitsReader, pIOFL);
 
     /** set scan arrays and other MB level constants **/
     if (iOrient == 1) {
@@ -251,8 +248,8 @@ static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
                 {
                     JxrHpBlockDecodingContext blockContext;
                     blockContext.huffmanStates = state->huffmanStates;
-                    blockContext.highpassReader = &highpassReader;
-                    blockContext.flexbitsReader = &flexbitsReader;
+                    blockContext.highpassReader = highpassReader;
+                    blockContext.flexbitsReader = flexbitsReader;
                     blockContext.coefficientBuffer = &coefficients;
                     blockContext.scan = pScan;
                     blockContext.coefficientOrder = pOrder;
@@ -291,10 +288,8 @@ Int JxrHpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
 {
     CWMImageStrCodec* codec = state->codec;
     CWMITile* tile = codec->pTile + codec->cTileColumn;
-    JxrEntropyBitReader highpassReader;
+    JxrEntropyBitReader* highpassReader = &state->highpassReader;
     Int tableIndex;
-
-    JxrEntropyBitReaderInit(&highpassReader, state->highpassInput);
 
     /** reset adaptive scan totals **/
     if (codec->m_bResetRGITotals) {
@@ -302,7 +297,7 @@ Int JxrHpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
         JxrAdaptiveScanResetTotals(state->verticalScan, 16);
     }
     if((codec->WMISCP.bfBitstreamFormat != SPATIAL) && (tile->cBitsHP > 0)) { // MB-based HP QP index
-        codec->MBInfo.iQIndexHP = JxrQuantizationIndexReaderDecode(&highpassReader, tile->cBitsHP);
+        codec->MBInfo.iQIndexHP = JxrQuantizationIndexReaderDecode(highpassReader, tile->cBitsHP);
         if (codec->MBInfo.iQIndexHP >= tile->cNumQPHP)
             goto ErrorExit;
     }

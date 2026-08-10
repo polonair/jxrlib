@@ -18,7 +18,7 @@ Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
     Int k;
     CAdaptiveScan* pScan = state->lowpassScan;
     BitIOInfo* pIO = state->lowpassInput;
-    JxrEntropyBitReader reader;
+    JxrEntropyBitReader* reader = &state->lowpassReader;
     Int iModelBits = state->lowpassModel->m_iFlcBits[0];
     Int aRLCoeffs[32], iNumNonzero = 0, iIndex = 0;
     Int aLaplacianMean[2] = { 0, 0}, *pLM = aLaplacianMean;
@@ -28,11 +28,10 @@ Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
 
     UNREFERENCED_PARAMETER(macroblockX);
     UNREFERENCED_PARAMETER(macroblockY);
-    JxrEntropyBitReaderInit(&reader, pIO);
 
     readIS_L1(codec, pIO);
     if((codec->WMISCP.bfBitstreamFormat != SPATIAL) && (codec->pTile[codec->cTileColumn].cBitsLP > 0))  // MB-based LP QP index
-        pMBInfo->iQIndexLP = JxrQuantizationIndexReaderDecode(&reader,
+        pMBInfo->iQIndexLP = JxrQuantizationIndexReaderDecode(reader,
             codec->pTile[codec->cTileColumn].cBitsLP);
 
     // set arrays
@@ -50,18 +49,18 @@ Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
         int iMax = iFullPlanes * 4 - 5; /* actually (1 << iNChannels) - 1 **/
         if (iCountZ <= 0 || iCountM < 0) {
             iCBP = 0;
-            if (JxrEntropyBitReaderReadFlag(&reader)) {
+            if (JxrEntropyBitReaderReadFlag(reader)) {
                 iCBP = 1;
-                k = JxrEntropyBitReaderRead(&reader, iFullPlanes - 1);
+                k = JxrEntropyBitReaderRead(reader, iFullPlanes - 1);
                 if (k) {
-                    iCBP = k * 2 + JxrEntropyBitReaderRead(&reader, 1);
+                    iCBP = k * 2 + JxrEntropyBitReaderRead(reader, 1);
                 }
             }
             if (iCountM < iCountZ)
                 iCBP = iMax - iCBP;
         }
         else {
-            iCBP = JxrEntropyBitReaderRead(&reader, iFullPlanes);
+            iCBP = JxrEntropyBitReaderRead(reader, iFullPlanes);
         }
 
         iCountM += 1 - 4 * (iCBP == iMax);//(b + c - 2*a);
@@ -80,7 +79,7 @@ Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
     }
     else { /** 1 or N channel **/
         for (iChannel = 0; iChannel < iChannels; iChannel++)
-            iCBP |= ((Int)JxrLpResidualDecoderReadBitsReader(&reader, 1) << iChannel);
+            iCBP |= ((Int)JxrLpResidualDecoderReadBitsReader(reader, 1) << iChannel);
     }
 
     for (iChannel = 0; iChannel < iFullPlanes; iChannel++) {
@@ -88,7 +87,7 @@ Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
 
         if (iCBP & 1) {
             iNumNonzero = JxrEntropyBlockDecoderDecodeLowpassBlockReader(iChannel > 0, aRLCoeffs, state->huffmanStates,
-                CTDC, &reader, 1 + 9 * ((cf == YUV_420) && (iChannel == 1))
+                CTDC, reader, 1 + 9 * ((cf == YUV_420) && (iChannel == 1))
                 + ((cf == YUV_422) && (iChannel == 1)));
 
             if ((cf == YUV_420 || cf == YUV_422) && iChannel) {
@@ -127,15 +126,15 @@ Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
         if (iModelBits) {
             if ((cf == YUV_420 || cf == YUV_422) && iChannel) {
                 for (k = 1; k < (cf == YUV_420 ? 4 : 8); k++) {
-                    aDC[1][k] = JxrLpResidualDecoderDecodeChromaCoefficientReader(aDC[1][k], &reader, iModelBits);
-                    aDC[2][k] = JxrLpResidualDecoderDecodeChromaCoefficientReader(aDC[2][k], &reader, iModelBits);
+                    aDC[1][k] = JxrLpResidualDecoderDecodeChromaCoefficientReader(aDC[1][k], reader, iModelBits);
+                    aDC[2][k] = JxrLpResidualDecoderDecodeChromaCoefficientReader(aDC[2][k], reader, iModelBits);
                 }
             }
             else {
                 for (k = 1; k < 16; k++) {
                     PixelI coefficient = JxrCoefficientBufferGet(&coefficients, k);
                     JxrCoefficientBufferSet(&coefficients, k,
-                        JxrLpResidualDecoderDecodeNormalCoefficientReader(coefficient, &reader, iModelBits));
+                        JxrLpResidualDecoderDecodeNormalCoefficientReader(coefficient, reader, iModelBits));
                 }
             }
         }

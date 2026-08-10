@@ -200,6 +200,8 @@ static int test_decoder_subband_context(void)
     return state.codec == &codec && state.entropy == &entropy &&
         state.dcInput == &dcInput && state.lowpassInput == &lowpassInput &&
         state.highpassInput == &highpassInput && state.flexbitsInput == &flexbitsInput &&
+        state.dcReader.legacyStream == &dcInput && state.lowpassReader.legacyStream == &lowpassInput &&
+        state.highpassReader.legacyStream == &highpassInput && state.flexbitsReader.legacyStream == &flexbitsInput &&
         state.dcModel == &entropy.m_aModelDC && state.lowpassModel == &entropy.m_aModelLP &&
         state.highpassModel == &entropy.m_aModelAC && state.huffmanStates == entropy.m_pAHexpt &&
         state.cbpHuffman == entropy.m_pAdaptHuffCBPCY &&

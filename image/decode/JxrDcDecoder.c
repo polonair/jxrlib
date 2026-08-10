@@ -14,7 +14,7 @@ Int JxrDcDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, 
     const COLORFORMAT colorFormat = codec->m_param.cfColorFormat;
     const Int channelCount = (Int)codec->m_param.cNumChannels;
     BitIOInfo* input = state->dcInput;
-    JxrEntropyBitReader reader;
+    JxrEntropyBitReader* reader = &state->dcReader;
     Int index;
     Int channel;
     Int laplacianMean[2] = { 0, 0 };
@@ -27,7 +27,6 @@ Int JxrDcDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, 
 
     UNREFERENCED_PARAMETER(macroblockX);
     UNREFERENCED_PARAMETER(macroblockY);
-    JxrEntropyBitReaderInit(&reader, input);
 
     for (channel = 0; channel < channelCount; ++channel) {
         memset(macroblock->iBlockDC[channel], 0, 16 * sizeof(I32));
@@ -38,9 +37,9 @@ Int JxrDcDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, 
     macroblock->iQIndexHP = 0;
 
     if (codec->WMISCP.bfBitstreamFormat == SPATIAL && codec->WMISCP.sbSubband != SB_DC_ONLY) {
-        if (tile->cBitsLP > 0) macroblock->iQIndexLP = JxrQuantizationIndexReaderDecode(&reader, tile->cBitsLP);
+        if (tile->cBitsLP > 0) macroblock->iQIndexLP = JxrQuantizationIndexReaderDecode(reader, tile->cBitsLP);
         if (codec->WMISCP.sbSubband != SB_NO_HIGHPASS && tile->cBitsHP > 0) {
-            macroblock->iQIndexHP = JxrQuantizationIndexReaderDecode(&reader, tile->cBitsHP);
+            macroblock->iQIndexHP = JxrQuantizationIndexReaderDecode(reader, tile->cBitsHP);
         }
     }
     if (tile->cBitsHP == 0 && tile->cNumQPHP > 1) macroblock->iQIndexHP = macroblock->iQIndexLP;
@@ -49,12 +48,12 @@ Int JxrDcDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, 
     if (colorFormat == Y_ONLY || colorFormat == CMYK || colorFormat == NCOMPONENT) {
         for (channel = 0; channel < channelCount; ++channel) {
             luminance = 0;
-            if (JxrEntropyBitReaderReadFlag(&reader)) {
-                luminance = JxrEntropyLevelDecoderDecodeReader(state->huffmanStates[3], &reader) - 1;
+            if (JxrEntropyBitReaderReadFlag(reader)) {
+                luminance = JxrEntropyLevelDecoderDecodeReader(state->huffmanStates[3], reader) - 1;
                 *currentMean += 1;
             }
-            if (modelBits) luminance = (luminance << modelBits) | (Int)JxrEntropyBitReaderRead(&reader, modelBits);
-            if (luminance && JxrEntropyBitReaderReadFlag(&reader)) luminance = -luminance;
+            if (modelBits) luminance = (luminance << modelBits) | (Int)JxrEntropyBitReaderRead(reader, modelBits);
+            if (luminance && JxrEntropyBitReaderReadFlag(reader)) luminance = -luminance;
             macroblock->iBlockDC[channel][0] = luminance;
             currentMean = laplacianMean + 1;
             modelBits = state->dcModel->m_iFlcBits[1];
@@ -64,27 +63,27 @@ Int JxrDcDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, 
         significantFlags = state->huffmanStates[2];
         {
             JxrHuffmanTable table = JxrHuffmanTableCreate(significantFlags->m_hufDecTable);
-            index = JxrHuffmanDecoderDecodeSymbolReader(&table, &reader);
+            index = JxrHuffmanDecoderDecodeSymbolReader(&table, reader);
         }
         luminance = index >> 2;
         chromaU = (index >> 1) & 1;
         chromaV = index & 1;
 
-        if (luminance) { luminance = JxrEntropyLevelDecoderDecodeReader(state->huffmanStates[3], &reader) - 1; *currentMean += 1; }
-        if (modelBits) luminance = (luminance << modelBits) | (Int)JxrEntropyBitReaderRead(&reader, modelBits);
-        if (luminance && JxrEntropyBitReaderReadFlag(&reader)) luminance = -luminance;
+        if (luminance) { luminance = JxrEntropyLevelDecoderDecodeReader(state->huffmanStates[3], reader) - 1; *currentMean += 1; }
+        if (modelBits) luminance = (luminance << modelBits) | (Int)JxrEntropyBitReaderRead(reader, modelBits);
+        if (luminance && JxrEntropyBitReaderReadFlag(reader)) luminance = -luminance;
         macroblock->iBlockDC[0][0] = luminance;
 
         currentMean = laplacianMean + 1;
         modelBits = state->dcModel->m_iFlcBits[1];
-        if (chromaU) { chromaU = JxrEntropyLevelDecoderDecodeReader(state->huffmanStates[4], &reader) - 1; *currentMean += 1; }
-        if (modelBits) chromaU = (chromaU << modelBits) | (Int)JxrEntropyBitReaderRead(&reader, modelBits);
-        if (chromaU && JxrEntropyBitReaderReadFlag(&reader)) chromaU = -chromaU;
+        if (chromaU) { chromaU = JxrEntropyLevelDecoderDecodeReader(state->huffmanStates[4], reader) - 1; *currentMean += 1; }
+        if (modelBits) chromaU = (chromaU << modelBits) | (Int)JxrEntropyBitReaderRead(reader, modelBits);
+        if (chromaU && JxrEntropyBitReaderReadFlag(reader)) chromaU = -chromaU;
         macroblock->iBlockDC[1][0] = chromaU;
 
-        if (chromaV) { chromaV = JxrEntropyLevelDecoderDecodeReader(state->huffmanStates[4], &reader) - 1; *currentMean += 1; }
-        if (modelBits) chromaV = (chromaV << modelBits) | (Int)JxrEntropyBitReaderRead(&reader, modelBits);
-        if (chromaV && JxrEntropyBitReaderReadFlag(&reader)) chromaV = -chromaV;
+        if (chromaV) { chromaV = JxrEntropyLevelDecoderDecodeReader(state->huffmanStates[4], reader) - 1; *currentMean += 1; }
+        if (modelBits) chromaV = (chromaV << modelBits) | (Int)JxrEntropyBitReaderRead(reader, modelBits);
+        if (chromaV && JxrEntropyBitReaderReadFlag(reader)) chromaV = -chromaV;
         macroblock->iBlockDC[2][0] = chromaV;
     }
 

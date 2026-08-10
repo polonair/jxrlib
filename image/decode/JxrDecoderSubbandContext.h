@@ -2,6 +2,7 @@
 #define JXR_DECODER_SUBBAND_CONTEXT_H
 
 #include "strcodec.h"
+#include "JxrEntropyReader.h"
 
 /*
  * Explicit view of the legacy state consumed by one macroblock subband
@@ -14,6 +15,10 @@ typedef struct JxrDecoderSubbandContext {
     BitIOInfo* lowpassInput;
     BitIOInfo* highpassInput;
     BitIOInfo* flexbitsInput;
+    JxrEntropyBitReader dcReader;
+    JxrEntropyBitReader lowpassReader;
+    JxrEntropyBitReader highpassReader;
+    JxrEntropyBitReader flexbitsReader;
     CAdaptiveModel* dcModel;
     CAdaptiveModel* lowpassModel;
     CAdaptiveModel* highpassModel;
