@@ -4,13 +4,15 @@
 #include "strcodec.h"
 #include "JxrEntropyReader.h"
 
+#define JXR_TILE_MAX_QUANTIZERS 16
+
 /* Read-only tile snapshot. Native quantizer arrays remain isolated in this bridge. */
 typedef struct JxrDecoderTileState {
     U8 lowpassQuantizerBits;
     U8 highpassQuantizerBits;
     U8 lowpassQuantizerCount;
     U8 highpassQuantizerCount;
-    CWMIQuantizer* highpassQuantizers[MAX_CHANNELS];
+    Int highpassQuantizerParameters[MAX_CHANNELS][JXR_TILE_MAX_QUANTIZERS];
 } JxrDecoderTileState;
 
 Void JxrDecoderTileStateInit(JxrDecoderTileState* state, const CWMITile* nativeTile);

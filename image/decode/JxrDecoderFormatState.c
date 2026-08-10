@@ -7,19 +7,28 @@
 Void JxrDecoderTileStateInit(JxrDecoderTileState* state, const CWMITile* nativeTile)
 {
     Int channel;
+    Int quantizerIndex;
     state->lowpassQuantizerBits = 0;
     state->highpassQuantizerBits = 0;
     state->lowpassQuantizerCount = 0;
     state->highpassQuantizerCount = 0;
     for (channel = 0; channel < MAX_CHANNELS; ++channel)
-        state->highpassQuantizers[channel] = NULL;
+        for (quantizerIndex = 0; quantizerIndex < JXR_TILE_MAX_QUANTIZERS;
+            ++quantizerIndex)
+            state->highpassQuantizerParameters[channel][quantizerIndex] = 0;
     if (nativeTile == NULL) return;
     state->lowpassQuantizerBits = nativeTile->cBitsLP;
     state->highpassQuantizerBits = nativeTile->cBitsHP;
     state->lowpassQuantizerCount = nativeTile->cNumQPLP;
     state->highpassQuantizerCount = nativeTile->cNumQPHP;
-    for (channel = 0; channel < MAX_CHANNELS; ++channel)
-        state->highpassQuantizers[channel] = nativeTile->pQuantizerHP[channel];
+    assert(state->highpassQuantizerCount <= JXR_TILE_MAX_QUANTIZERS);
+    for (channel = 0; channel < MAX_CHANNELS; ++channel) {
+        if (nativeTile->pQuantizerHP[channel] == NULL) continue;
+        for (quantizerIndex = 0; quantizerIndex < state->highpassQuantizerCount;
+            ++quantizerIndex)
+            state->highpassQuantizerParameters[channel][quantizerIndex] =
+                nativeTile->pQuantizerHP[channel][quantizerIndex].iQP;
+    }
 }
 
 U8 JxrDecoderTileStateGetLowpassQuantizerBits(const JxrDecoderTileState* state)
@@ -35,8 +44,7 @@ Int JxrDecoderTileStateGetHighpassQuantizerParameter(const JxrDecoderTileState* 
 {
     assert(plane >= 0 && plane < MAX_CHANNELS);
     assert(quantizerIndex >= 0 && quantizerIndex < state->highpassQuantizerCount);
-    assert(state->highpassQuantizers[plane] != NULL);
-    return state->highpassQuantizers[plane][quantizerIndex].iQP;
+    return state->highpassQuantizerParameters[plane][quantizerIndex];
 }
 
 Void JxrDecoderFormatStateInit(JxrDecoderFormatState* state, CWMImageStrCodec* nativeCodec)

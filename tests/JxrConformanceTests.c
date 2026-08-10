@@ -759,6 +759,7 @@ static int test_decoder_format_snapshot_vectors(void)
     codec.m_param.bTranscode = FALSE;
     codec.cTileColumn = 0;
     tiles[1].cBitsHP = 0;
+    highpass0[1].iQP = 1;
     codec.m_bResetRGITotals = FALSE;
     codec.m_bResetContext = FALSE;
     parameters.bSkipFlexbits = FALSE;
