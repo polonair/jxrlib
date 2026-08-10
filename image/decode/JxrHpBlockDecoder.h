@@ -1,7 +1,7 @@
 #ifndef JXR_HP_BLOCK_DECODER_H
 #define JXR_HP_BLOCK_DECODER_H
 
-#include "JxrAdaptiveScan.h"
+#include "JxrAdaptiveScanState.h"
 #include "JxrCoefficientBuffer.h"
 #include "JxrEntropyReader.h"
 #include "JxrHuffmanStateSet.h"
@@ -11,7 +11,7 @@ typedef struct JxrHpBlockDecodingContext {
     JxrEntropyBitReader* highpassReader;
     JxrEntropyBitReader* flexbitsReader;
     JxrCoefficientBuffer* coefficientBuffer;
-    CAdaptiveScan* scan;
+    JxrAdaptiveScanState* scanState;
     const Int* coefficientOrder;
     Bool isChroma;
     Bool hasCoefficients;

@@ -190,7 +190,7 @@ static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
     const Int iChannels = (Int) codec->m_param.cNumChannels;
     const Int iPlanes = (cf == YUV_420 || cf == YUV_422) ? 1 : iChannels;
     Int  iQP;
-    CAdaptiveScan *pScan;
+    JxrAdaptiveScanState* scanState;
     JxrCoefficientBuffer coefficients;
     Int i, iBlock, iSubblock, iNBlocks = 4;
     Int iModelBits = JxrAdaptiveModelStateGetFlcBits(&state->highpassModelState, 0);
@@ -208,10 +208,10 @@ static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
 
     /** set scan arrays and other MB level constants **/
     if (iOrient == 1) {
-        pScan = state->verticalScan;
+        scanState = &state->verticalScanState;
     }
     else {
-        pScan = state->horizontalScan;
+        scanState = &state->horizontalScanState;
     }
 
     if (cf == YUV_420) {
@@ -249,7 +249,7 @@ static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
                     blockContext.highpassReader = highpassReader;
                     blockContext.flexbitsReader = flexbitsReader;
                     blockContext.coefficientBuffer = &coefficients;
-                    blockContext.scan = pScan;
+                    blockContext.scanState = scanState;
                     blockContext.coefficientOrder = pOrder;
                     blockContext.isChroma = bChroma;
                     blockContext.hasCoefficients = (iCBPCY & 1) != 0;
@@ -293,8 +293,8 @@ Int JxrHpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
 
     /** reset adaptive scan totals **/
     if (codec->m_bResetRGITotals) {
-        JxrAdaptiveScanResetTotals(state->horizontalScan, 16);
-        JxrAdaptiveScanResetTotals(state->verticalScan, 16);
+        JxrAdaptiveScanStateResetTotals(&state->horizontalScanState, 16);
+        JxrAdaptiveScanStateResetTotals(&state->verticalScanState, 16);
     }
     if((codec->WMISCP.bfBitstreamFormat != SPATIAL) && (tile->cBitsHP > 0)) { // MB-based HP QP index
         codec->MBInfo.iQIndexHP = JxrQuantizationIndexReaderDecode(highpassReader, tile->cBitsHP);

@@ -39,8 +39,8 @@ static Int JxrHpBlockDecoderDecodeEntropyCoefficients(JxrHpBlockDecodingContext*
     }
     location &= 15;
     JxrCoefficientBufferSet(context->coefficientBuffer,
-        JxrAdaptiveScanGetCoefficientIndex(context->scan, location), (PixelI)level);
-    JxrAdaptiveScanObserveNonZero(context->scan, location);
+        JxrAdaptiveScanStateGetCoefficientIndex(context->scanState, location), (PixelI)level);
+    JxrAdaptiveScanStateObserveNonZero(context->scanState, location);
     location = (location + 1) & 15;
 
     while (remainingSignificantRuns != 0) {
@@ -65,8 +65,8 @@ static Int JxrHpBlockDecoderDecodeEntropyCoefficients(JxrHpBlockDecodingContext*
             level *= magnitude;
         }
         JxrCoefficientBufferSet(context->coefficientBuffer,
-            JxrAdaptiveScanGetCoefficientIndex(context->scan, location), (PixelI)level);
-        JxrAdaptiveScanObserveNonZero(context->scan, location);
+            JxrAdaptiveScanStateGetCoefficientIndex(context->scanState, location), (PixelI)level);
+        JxrAdaptiveScanStateObserveNonZero(context->scanState, location);
         location = (location + 1) & 15;
         nonzeroCount++;
     }

@@ -17,7 +17,7 @@ Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
     const Int iChannels = (Int) codec->m_param.cNumChannels;
     const Int iFullPlanes = (cf == YUV_420 || cf == YUV_422) ? 2 : iChannels;
     Int k;
-    CAdaptiveScan* pScan = state->lowpassScan;
+    JxrAdaptiveScanState* scanState = &state->lowpassScanState;
     JxrEntropyBitReader* reader = &state->lowpassReader;
     Int iModelBits = JxrAdaptiveModelStateGetFlcBits(&state->lowpassModelState, 0);
     Int aRLCoeffs[32], iNumNonzero = 0, iIndex = 0;
@@ -40,7 +40,7 @@ Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
     }
     /** reset adaptive scan totals **/
     if (codec->m_bResetRGITotals) {
-        JxrAdaptiveScanResetTotals(pScan, 16);
+        JxrAdaptiveScanStateResetTotals(scanState, 16);
     }
 
     /** in raw mode, this can take 6% of the bits in the extreme low rate case!!! **/
@@ -105,8 +105,9 @@ Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
 
                 for (k = 0; k < iNumNonzero; k++) {
                     iIndex += aRLCoeffs[k * 2];
-                    JxrCoefficientBufferSet(&coefficients, JxrAdaptiveScanGetCoefficientIndex(pScan, iIndex), aRLCoeffs[k * 2 + 1]);
-                    JxrAdaptiveScanObserveNonZero(pScan, iIndex);
+                    JxrCoefficientBufferSet(&coefficients,
+                        JxrAdaptiveScanStateGetCoefficientIndex(scanState, iIndex), aRLCoeffs[k * 2 + 1]);
+                    JxrAdaptiveScanStateObserveNonZero(scanState, iIndex);
                     iIndex++;
                 }
             }

@@ -18,9 +18,9 @@ Void JxrDecoderSubbandContextInit(JxrDecoderSubbandContext* state,
     state->trimFlexBits = entropy->m_iTrimFlexBits;
     JxrLowpassCbpStateInit(&state->lowpassCbpState, &entropy->m_iCBPCountZero,
         &entropy->m_iCBPCountMax);
-    state->lowpassScan = entropy->m_aScanLowpass;
-    state->horizontalScan = entropy->m_aScanHoriz;
-    state->verticalScan = entropy->m_aScanVert;
+    JxrAdaptiveScanStateInit(&state->lowpassScanState, entropy->m_aScanLowpass);
+    JxrAdaptiveScanStateInit(&state->horizontalScanState, entropy->m_aScanHoriz);
+    JxrAdaptiveScanStateInit(&state->verticalScanState, entropy->m_aScanVert);
     JxrMacroblockCbpStateInit(&state->macroblockCbpState, codec->MBInfo.iCBP,
         codec->MBInfo.iDiffCBP);
 }

@@ -13,6 +13,7 @@
 #include "JxrMacroblockCbpState.h"
 #include "JxrAdaptiveModelState.h"
 #include "JxrHuffmanStateSet.h"
+#include "JxrAdaptiveScanState.h"
 #include "JxrBitMath.h"
 #include "JxrDecoderSubbandContext.h"
 #include "JxrHpCoefficientBlockResolver.h"
@@ -133,6 +134,26 @@ static int test_adaptive_scan_vectors(void)
     JxrAdaptiveScanObserveNonZero(scan, 2);
     return scan[1].uScan == 2 && scan[1].uTotal == 33 &&
         scan[2].uScan == 1 && scan[2].uTotal == 32;
+}
+
+static int test_adaptive_scan_state_vectors(void)
+{
+    CAdaptiveScan scan[4];
+    JxrAdaptiveScanState state;
+
+    memset(scan, 0, sizeof(scan));
+    scan[0].uScan = 3;
+    scan[1].uScan = 2;
+    scan[2].uScan = 1;
+    scan[3].uScan = 0;
+    JxrAdaptiveScanStateInit(&state, scan);
+    JxrAdaptiveScanStateResetTotals(&state, 4);
+    if (JxrAdaptiveScanStateGetCoefficientIndex(&state, 2) != 1) return 0;
+    JxrAdaptiveScanStateObserveNonZero(&state, 2);
+    JxrAdaptiveScanStateObserveNonZero(&state, 2);
+    JxrAdaptiveScanStateObserveNonZero(&state, 2);
+    return JxrAdaptiveScanStateGetCoefficientIndex(&state, 1) == 1 &&
+        JxrAdaptiveScanStateGetCoefficientIndex(&state, 2) == 2;
 }
 
 static int test_coefficient_buffer_vectors(void)
@@ -343,8 +364,9 @@ static int test_decoder_subband_context(void)
         state.trimFlexBits == entropy.m_iTrimFlexBits &&
         JxrLowpassCbpStateGetZeroCount(&state.lowpassCbpState) == entropy.m_iCBPCountZero &&
         JxrLowpassCbpStateGetMaxCount(&state.lowpassCbpState) == entropy.m_iCBPCountMax &&
-        state.lowpassScan == entropy.m_aScanLowpass && state.horizontalScan == entropy.m_aScanHoriz &&
-        state.verticalScan == entropy.m_aScanVert &&
+        JxrAdaptiveScanStateGetCoefficientIndex(&state.lowpassScanState, 1) == entropy.m_aScanLowpass[1].uScan &&
+        JxrAdaptiveScanStateGetCoefficientIndex(&state.horizontalScanState, 1) == entropy.m_aScanHoriz[1].uScan &&
+        JxrAdaptiveScanStateGetCoefficientIndex(&state.verticalScanState, 1) == entropy.m_aScanVert[1].uScan &&
         JxrMacroblockCbpStateGetCbp(&state.macroblockCbpState, 0) == codec.MBInfo.iCBP[0] &&
         JxrMacroblockCbpStateGetDifferential(&state.macroblockCbpState, 0) == codec.MBInfo.iDiffCBP[0];
 }
@@ -448,6 +470,7 @@ int main(int argc, char** argv)
         { "huffman_state_set_vectors", test_huffman_state_set_vectors },
         { "explicit_entropy_context", test_explicit_entropy_context },
         { "adaptive_scan_vectors", test_adaptive_scan_vectors },
+        { "adaptive_scan_state_vectors", test_adaptive_scan_state_vectors },
         { "coefficient_buffer_vectors", test_coefficient_buffer_vectors },
         { "huffman_decoder_vectors", test_huffman_decoder_vectors },
         { "lp_residual_vectors", test_lp_residual_vectors },
