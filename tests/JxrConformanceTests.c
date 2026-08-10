@@ -29,6 +29,7 @@
 #include "JxrHpCoefficientBlockResolver.h"
 #include "JxrMacroblockRegionState.h"
 #include "JxrTranscodeTileQuantizerState.h"
+#include "JxrTranscodeQuantizerWriter.h"
 #include "JxrEntropyReader.h"
 #include "JxrLegacyBitReaderAdapter.h"
 #ifdef _WIN32
@@ -284,6 +285,51 @@ static int test_transcode_tile_quantizer_state_vectors(void)
         state.highpassIndex[1][3] == 0 && state.useDcForLowpassAlpha &&
         !state.useLowpassForHighpassAlpha && state.lowpassQuantizerCountAlpha == 2 &&
         state.highpassQuantizerCountAlpha == 0;
+}
+
+static Bool write_transcode_test_bits(Void* context, U32 value, U32 count)
+{
+    return JxrBitWriterWrite((JxrBitWriter*)context, value, count);
+}
+
+static int test_transcode_quantizer_writer_vectors(void)
+{
+    U8 data[8] = {0};
+    U8 indices[JXR_TRANSCODE_MAX_QUANTIZERS][MAX_CHANNELS] = {{0}};
+    U8 modes[JXR_TRANSCODE_MAX_QUANTIZERS] = {0};
+    JxrBitWriter writer;
+    JxrTranscodeBitSink sink;
+
+    indices[0][0] = 0x12;
+    indices[0][1] = 0x34;
+    indices[0][2] = 0x56;
+    indices[1][0] = 0x78;
+    indices[1][1] = 0x9a;
+    indices[1][2] = 0xbc;
+    modes[0] = 2;
+    modes[1] = 1;
+    JxrBitWriterInit(&writer, data, sizeof(data));
+    JxrTranscodeBitSinkInit(&sink, &writer, write_transcode_test_bits);
+    if (!JxrTranscodeQuantizerWriterWriteQuantizer(&sink, indices[0], 2, 3) ||
+        !JxrBitWriterFlush(&writer) || JxrBitWriterBytes(&writer) != 4 ||
+        data[0] != 0x84 || data[1] != 0x8d || data[2] != 0x15 || data[3] != 0x80) return 0;
+
+    memset(data, 0, sizeof(data));
+    JxrBitWriterInit(&writer, data, sizeof(data));
+    JxrTranscodeBitSinkInit(&sink, &writer, write_transcode_test_bits);
+    if (!JxrTranscodeQuantizerWriterWriteQuantizers(&sink, indices, modes, 2, 3, FALSE) ||
+        !JxrBitWriterFlush(&writer) || JxrBitWriterBytes(&writer) != 7 ||
+        data[0] != 0x0c || data[1] != 0x24 || data[2] != 0x68 || data[3] != 0xac ||
+        data[4] != 0xbc || data[5] != 0x4d || data[6] != 0x00) return 0;
+
+    memset(data, 0, sizeof(data));
+    indices[0][3] = 0xaa;
+    indices[1][3] = 0xbb;
+    JxrBitWriterInit(&writer, data, sizeof(data));
+    JxrTranscodeBitSinkInit(&sink, &writer, write_transcode_test_bits);
+    return JxrTranscodeQuantizerWriterWriteAlphaQuantizers(&sink, indices, 2, 3, FALSE) &&
+        JxrBitWriterFlush(&writer) && JxrBitWriterBytes(&writer) == 3 &&
+        data[0] == 0x0d && data[1] == 0x55 && data[2] == 0xd8;
 }
 
 static int test_bit_input_buffer_state_vectors(void)
@@ -1085,6 +1131,7 @@ int main(int argc, char** argv)
         { "coefficient_plane_state_vectors", test_coefficient_plane_state_vectors },
         { "macroblock_region_state_vectors", test_macroblock_region_state_vectors },
         { "transcode_tile_quantizer_state_vectors", test_transcode_tile_quantizer_state_vectors },
+        { "transcode_quantizer_writer_vectors", test_transcode_quantizer_writer_vectors },
         { "bit_input_buffer_state_vectors", test_bit_input_buffer_state_vectors },
         { "packet_source_vectors", test_packet_source_vectors },
         { "packet_executor_vectors", test_packet_executor_vectors },
