@@ -29,7 +29,7 @@ Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
     UNREFERENCED_PARAMETER(macroblockX);
     UNREFERENCED_PARAMETER(macroblockY);
 
-    JxrDecoderFormatStateRefillLevel1(format, reader);
+    if (!JxrDecoderFormatStateRefillLevel1(format, reader)) return ICERR_ERROR;
     if(!JxrDecoderFormatStateIsSpatial(format) && tile->cBitsLP > 0)  // MB-based LP QP index
         JxrMacroblockStateSetLowpassQuantizerIndex(macroblock,
             JxrQuantizationIndexReaderDecode(reader, tile->cBitsLP));

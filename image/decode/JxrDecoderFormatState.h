@@ -22,7 +22,7 @@ Bool JxrDecoderFormatStateIsTranscode(const JxrDecoderFormatState* state);
 Bool JxrDecoderFormatStateHasFlexbits(const JxrDecoderFormatState* state);
 Bool JxrDecoderFormatStateShouldSkipFlexbits(const JxrDecoderFormatState* state);
 Bool JxrDecoderFormatStateShouldAdaptDcHuffman(const JxrDecoderFormatState* state);
-Void JxrDecoderFormatStateRefillLevel1(JxrDecoderFormatState* state, JxrEntropyBitReader* reader);
-Void JxrDecoderFormatStateRefillLevel2(JxrDecoderFormatState* state, JxrEntropyBitReader* reader);
+Bool JxrDecoderFormatStateRefillLevel1(JxrDecoderFormatState* state, JxrEntropyBitReader* reader);
+Bool JxrDecoderFormatStateRefillLevel2(JxrDecoderFormatState* state, JxrEntropyBitReader* reader);
 
 #endif

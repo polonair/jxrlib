@@ -6,6 +6,6 @@
 Int JxrHpDecoderDecodeMacroblock(CWMImageStrCodec* codec, CCodingContext* context,
     Int macroblockX, Int macroblockY);
 Int JxrHpDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, Int macroblockY);
-Void JxrHpDecoderDecodeCbp(JxrDecoderSubbandContext* state);
+Bool JxrHpDecoderDecodeCbp(JxrDecoderSubbandContext* state);
 
 #endif

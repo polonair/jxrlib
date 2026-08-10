@@ -17,7 +17,7 @@ extern const int dctIndex[3][16];
 /*************************************************************************
     DecodeCBP
 *************************************************************************/
-Void JxrHpDecoderDecodeCbp(JxrDecoderSubbandContext* state)
+Bool JxrHpDecoderDecodeCbp(JxrDecoderSubbandContext* state)
 {
     JxrDecoderFormatState* format = &state->formatState;
     JxrEntropyBitReader* reader = &state->highpassReader;
@@ -31,7 +31,7 @@ Void JxrHpDecoderDecodeCbp(JxrDecoderSubbandContext* state)
     CAdaptiveHuffman* pAHCBP1 = JxrHighpassCbpStateGetCountHuffman(&state->highpassCbpState);
     CAdaptiveHuffman* pAHex1 = JxrHuffmanStateSetGet(&state->huffmanStateSet, 1);
 
-    JxrDecoderFormatStateRefillLevel1(format, reader);
+    if (!JxrDecoderFormatStateRefillLevel1(format, reader)) return FALSE;
 
     for (i = 0; i < iChannel; i++) {
 
@@ -174,6 +174,7 @@ Void JxrHpDecoderDecodeCbp(JxrDecoderSubbandContext* state)
             JxrMacroblockCbpStateSetDifferential(&state->macroblockCbpState, 2, iCBPCV);
         }
     }
+    return TRUE;
 }
 
 /*************************************************************************
@@ -227,14 +228,15 @@ static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
     for (i = 0; i < iPlanes; i++) {
         Int iIndex = 0, iNumNonZero;
 
-        if (JxrDecoderFormatStateHasFlexbits(format))
-            JxrDecoderFormatStateRefillLevel1(format, flexbitsReader);
+        if (JxrDecoderFormatStateHasFlexbits(format) &&
+            !JxrDecoderFormatStateRefillLevel1(format, flexbitsReader))
+            return ICERR_ERROR;
 
         for (iBlock = 0; iBlock < iNBlocks; iBlock++) {
 
-            JxrDecoderFormatStateRefillLevel2(format, highpassReader);
+            if (!JxrDecoderFormatStateRefillLevel2(format, highpassReader)) return ICERR_ERROR;
             if (!JxrEntropyBitReaderSharesStream(highpassReader, flexbitsReader))
-                JxrDecoderFormatStateRefillLevel2(format, flexbitsReader);
+                if (!JxrDecoderFormatStateRefillLevel2(format, flexbitsReader)) return ICERR_ERROR;
 
             iQP = (JxrDecoderFormatStateIsTranscode(format) ? 1 : pTile->pQuantizerHP[iPlanes > 1 ? i : (iBlock > 3 ? (cf == YUV_420 ? iBlock - 3 : iBlock / 2 - 1) : 0)][JxrMacroblockStateGetHighpassQuantizerIndex(macroblock)].iQP);
 
@@ -309,7 +311,7 @@ Int JxrHpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
             JxrMacroblockStateGetLowpassQuantizerIndex(macroblock));
 
 
-    JxrHpDecoderDecodeCbp(state);
+    if (!JxrHpDecoderDecodeCbp(state)) goto ErrorExit;
     JxrCbpPredictorDecode(state);
 
     if (JxrHpDecoderDecodeCoefficients(state, macroblockX, macroblockY) != ICERR_OK)

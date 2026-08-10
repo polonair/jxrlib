@@ -28,7 +28,7 @@ Bool JxrDecoderFormatStateShouldSkipFlexbits(const JxrDecoderFormatState* state)
 { return state->nativeCodec->m_Dparam->bSkipFlexbits; }
 Bool JxrDecoderFormatStateShouldAdaptDcHuffman(const JxrDecoderFormatState* state)
 { return (!(state->nativeCodec->WMISCP.bfBitstreamFormat != FREQUENCY || state->nativeCodec->m_Dparam->cThumbnailScale < 16)) || JxrDecoderFormatStateIsDcOnly(state); }
-Void JxrDecoderFormatStateRefillLevel1(JxrDecoderFormatState* state, JxrEntropyBitReader* reader)
-{ JxrSubbandStreamRefillLevel1(state->nativeCodec, reader); }
-Void JxrDecoderFormatStateRefillLevel2(JxrDecoderFormatState* state, JxrEntropyBitReader* reader)
-{ JxrSubbandStreamRefillLevel2(state->nativeCodec, reader); }
+Bool JxrDecoderFormatStateRefillLevel1(JxrDecoderFormatState* state, JxrEntropyBitReader* reader)
+{ return JxrSubbandStreamRefillLevel1(state->nativeCodec, reader); }
+Bool JxrDecoderFormatStateRefillLevel2(JxrDecoderFormatState* state, JxrEntropyBitReader* reader)
+{ return JxrSubbandStreamRefillLevel2(state->nativeCodec, reader); }

@@ -23,6 +23,7 @@
 #include "JxrLegacyBitIoBridge.h"
 #include "JxrPacketExecutor.h"
 #include "JxrBitMath.h"
+#include "JxrDecoderFormatState.h"
 #include "JxrDecoderSubbandContext.h"
 #include "JxrHpCoefficientBlockResolver.h"
 #include "JxrEntropyReader.h"
@@ -308,6 +309,36 @@ static int test_bit_reader_core_vectors(void)
     if (!JxrBitReaderCoreTryRefill(&core, &source, 4096, &didRefill) || !didRefill) return 0;
     return !core.hasError && ring[0] == 0x78 && core.input.packetStartIndex == 4096 &&
         core.input.streamOffset == 8192 && core.input.shadow == 0x12345678U;
+}
+
+static int test_refill_error_propagation_vectors(void)
+{
+    union { U64 alignment; U8 bytes[PACKETLENGTH * 2 + sizeof(BitIOInfo)]; } storage;
+    BitIOInfo* legacy = (BitIOInfo*)(storage.bytes + PACKETLENGTH * 2);
+    JxrLegacyBitReaderAdapter adapter;
+    JxrEntropyBitReader reader;
+    JxrDecoderFormatState format;
+
+    memset(&storage, 0, sizeof(storage));
+    legacy->pbStart = storage.bytes;
+    legacy->pbCurrent = storage.bytes + PACKETLENGTH;
+    legacy->iMask = -8192;
+    legacy->offRef = 4096;
+    JxrLegacyBitReaderAdapterInit(&adapter, legacy);
+    if (JxrLegacyBitReaderAdapterRefillLevel1(NULL, &adapter) ||
+        !adapter.core.hasError || adapter.core.lastPacketRead.status != JxrPacketReadFailed)
+        return 0;
+
+    JxrEntropyBitReaderInit(&reader, legacy);
+    JxrDecoderFormatStateInit(&format, NULL);
+    if (JxrDecoderFormatStateRefillLevel1(&format, &reader) ||
+        !JxrEntropyBitReaderHasError(&reader)) return 0;
+
+    legacy->pbCurrent = storage.bytes;
+    JxrEntropyBitReaderInit(&reader, legacy);
+    return JxrDecoderFormatStateRefillLevel1(&format, &reader) &&
+        !JxrEntropyBitReaderHasError(&reader) &&
+        JxrDecoderFormatStateRefillLevel2(&format, &reader);
 }
 
 static int test_bit_cursor_state_vectors(void)
@@ -835,6 +866,7 @@ int main(int argc, char** argv)
         { "packet_executor_vectors", test_packet_executor_vectors },
         { "packet_short_read_vectors", test_packet_short_read_vectors },
         { "bit_reader_core_vectors", test_bit_reader_core_vectors },
+        { "refill_error_propagation_vectors", test_refill_error_propagation_vectors },
         { "bit_cursor_state_vectors", test_bit_cursor_state_vectors },
         { "bit_cursor_ring_wrap_vectors", test_bit_cursor_ring_wrap_vectors },
         { "explicit_entropy_context", test_explicit_entropy_context },

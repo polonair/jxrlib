@@ -40,7 +40,7 @@ U32 JxrSharedBitReaderStateReadLong(JxrSharedBitReaderState* state, U32 count)
     return value;
 }
 
-Void JxrSharedBitReaderStateRefillLevel1(CWMImageStrCodec* codec, JxrSharedBitReaderState* state)
+Bool JxrSharedBitReaderStateRefillLevel1(CWMImageStrCodec* codec, JxrSharedBitReaderState* state)
 {
     UNREFERENCED_PARAMETER(codec);
     JxrSharedBitReaderStateSyncFromLegacy(state);
@@ -57,9 +57,10 @@ Void JxrSharedBitReaderStateRefillLevel1(CWMImageStrCodec* codec, JxrSharedBitRe
         size_t legacyOffset = before.offRef + PACKETLENGTH;
 
         JxrWmpPacketSourceInit(&wmpSource, before.pWS, &source);
-        JxrBitReaderCoreTryRefill(&state->core, &source, PACKETLENGTH, &executorDidRefill);
+        Bool refillSucceeded = JxrBitReaderCoreTryRefill(&state->core, &source,
+            PACKETLENGTH, &executorDidRefill);
         JxrLegacyBitIoBridgeApplyInput(state->legacyStream, &state->core.input);
-        executorMatchesLegacy = executorDidRefill && legacyNeedsRefill &&
+        executorMatchesLegacy = refillSucceeded && executorDidRefill && legacyNeedsRefill &&
             state->core.input.packetStartIndex == legacyStartIndex &&
             state->core.input.currentIndex ==
                 (size_t)(before.pbCurrent - state->core.input.buffer) &&
@@ -71,13 +72,16 @@ Void JxrSharedBitReaderStateRefillLevel1(CWMImageStrCodec* codec, JxrSharedBitRe
             (UINTPTR_T)(state->core.input.buffer + state->core.input.currentIndex),
             state->core.input.streamOffset, state->core.input.shadow,
             state->core.lastPacketRead.nativeError);
+        return refillSucceeded;
     }
+    return TRUE;
 }
 
-Void JxrSharedBitReaderStateRefillLevel2(CWMImageStrCodec* codec, JxrSharedBitReaderState* state)
+Bool JxrSharedBitReaderStateRefillLevel2(CWMImageStrCodec* codec, JxrSharedBitReaderState* state)
 {
     UNREFERENCED_PARAMETER(codec);
     UNREFERENCED_PARAMETER(state);
+    return TRUE;
 }
 
 Void JxrSharedBitReaderStateSyncFromLegacy(JxrSharedBitReaderState* state)

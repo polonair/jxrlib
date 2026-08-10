@@ -14,8 +14,8 @@ Void JxrSharedBitReaderStateInit(JxrSharedBitReaderState* state, BitIOInfo* lega
 U32 JxrSharedBitReaderStatePeek(JxrSharedBitReaderState* state, U32 count);
 Void JxrSharedBitReaderStateConsume(JxrSharedBitReaderState* state, U32 count);
 U32 JxrSharedBitReaderStateReadLong(JxrSharedBitReaderState* state, U32 count);
-Void JxrSharedBitReaderStateRefillLevel1(CWMImageStrCodec* codec, JxrSharedBitReaderState* state);
-Void JxrSharedBitReaderStateRefillLevel2(CWMImageStrCodec* codec, JxrSharedBitReaderState* state);
+Bool JxrSharedBitReaderStateRefillLevel1(CWMImageStrCodec* codec, JxrSharedBitReaderState* state);
+Bool JxrSharedBitReaderStateRefillLevel2(CWMImageStrCodec* codec, JxrSharedBitReaderState* state);
 Void JxrSharedBitReaderStateSyncFromLegacy(JxrSharedBitReaderState* state);
 Bool JxrSharedBitReaderStateIsCurrent(const JxrSharedBitReaderState* state);
 Bool JxrSharedBitReaderStateNeedsRefill(const JxrSharedBitReaderState* state);

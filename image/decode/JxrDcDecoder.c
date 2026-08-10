@@ -30,7 +30,7 @@ Int JxrDcDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, 
 
     JxrMacroblockStateClearDc(macroblock, channelCount);
 
-    JxrDecoderFormatStateRefillLevel1(format, reader);
+    if (!JxrDecoderFormatStateRefillLevel1(format, reader)) return ICERR_ERROR;
     JxrMacroblockStateResetQuantizerIndices(macroblock);
 
     if (JxrDecoderFormatStateIsSpatial(format) && !JxrDecoderFormatStateIsDcOnly(format)) {

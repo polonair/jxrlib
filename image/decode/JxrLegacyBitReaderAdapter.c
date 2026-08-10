@@ -20,9 +20,9 @@ U32 JxrLegacyBitReaderAdapterRead32(JxrLegacyBitReaderAdapter* state, U32 count)
     return JxrSharedBitReaderStateReadLong(state, count);
 }
 
-Void JxrLegacyBitReaderAdapterRefillLevel1(CWMImageStrCodec* codec, JxrLegacyBitReaderAdapter* state)
+Bool JxrLegacyBitReaderAdapterRefillLevel1(CWMImageStrCodec* codec, JxrLegacyBitReaderAdapter* state)
 {
-    JxrSharedBitReaderStateRefillLevel1(codec, state);
+    return JxrSharedBitReaderStateRefillLevel1(codec, state);
 }
 
 Void JxrLegacyBitReaderAdapterSyncInputBufferState(JxrLegacyBitReaderAdapter* state)
@@ -47,9 +47,9 @@ Bool JxrLegacyBitReaderAdapterHasMatchingRefillDecision(const JxrLegacyBitReader
     return legacyNeedsRefill == JxrLegacyBitReaderAdapterNeedsRefill(state);
 }
 
-Void JxrLegacyBitReaderAdapterRefillLevel2(CWMImageStrCodec* codec, JxrLegacyBitReaderAdapter* state)
+Bool JxrLegacyBitReaderAdapterRefillLevel2(CWMImageStrCodec* codec, JxrLegacyBitReaderAdapter* state)
 {
-    JxrSharedBitReaderStateRefillLevel2(codec, state);
+    return JxrSharedBitReaderStateRefillLevel2(codec, state);
 }
 
 Bool JxrLegacyBitReaderAdapterSharesStream(const JxrLegacyBitReaderAdapter* left,
