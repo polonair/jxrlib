@@ -23,8 +23,10 @@ U32 JxrLegacyBitReaderAdapterRead32(JxrLegacyBitReaderAdapter* state, U32 count)
 
 Void JxrLegacyBitReaderAdapterRefillLevel1(CWMImageStrCodec* codec, JxrLegacyBitReaderAdapter* state)
 {
-    readIS(codec, state->stream);
-    JxrLegacyBitReaderAdapterSyncInputBufferState(state);
+    if (JxrLegacyBitReaderAdapterNeedsRefill(state)) {
+        readIS(codec, state->stream);
+        JxrLegacyBitReaderAdapterSyncInputBufferState(state);
+    }
 }
 
 Void JxrLegacyBitReaderAdapterSyncInputBufferState(JxrLegacyBitReaderAdapter* state)
@@ -41,6 +43,11 @@ Bool JxrLegacyBitReaderAdapterIsInputBufferStateCurrent(const JxrLegacyBitReader
         state->inputBufferState.mask == (UINTPTR_T)state->stream->iMask &&
         state->inputBufferState.streamOffset == state->stream->offRef &&
         state->inputBufferState.shadow == state->stream->uiShadow;
+}
+
+Bool JxrLegacyBitReaderAdapterNeedsRefill(const JxrLegacyBitReaderAdapter* state)
+{
+    return JxrBitInputBufferStateNeedsRefill(&state->inputBufferState, PACKETLENGTH);
 }
 
 Void JxrLegacyBitReaderAdapterRefillLevel2(CWMImageStrCodec* codec, JxrLegacyBitReaderAdapter* state)

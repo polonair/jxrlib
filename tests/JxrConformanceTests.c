@@ -390,14 +390,14 @@ static int test_legacy_bit_reader_mirror_vectors(void)
     input.uiShadow = 0x12345678U;
     JxrLegacyBitReaderAdapterInit(&adapter, &input);
     if (!JxrLegacyBitReaderAdapterIsInputBufferStateCurrent(&adapter) ||
-        !JxrBitInputBufferStateNeedsRefill(&adapter.inputBufferState, 4096)) return 0;
+        !JxrLegacyBitReaderAdapterNeedsRefill(&adapter)) return 0;
     input.pbStart = (U8*)(UINTPTR_T)0x10001000U;
     input.pbCurrent = (U8*)(UINTPTR_T)0x10001000U;
     input.offRef = 8192;
     input.uiShadow = 0xabcdef01U;
     JxrLegacyBitReaderAdapterSyncInputBufferState(&adapter);
     return JxrLegacyBitReaderAdapterIsInputBufferStateCurrent(&adapter) &&
-        !JxrBitInputBufferStateNeedsRefill(&adapter.inputBufferState, 4096);
+        !JxrLegacyBitReaderAdapterNeedsRefill(&adapter);
 }
 
 static int test_hp_coefficient_block_resolver(void)
