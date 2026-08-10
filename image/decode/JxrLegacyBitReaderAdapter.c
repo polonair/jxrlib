@@ -4,6 +4,14 @@
 #include "JxrWmpPacketSource.h"
 #include "JxrLegacyBitIoBridge.h"
 
+static Void JxrLegacyBitReaderAdapterRefreshIfExternalStateChanged(JxrLegacyBitReaderAdapter* state)
+{
+    if (!JxrLegacyBitIoBridgeCursorMatches(state->stream, &state->bitCursor) ||
+        !JxrLegacyBitIoBridgeInputMatches(state->stream, &state->inputBufferState)) {
+        JxrLegacyBitIoBridgeRead(state->stream, &state->bitCursor, &state->inputBufferState);
+    }
+}
+
 Void JxrLegacyBitReaderAdapterInit(JxrLegacyBitReaderAdapter* state, BitIOInfo* stream)
 {
     state->stream = stream;
@@ -12,25 +20,25 @@ Void JxrLegacyBitReaderAdapterInit(JxrLegacyBitReaderAdapter* state, BitIOInfo* 
 
 U32 JxrLegacyBitReaderAdapterPeek16(JxrLegacyBitReaderAdapter* state, U32 count)
 {
-    JxrLegacyBitIoBridgeRead(state->stream, &state->bitCursor, &state->inputBufferState);
+    JxrLegacyBitReaderAdapterRefreshIfExternalStateChanged(state);
     return JxrBitCursorStatePeek(&state->bitCursor, count);
 }
 
 Void JxrLegacyBitReaderAdapterConsume16(JxrLegacyBitReaderAdapter* state, U32 count)
 {
-    JxrLegacyBitIoBridgeRead(state->stream, &state->bitCursor, &state->inputBufferState);
+    JxrLegacyBitReaderAdapterRefreshIfExternalStateChanged(state);
     JxrBitCursorStateConsume(&state->bitCursor, count);
+    state->inputBufferState.currentIndex = state->bitCursor.currentIndex;
     JxrLegacyBitIoBridgeApplyCursor(state->stream, &state->bitCursor);
-    JxrLegacyBitReaderAdapterSyncInputBufferState(state);
 }
 
 U32 JxrLegacyBitReaderAdapterRead32(JxrLegacyBitReaderAdapter* state, U32 count)
 {
     U32 value;
-    JxrLegacyBitIoBridgeRead(state->stream, &state->bitCursor, &state->inputBufferState);
+    JxrLegacyBitReaderAdapterRefreshIfExternalStateChanged(state);
     value = JxrBitCursorStateReadLong(&state->bitCursor, count);
+    state->inputBufferState.currentIndex = state->bitCursor.currentIndex;
     JxrLegacyBitIoBridgeApplyCursor(state->stream, &state->bitCursor);
-    JxrLegacyBitReaderAdapterSyncInputBufferState(state);
     return value;
 }
 
@@ -67,7 +75,6 @@ Void JxrLegacyBitReaderAdapterRefillLevel1(CWMImageStrCodec* codec, JxrLegacyBit
             (UINTPTR_T)(state->inputBufferState.buffer + state->inputBufferState.currentIndex),
             state->inputBufferState.streamOffset,
             state->inputBufferState.shadow, wmpSource.lastReadResult);
-        JxrLegacyBitReaderAdapterSyncInputBufferState(state);
     }
 }
 

@@ -532,6 +532,29 @@ static int test_legacy_bit_io_bridge_vectors(void)
         legacy->cBitsUsed == 3 && legacy->offRef == 8192 && legacy->uiShadow == 0x87654321U;
 }
 
+static int test_legacy_bit_reader_authoritative_state_vectors(void)
+{
+    union { U64 alignment; U8 bytes[PACKETLENGTH * 2 + sizeof(BitIOInfo)]; } storage;
+    BitIOInfo* legacy = (BitIOInfo*)(storage.bytes + PACKETLENGTH * 2);
+    JxrLegacyBitReaderAdapter adapter;
+
+    memset(&storage, 0, sizeof(storage));
+    legacy->pbStart = storage.bytes;
+    legacy->pbCurrent = storage.bytes;
+    legacy->iMask = -8192;
+    legacy->uiAccumulator = 0xa0000000U;
+    JxrLegacyBitReaderAdapterInit(&adapter, legacy);
+    if (JxrLegacyBitReaderAdapterPeek16(&adapter, 4) != 10) return 0;
+    legacy->uiAccumulator = 0;
+    if (JxrLegacyBitReaderAdapterPeek16(&adapter, 4) != 0) return 0;
+    legacy->uiAccumulator = 0xa0000000U;
+    JxrLegacyBitReaderAdapterSyncInputBufferState(&adapter);
+    JxrLegacyBitReaderAdapterConsume16(&adapter, 4);
+    if (adapter.bitCursor.usedBits != 4 || adapter.inputBufferState.currentIndex != 0 ||
+        legacy->cBitsUsed != 4 || !JxrLegacyBitReaderAdapterIsInputBufferStateCurrent(&adapter)) return 0;
+    return JxrLegacyBitReaderAdapterPeek16(&adapter, 4) == 0;
+}
+
 static int test_hp_coefficient_block_resolver(void)
 {
     CWMImageStrCodec codec;
@@ -717,6 +740,7 @@ int main(int argc, char** argv)
         { "entropy_reader_state_vectors", test_entropy_reader_state_vectors },
         { "legacy_bit_reader_mirror_vectors", test_legacy_bit_reader_mirror_vectors },
         { "legacy_bit_io_bridge_vectors", test_legacy_bit_io_bridge_vectors },
+        { "legacy_bit_reader_authoritative_state_vectors", test_legacy_bit_reader_authoritative_state_vectors },
         { "hp_coefficient_block_resolver", test_hp_coefficient_block_resolver },
         { "decoder_subband_context", test_decoder_subband_context },
         { "minimal_fixture", test_minimal_fixture },
