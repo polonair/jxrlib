@@ -22,12 +22,13 @@ U32 JxrLegacyBitReaderAdapterRead32(JxrLegacyBitReaderAdapter* state, U32 count)
 
 Void JxrLegacyBitReaderAdapterRefillLevel1(CWMImageStrCodec* codec, JxrLegacyBitReaderAdapter* state)
 {
-    readIS_L1(codec, state->stream);
+    readIS(codec, state->stream);
 }
 
 Void JxrLegacyBitReaderAdapterRefillLevel2(CWMImageStrCodec* codec, JxrLegacyBitReaderAdapter* state)
 {
-    readIS_L2(codec, state->stream);
+    UNREFERENCED_PARAMETER(codec);
+    UNREFERENCED_PARAMETER(state);
 }
 
 Bool JxrLegacyBitReaderAdapterSharesStream(const JxrLegacyBitReaderAdapter* left,
