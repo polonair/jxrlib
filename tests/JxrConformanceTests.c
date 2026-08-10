@@ -14,6 +14,7 @@
 #include "JxrAdaptiveModelState.h"
 #include "JxrHuffmanStateSet.h"
 #include "JxrAdaptiveScanState.h"
+#include "JxrHighpassCbpState.h"
 #include "JxrBitMath.h"
 #include "JxrDecoderSubbandContext.h"
 #include "JxrHpCoefficientBlockResolver.h"
@@ -111,6 +112,22 @@ static int test_huffman_state_set_vectors(void)
     if (JxrHuffmanStateSetGet(&stateSet, 3) != &huffman) return 0;
     JxrHuffmanStateSetObserve(&stateSet, 3, 1);
     return huffman.m_iDiscriminant == 12;
+}
+
+static int test_highpass_cbp_state_vectors(void)
+{
+    CAdaptiveHuffman pattern;
+    CAdaptiveHuffman count;
+    CCBPModel model;
+    JxrHighpassCbpState state;
+
+    memset(&pattern, 0, sizeof(pattern));
+    memset(&count, 0, sizeof(count));
+    memset(&model, 0, sizeof(model));
+    JxrHighpassCbpStateInit(&state, &pattern, &count, &model);
+    return JxrHighpassCbpStateGetPatternHuffman(&state) == &pattern &&
+        JxrHighpassCbpStateGetCountHuffman(&state) == &count &&
+        JxrHighpassCbpStateGetPredictionModel(&state) == &model;
 }
 
 static int test_explicit_entropy_context(void)
@@ -358,9 +375,9 @@ static int test_decoder_subband_context(void)
         JxrAdaptiveModelStateGetFlcBits(&state.lowpassModelState, 0) == entropy.m_aModelLP.m_iFlcBits[0] &&
         JxrAdaptiveModelStateGetFlcBits(&state.highpassModelState, 0) == entropy.m_aModelAC.m_iFlcBits[0] &&
         JxrHuffmanStateSetGet(&state.huffmanStateSet, 0) == entropy.m_pAHexpt[0] &&
-        state.cbpHuffman == entropy.m_pAdaptHuffCBPCY &&
-        state.cbpCountHuffman == entropy.m_pAdaptHuffCBPCY1 &&
-        state.highpassCbpModel == &entropy.m_aCBPModel &&
+        JxrHighpassCbpStateGetPatternHuffman(&state.highpassCbpState) == entropy.m_pAdaptHuffCBPCY &&
+        JxrHighpassCbpStateGetCountHuffman(&state.highpassCbpState) == entropy.m_pAdaptHuffCBPCY1 &&
+        JxrHighpassCbpStateGetPredictionModel(&state.highpassCbpState) == &entropy.m_aCBPModel &&
         state.trimFlexBits == entropy.m_iTrimFlexBits &&
         JxrLowpassCbpStateGetZeroCount(&state.lowpassCbpState) == entropy.m_iCBPCountZero &&
         JxrLowpassCbpStateGetMaxCount(&state.lowpassCbpState) == entropy.m_iCBPCountMax &&
@@ -468,6 +485,7 @@ int main(int argc, char** argv)
         { "adaptive_state", test_adaptive_state },
         { "adaptive_model_state_vectors", test_adaptive_model_state_vectors },
         { "huffman_state_set_vectors", test_huffman_state_set_vectors },
+        { "highpass_cbp_state_vectors", test_highpass_cbp_state_vectors },
         { "explicit_entropy_context", test_explicit_entropy_context },
         { "adaptive_scan_vectors", test_adaptive_scan_vectors },
         { "adaptive_scan_state_vectors", test_adaptive_scan_state_vectors },

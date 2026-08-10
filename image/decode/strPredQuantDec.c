@@ -542,16 +542,16 @@ Void JxrCbpPredictorDecode(JxrDecoderSubbandContext* state)
 
     for (channel = 0; channel < channelCount; ++channel) {
         Int cbp = predCBPCDec(codec, JxrMacroblockCbpStateGetDifferential(&state->macroblockCbpState, (Int)channel), macroblockX, macroblockY,
-            channel, state->highpassCbpModel);
+            channel, JxrHighpassCbpStateGetPredictionModel(&state->highpassCbpState));
         JxrMacroblockCbpStateSetCbp(&state->macroblockCbpState, (Int)channel, cbp);
         JxrCbpPredictorSetCurrentCbp(codec, channel, macroblockX, cbp);
     }
 
     if (cf == YUV_422) {
         Int cbpU = predCBPC422Dec(codec, JxrMacroblockCbpStateGetDifferential(&state->macroblockCbpState, 1), macroblockX, macroblockY,
-            1, state->highpassCbpModel);
+            1, JxrHighpassCbpStateGetPredictionModel(&state->highpassCbpState));
         Int cbpV = predCBPC422Dec(codec, JxrMacroblockCbpStateGetDifferential(&state->macroblockCbpState, 2), macroblockX, macroblockY,
-            2, state->highpassCbpModel);
+            2, JxrHighpassCbpStateGetPredictionModel(&state->highpassCbpState));
         JxrMacroblockCbpStateSetCbp(&state->macroblockCbpState, 1, cbpU);
         JxrMacroblockCbpStateSetCbp(&state->macroblockCbpState, 2, cbpV);
         JxrCbpPredictorSetCurrentCbp(codec, 1, macroblockX, cbpU);
@@ -559,9 +559,9 @@ Void JxrCbpPredictorDecode(JxrDecoderSubbandContext* state)
     }
     else if (cf == YUV_420) {
         Int cbpU = predCBPC420Dec(codec, JxrMacroblockCbpStateGetDifferential(&state->macroblockCbpState, 1), macroblockX, macroblockY,
-            1, state->highpassCbpModel);
+            1, JxrHighpassCbpStateGetPredictionModel(&state->highpassCbpState));
         Int cbpV = predCBPC420Dec(codec, JxrMacroblockCbpStateGetDifferential(&state->macroblockCbpState, 2), macroblockX, macroblockY,
-            2, state->highpassCbpModel);
+            2, JxrHighpassCbpStateGetPredictionModel(&state->highpassCbpState));
         JxrMacroblockCbpStateSetCbp(&state->macroblockCbpState, 1, cbpU);
         JxrMacroblockCbpStateSetCbp(&state->macroblockCbpState, 2, cbpV);
         JxrCbpPredictorSetCurrentCbp(codec, 1, macroblockX, cbpU);

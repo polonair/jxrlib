@@ -27,8 +27,8 @@ Void JxrHpDecoderDecodeCbp(JxrDecoderSubbandContext* state)
     Int k, iBlock, i;
     Int iNumCBP;
     Bool bIsChroma;
-    CAdaptiveHuffman* pAHCBP = state->cbpHuffman;
-    CAdaptiveHuffman* pAHCBP1 = state->cbpCountHuffman;
+    CAdaptiveHuffman* pAHCBP = JxrHighpassCbpStateGetPatternHuffman(&state->highpassCbpState);
+    CAdaptiveHuffman* pAHCBP1 = JxrHighpassCbpStateGetCountHuffman(&state->highpassCbpState);
     CAdaptiveHuffman* pAHex1 = JxrHuffmanStateSetGet(&state->huffmanStateSet, 1);
 
     JxrSubbandStreamRefillLevel1(codec, reader);
@@ -312,8 +312,7 @@ Int JxrHpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
         goto ErrorExit;
 
     if (codec->m_bResetContext) {
-        JxrAdaptiveHuffmanAdapt(state->cbpHuffman);
-        JxrAdaptiveHuffmanAdapt(state->cbpCountHuffman);
+        JxrHighpassCbpStateAdapt(&state->highpassCbpState);
         for (tableIndex = 0; tableIndex < CONTEXTX; ++tableIndex) {
             JxrHuffmanStateSetAdapt(&state->huffmanStateSet,
                 tableIndex + CONTEXTX + CTDC);

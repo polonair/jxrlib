@@ -8,6 +8,7 @@
 #include "JxrAdaptiveModelState.h"
 #include "JxrHuffmanStateSet.h"
 #include "JxrAdaptiveScanState.h"
+#include "JxrHighpassCbpState.h"
 
 /*
  * Explicit view of the legacy state consumed by one macroblock subband
@@ -23,9 +24,7 @@ typedef struct JxrDecoderSubbandContext {
     JxrAdaptiveModelState lowpassModelState;
     JxrAdaptiveModelState highpassModelState;
     JxrHuffmanStateSet huffmanStateSet;
-    CAdaptiveHuffman* cbpHuffman;
-    CAdaptiveHuffman* cbpCountHuffman;
-    CCBPModel* highpassCbpModel;
+    JxrHighpassCbpState highpassCbpState;
     Int trimFlexBits;
     JxrLowpassCbpState lowpassCbpState;
     JxrAdaptiveScanState lowpassScanState;

@@ -12,9 +12,8 @@ Void JxrDecoderSubbandContextInit(JxrDecoderSubbandContext* state,
     JxrAdaptiveModelStateInit(&state->lowpassModelState, &entropy->m_aModelLP);
     JxrAdaptiveModelStateInit(&state->highpassModelState, &entropy->m_aModelAC);
     JxrHuffmanStateSetInit(&state->huffmanStateSet, entropy->m_pAHexpt);
-    state->cbpHuffman = entropy->m_pAdaptHuffCBPCY;
-    state->cbpCountHuffman = entropy->m_pAdaptHuffCBPCY1;
-    state->highpassCbpModel = &entropy->m_aCBPModel;
+    JxrHighpassCbpStateInit(&state->highpassCbpState, entropy->m_pAdaptHuffCBPCY,
+        entropy->m_pAdaptHuffCBPCY1, &entropy->m_aCBPModel);
     state->trimFlexBits = entropy->m_iTrimFlexBits;
     JxrLowpassCbpStateInit(&state->lowpassCbpState, &entropy->m_iCBPCountZero,
         &entropy->m_iCBPCountMax);
