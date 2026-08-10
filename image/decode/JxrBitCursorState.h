@@ -5,13 +5,16 @@
 
 /* Explicit counterpart of the decoder's legacy BitIOInfo read cursor. */
 typedef struct JxrBitCursorState {
-    UINTPTR_T currentAddress;
-    UINTPTR_T mask;
+    const U8* buffer;
+    size_t length;
+    size_t currentIndex;
     U32 accumulator;
     U32 usedBits;
 } JxrBitCursorState;
 
-Void JxrBitCursorStateInit(JxrBitCursorState* state, const BitIOInfo* legacy);
+Void JxrBitCursorStateInit(JxrBitCursorState* state, const U8* buffer, size_t length,
+    size_t currentIndex, U32 accumulator, U32 usedBits);
+Void JxrBitCursorStateInitFromLegacy(JxrBitCursorState* state, const BitIOInfo* legacy);
 U32 JxrBitCursorStatePeek(const JxrBitCursorState* state, U32 count);
 Void JxrBitCursorStateConsume(JxrBitCursorState* state, U32 count);
 U32 JxrBitCursorStateReadLong(JxrBitCursorState* state, U32 count);

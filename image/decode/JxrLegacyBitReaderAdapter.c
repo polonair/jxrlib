@@ -11,15 +11,15 @@ Void JxrLegacyBitReaderAdapterInit(JxrLegacyBitReaderAdapter* state, BitIOInfo* 
 
 U32 JxrLegacyBitReaderAdapterPeek16(JxrLegacyBitReaderAdapter* state, U32 count)
 {
-    JxrBitCursorStateInit(&state->bitCursor, state->stream);
+    JxrBitCursorStateInitFromLegacy(&state->bitCursor, state->stream);
     return JxrBitCursorStatePeek(&state->bitCursor, count);
 }
 
 Void JxrLegacyBitReaderAdapterConsume16(JxrLegacyBitReaderAdapter* state, U32 count)
 {
-    JxrBitCursorStateInit(&state->bitCursor, state->stream);
+    JxrBitCursorStateInitFromLegacy(&state->bitCursor, state->stream);
     JxrBitCursorStateConsume(&state->bitCursor, count);
-    state->stream->pbCurrent = (U8*)state->bitCursor.currentAddress;
+    state->stream->pbCurrent = (U8*)state->bitCursor.buffer + state->bitCursor.currentIndex;
     state->stream->uiAccumulator = state->bitCursor.accumulator;
     state->stream->cBitsUsed = state->bitCursor.usedBits;
     JxrLegacyBitReaderAdapterSyncInputBufferState(state);
@@ -28,9 +28,9 @@ Void JxrLegacyBitReaderAdapterConsume16(JxrLegacyBitReaderAdapter* state, U32 co
 U32 JxrLegacyBitReaderAdapterRead32(JxrLegacyBitReaderAdapter* state, U32 count)
 {
     U32 value;
-    JxrBitCursorStateInit(&state->bitCursor, state->stream);
+    JxrBitCursorStateInitFromLegacy(&state->bitCursor, state->stream);
     value = JxrBitCursorStateReadLong(&state->bitCursor, count);
-    state->stream->pbCurrent = (U8*)state->bitCursor.currentAddress;
+    state->stream->pbCurrent = (U8*)state->bitCursor.buffer + state->bitCursor.currentIndex;
     state->stream->uiAccumulator = state->bitCursor.accumulator;
     state->stream->cBitsUsed = state->bitCursor.usedBits;
     JxrLegacyBitReaderAdapterSyncInputBufferState(state);
@@ -77,7 +77,7 @@ Void JxrLegacyBitReaderAdapterSyncInputBufferState(JxrLegacyBitReaderAdapter* st
     JxrBitInputBufferStateInit(&state->inputBufferState,
         (UINTPTR_T)state->stream->pbStart, (UINTPTR_T)state->stream->pbCurrent,
         (UINTPTR_T)state->stream->iMask, state->stream->offRef, state->stream->uiShadow);
-    JxrBitCursorStateInit(&state->bitCursor, state->stream);
+    JxrBitCursorStateInitFromLegacy(&state->bitCursor, state->stream);
 }
 
 Bool JxrLegacyBitReaderAdapterIsInputBufferStateCurrent(const JxrLegacyBitReaderAdapter* state)

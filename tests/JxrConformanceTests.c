@@ -241,7 +241,7 @@ static int test_bit_cursor_state_vectors(void)
     legacy.iMask = ~(UINTPTR_T)1;
     legacy.uiAccumulator = ((U32)data[0] << 24) | ((U32)data[1] << 16) |
         ((U32)data[2] << 8) | (U32)data[3];
-    JxrBitCursorStateInit(&cursor, &legacy);
+    JxrBitCursorStateInit(&cursor, data, sizeof(data), 0, legacy.uiAccumulator, legacy.cBitsUsed);
     if (JxrBitCursorStatePeek(&cursor, 0) != 0 ||
         JxrBitCursorStateReadLong(&cursor, 0) != 0 ||
         !JxrBitCursorStateMatchesLegacy(&cursor, &legacy)) return 0;
@@ -266,6 +266,21 @@ static int test_bit_cursor_state_vectors(void)
     legacyValue = getBit32(&legacy, 32);
     return JxrBitCursorStateReadLong(&cursor, 32) == legacyValue &&
         JxrBitCursorStateMatchesLegacy(&cursor, &legacy);
+}
+
+static int test_bit_cursor_ring_wrap_vectors(void)
+{
+    U8 ring[8] = { 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef };
+    JxrBitCursorState cursor;
+
+    JxrBitCursorStateInit(&cursor, ring, sizeof(ring), 6, 0, 0);
+    JxrBitCursorStateConsume(&cursor, 16);
+    if (cursor.currentIndex != 0 || cursor.usedBits != 0 ||
+        cursor.accumulator != 0x01234567U) return 0;
+    JxrBitCursorStateInit(&cursor, ring, sizeof(ring), 6, 0, 7);
+    JxrBitCursorStateConsume(&cursor, 9);
+    return cursor.currentIndex == 0 && cursor.usedBits == 0 &&
+        cursor.accumulator == 0x01234567U;
 }
 
 static int test_explicit_entropy_context(void)
@@ -656,6 +671,7 @@ int main(int argc, char** argv)
         { "packet_source_vectors", test_packet_source_vectors },
         { "packet_executor_vectors", test_packet_executor_vectors },
         { "bit_cursor_state_vectors", test_bit_cursor_state_vectors },
+        { "bit_cursor_ring_wrap_vectors", test_bit_cursor_ring_wrap_vectors },
         { "explicit_entropy_context", test_explicit_entropy_context },
         { "adaptive_scan_vectors", test_adaptive_scan_vectors },
         { "adaptive_scan_state_vectors", test_adaptive_scan_state_vectors },
