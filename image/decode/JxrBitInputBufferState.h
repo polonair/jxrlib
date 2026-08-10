@@ -1,7 +1,7 @@
 #ifndef JXR_BIT_INPUT_BUFFER_STATE_H
 #define JXR_BIT_INPUT_BUFFER_STATE_H
 
-#include "strcodec.h"
+#include "windowsmediaphoto.h"
 #include "JxrPacketSource.h"
 
 /* Managed-style packet state: byte buffer plus explicit ring indices. */

@@ -19,6 +19,7 @@
 #include "JxrCoefficientPlaneState.h"
 #include "JxrBitInputBufferState.h"
 #include "JxrBitCursorState.h"
+#include "JxrLegacyBitIoBridge.h"
 #include "JxrPacketExecutor.h"
 #include "JxrBitMath.h"
 #include "JxrDecoderSubbandContext.h"
@@ -243,28 +244,28 @@ static int test_bit_cursor_state_vectors(void)
     JxrBitCursorStateInit(&cursor, data, sizeof(data), 0, legacy.uiAccumulator, legacy.cBitsUsed);
     if (JxrBitCursorStatePeek(&cursor, 0) != 0 ||
         JxrBitCursorStateReadLong(&cursor, 0) != 0 ||
-        !JxrBitCursorStateMatchesLegacy(&cursor, &legacy)) return 0;
+        !JxrLegacyBitIoBridgeCursorMatches(&legacy, &cursor)) return 0;
     if (JxrBitCursorStatePeek(&cursor, 3) != peekBit16(&legacy, 3) ||
-        !JxrBitCursorStateMatchesLegacy(&cursor, &legacy)) return 0;
+        !JxrLegacyBitIoBridgeCursorMatches(&legacy, &cursor)) return 0;
     JxrBitCursorStateConsume(&cursor, 0);
     flushBit16(&legacy, 0);
-    if (!JxrBitCursorStateMatchesLegacy(&cursor, &legacy)) return 0;
+    if (!JxrLegacyBitIoBridgeCursorMatches(&legacy, &cursor)) return 0;
     JxrBitCursorStateConsume(&cursor, 3);
     flushBit16(&legacy, 3);
-    if (!JxrBitCursorStateMatchesLegacy(&cursor, &legacy)) return 0;
+    if (!JxrLegacyBitIoBridgeCursorMatches(&legacy, &cursor)) return 0;
     if (JxrBitCursorStatePeek(&cursor, 13) != peekBit16(&legacy, 13)) return 0;
     JxrBitCursorStateConsume(&cursor, 5);
     flushBit16(&legacy, 5);
-    if (!JxrBitCursorStateMatchesLegacy(&cursor, &legacy)) return 0;
+    if (!JxrLegacyBitIoBridgeCursorMatches(&legacy, &cursor)) return 0;
     JxrBitCursorStateConsume(&cursor, 8);
     flushBit16(&legacy, 8);
-    if (!JxrBitCursorStateMatchesLegacy(&cursor, &legacy)) return 0;
+    if (!JxrLegacyBitIoBridgeCursorMatches(&legacy, &cursor)) return 0;
     legacyValue = getBit32(&legacy, 17);
     if (JxrBitCursorStateReadLong(&cursor, 17) != legacyValue ||
-        !JxrBitCursorStateMatchesLegacy(&cursor, &legacy)) return 0;
+        !JxrLegacyBitIoBridgeCursorMatches(&legacy, &cursor)) return 0;
     legacyValue = getBit32(&legacy, 32);
     return JxrBitCursorStateReadLong(&cursor, 32) == legacyValue &&
-        JxrBitCursorStateMatchesLegacy(&cursor, &legacy);
+        JxrLegacyBitIoBridgeCursorMatches(&legacy, &cursor);
 }
 
 static int test_bit_cursor_ring_wrap_vectors(void)
@@ -500,6 +501,37 @@ static int test_legacy_bit_reader_mirror_vectors(void)
         !JxrLegacyBitReaderAdapterNeedsRefill(&adapter);
 }
 
+static int test_legacy_bit_io_bridge_vectors(void)
+{
+    union { U64 alignment; U8 bytes[PACKETLENGTH * 2 + sizeof(BitIOInfo)]; } storage;
+    BitIOInfo* legacy = (BitIOInfo*)(storage.bytes + PACKETLENGTH * 2);
+    JxrBitCursorState cursor;
+    JxrBitInputBufferState input;
+
+    memset(&storage, 0, sizeof(storage));
+    legacy->pbStart = storage.bytes;
+    legacy->pbCurrent = storage.bytes + 2;
+    legacy->uiAccumulator = 0xabcdef00U;
+    legacy->cBitsUsed = 7;
+    legacy->offRef = 4096;
+    legacy->uiShadow = 0x12345678U;
+    JxrLegacyBitIoBridgeRead(legacy, &cursor, &input);
+    if (cursor.currentIndex != 2 || input.packetStartIndex != 0 ||
+        input.currentIndex != 2 || !JxrLegacyBitIoBridgeCursorMatches(legacy, &cursor) ||
+        !JxrLegacyBitIoBridgeInputMatches(legacy, &input)) return 0;
+    cursor.currentIndex = 4;
+    cursor.accumulator = 0x10203040U;
+    cursor.usedBits = 3;
+    JxrLegacyBitIoBridgeApplyCursor(legacy, &cursor);
+    input.packetStartIndex = PACKETLENGTH;
+    input.streamOffset = 8192;
+    input.shadow = 0x87654321U;
+    JxrLegacyBitIoBridgeApplyInput(legacy, &input);
+    return legacy->pbStart == storage.bytes + PACKETLENGTH &&
+        legacy->pbCurrent == storage.bytes + 4 && legacy->uiAccumulator == 0x10203040U &&
+        legacy->cBitsUsed == 3 && legacy->offRef == 8192 && legacy->uiShadow == 0x87654321U;
+}
+
 static int test_hp_coefficient_block_resolver(void)
 {
     CWMImageStrCodec codec;
@@ -684,6 +716,7 @@ int main(int argc, char** argv)
         { "entropy_reader_signed_residual_vectors", test_entropy_reader_signed_residual_vectors },
         { "entropy_reader_state_vectors", test_entropy_reader_state_vectors },
         { "legacy_bit_reader_mirror_vectors", test_legacy_bit_reader_mirror_vectors },
+        { "legacy_bit_io_bridge_vectors", test_legacy_bit_io_bridge_vectors },
         { "hp_coefficient_block_resolver", test_hp_coefficient_block_resolver },
         { "decoder_subband_context", test_decoder_subband_context },
         { "minimal_fixture", test_minimal_fixture },

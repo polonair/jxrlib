@@ -2,11 +2,7 @@
 #include "JXRTrace.h"
 #include "JxrPacketExecutor.h"
 #include "JxrWmpPacketSource.h"
-
-static U8* JxrLegacyBitReaderAdapterRingBuffer(BitIOInfo* stream)
-{
-    return (U8*)stream - PACKETLENGTH * 2;
-}
+#include "JxrLegacyBitIoBridge.h"
 
 Void JxrLegacyBitReaderAdapterInit(JxrLegacyBitReaderAdapter* state, BitIOInfo* stream)
 {
@@ -16,28 +12,24 @@ Void JxrLegacyBitReaderAdapterInit(JxrLegacyBitReaderAdapter* state, BitIOInfo* 
 
 U32 JxrLegacyBitReaderAdapterPeek16(JxrLegacyBitReaderAdapter* state, U32 count)
 {
-    JxrBitCursorStateInitFromLegacy(&state->bitCursor, state->stream);
+    JxrLegacyBitIoBridgeRead(state->stream, &state->bitCursor, &state->inputBufferState);
     return JxrBitCursorStatePeek(&state->bitCursor, count);
 }
 
 Void JxrLegacyBitReaderAdapterConsume16(JxrLegacyBitReaderAdapter* state, U32 count)
 {
-    JxrBitCursorStateInitFromLegacy(&state->bitCursor, state->stream);
+    JxrLegacyBitIoBridgeRead(state->stream, &state->bitCursor, &state->inputBufferState);
     JxrBitCursorStateConsume(&state->bitCursor, count);
-    state->stream->pbCurrent = (U8*)state->bitCursor.buffer + state->bitCursor.currentIndex;
-    state->stream->uiAccumulator = state->bitCursor.accumulator;
-    state->stream->cBitsUsed = state->bitCursor.usedBits;
+    JxrLegacyBitIoBridgeApplyCursor(state->stream, &state->bitCursor);
     JxrLegacyBitReaderAdapterSyncInputBufferState(state);
 }
 
 U32 JxrLegacyBitReaderAdapterRead32(JxrLegacyBitReaderAdapter* state, U32 count)
 {
     U32 value;
-    JxrBitCursorStateInitFromLegacy(&state->bitCursor, state->stream);
+    JxrLegacyBitIoBridgeRead(state->stream, &state->bitCursor, &state->inputBufferState);
     value = JxrBitCursorStateReadLong(&state->bitCursor, count);
-    state->stream->pbCurrent = (U8*)state->bitCursor.buffer + state->bitCursor.currentIndex;
-    state->stream->uiAccumulator = state->bitCursor.accumulator;
-    state->stream->cBitsUsed = state->bitCursor.usedBits;
+    JxrLegacyBitIoBridgeApplyCursor(state->stream, &state->bitCursor);
     JxrLegacyBitReaderAdapterSyncInputBufferState(state);
     return value;
 }
@@ -62,10 +54,7 @@ Void JxrLegacyBitReaderAdapterRefillLevel1(CWMImageStrCodec* codec, JxrLegacyBit
         JxrWmpPacketSourceInit(&wmpSource, before.pWS, &source);
         JxrPacketExecutorTryRefill(&state->inputBufferState, &source,
             PACKETLENGTH, &executorDidRefill);
-        state->stream->pbStart = state->inputBufferState.buffer +
-            state->inputBufferState.packetStartIndex;
-        state->stream->offRef = state->inputBufferState.streamOffset;
-        state->stream->uiShadow = state->inputBufferState.shadow;
+        JxrLegacyBitIoBridgeApplyInput(state->stream, &state->inputBufferState);
         executorMatchesLegacy = executorDidRefill && legacyNeedsRefill &&
             state->inputBufferState.packetStartIndex == legacyStartIndex &&
             state->inputBufferState.currentIndex ==
@@ -84,23 +73,13 @@ Void JxrLegacyBitReaderAdapterRefillLevel1(CWMImageStrCodec* codec, JxrLegacyBit
 
 Void JxrLegacyBitReaderAdapterSyncInputBufferState(JxrLegacyBitReaderAdapter* state)
 {
-    U8* buffer = JxrLegacyBitReaderAdapterRingBuffer(state->stream);
-    JxrBitInputBufferStateInit(&state->inputBufferState, buffer, PACKETLENGTH * 2,
-        (size_t)(state->stream->pbStart - buffer),
-        (size_t)(state->stream->pbCurrent - buffer), state->stream->offRef, state->stream->uiShadow);
-    JxrBitCursorStateInitFromLegacy(&state->bitCursor, state->stream);
+    JxrLegacyBitIoBridgeRead(state->stream, &state->bitCursor, &state->inputBufferState);
 }
 
 Bool JxrLegacyBitReaderAdapterIsInputBufferStateCurrent(const JxrLegacyBitReaderAdapter* state)
 {
-    return state->inputBufferState.buffer == JxrLegacyBitReaderAdapterRingBuffer(state->stream) &&
-        state->inputBufferState.length == PACKETLENGTH * 2 &&
-        state->inputBufferState.packetStartIndex ==
-            (size_t)(state->stream->pbStart - state->inputBufferState.buffer) &&
-        state->inputBufferState.currentIndex ==
-            (size_t)(state->stream->pbCurrent - state->inputBufferState.buffer) &&
-        state->inputBufferState.streamOffset == state->stream->offRef &&
-        state->inputBufferState.shadow == state->stream->uiShadow;
+    return JxrLegacyBitIoBridgeCursorMatches(state->stream, &state->bitCursor) &&
+        JxrLegacyBitIoBridgeInputMatches(state->stream, &state->inputBufferState);
 }
 
 Bool JxrLegacyBitReaderAdapterNeedsRefill(const JxrLegacyBitReaderAdapter* state)

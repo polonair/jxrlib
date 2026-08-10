@@ -1,5 +1,8 @@
 #include "JxrBitInputBufferState.h"
 
+#include <assert.h>
+#include <string.h>
+
 Void JxrBitInputBufferStateInit(JxrBitInputBufferState* state, U8* buffer, size_t length,
     size_t packetStartIndex, size_t currentIndex, size_t streamOffset, U32 shadow)
 {

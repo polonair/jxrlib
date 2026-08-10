@@ -1,5 +1,7 @@
 #include "JxrBitCursorState.h"
 
+#include <assert.h>
+
 static size_t JxrBitCursorStateWrapIndex(const JxrBitCursorState* state, size_t index)
 {
     return index % state->length;
@@ -14,11 +16,6 @@ static U32 JxrBitCursorStateLoad32BigEndian(const JxrBitCursorState* state)
         (U32)state->buffer[JxrBitCursorStateWrapIndex(state, index + 3)];
 }
 
-static const U8* JxrBitCursorStateLegacyBuffer(const BitIOInfo* legacy)
-{
-    return (const U8*)legacy - PACKETLENGTH * 2;
-}
-
 Void JxrBitCursorStateInit(JxrBitCursorState* state, const U8* buffer, size_t length,
     size_t currentIndex, U32 accumulator, U32 usedBits)
 {
@@ -28,13 +25,6 @@ Void JxrBitCursorStateInit(JxrBitCursorState* state, const U8* buffer, size_t le
     state->currentIndex = currentIndex;
     state->accumulator = accumulator;
     state->usedBits = usedBits;
-}
-
-Void JxrBitCursorStateInitFromLegacy(JxrBitCursorState* state, const BitIOInfo* legacy)
-{
-    const U8* buffer = JxrBitCursorStateLegacyBuffer(legacy);
-    JxrBitCursorStateInit(state, buffer, PACKETLENGTH * 2,
-        (size_t)(legacy->pbCurrent - buffer), legacy->uiAccumulator, legacy->cBitsUsed);
 }
 
 U32 JxrBitCursorStatePeek(const JxrBitCursorState* state, U32 count)
@@ -73,11 +63,4 @@ U32 JxrBitCursorStateReadLong(JxrBitCursorState* state, U32 count)
     value |= JxrBitCursorStatePeek(state, count);
     JxrBitCursorStateConsume(state, count);
     return value;
-}
-
-Bool JxrBitCursorStateMatchesLegacy(const JxrBitCursorState* state, const BitIOInfo* legacy)
-{
-    return legacy->pbCurrent == state->buffer + state->currentIndex &&
-        state->accumulator == legacy->uiAccumulator &&
-        state->usedBits == legacy->cBitsUsed;
 }
