@@ -12,7 +12,6 @@
 Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
         Int macroblockX, Int macroblockY)
 {
-    CWMImageStrCodec* codec = state->codec;
     JxrDecoderFormatState* format = &state->formatState;
     CWMITile* tile = JxrDecoderFormatStateGetCurrentTile(format);
     const COLORFORMAT cf = JxrDecoderFormatStateGetColorFormat(format);
@@ -30,7 +29,7 @@ Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
     UNREFERENCED_PARAMETER(macroblockX);
     UNREFERENCED_PARAMETER(macroblockY);
 
-    JxrSubbandStreamRefillLevel1(codec, reader);
+    JxrDecoderFormatStateRefillLevel1(format, reader);
     if(!JxrDecoderFormatStateIsSpatial(format) && tile->cBitsLP > 0)  // MB-based LP QP index
         JxrMacroblockStateSetLowpassQuantizerIndex(macroblock,
             JxrQuantizationIndexReaderDecode(reader, tile->cBitsLP));

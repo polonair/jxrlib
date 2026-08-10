@@ -9,7 +9,6 @@
 
 Int JxrDcDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, Int macroblockY)
 {
-    CWMImageStrCodec* codec = state->codec;
     JxrDecoderFormatState* format = &state->formatState;
     CWMITile* tile = JxrDecoderFormatStateGetCurrentTile(format);
     JxrMacroblockState* macroblock = &state->macroblockState;
@@ -31,7 +30,7 @@ Int JxrDcDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, 
 
     JxrMacroblockStateClearDc(macroblock, channelCount);
 
-    JxrSubbandStreamRefillLevel1(codec, reader);
+    JxrDecoderFormatStateRefillLevel1(format, reader);
     JxrMacroblockStateResetQuantizerIndices(macroblock);
 
     if (JxrDecoderFormatStateIsSpatial(format) && !JxrDecoderFormatStateIsDcOnly(format)) {
@@ -93,8 +92,8 @@ Int JxrDcDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, 
 
     JxrAdaptiveModelStateUpdateForMacroblock(&state->dcModelState, colorFormat,
         channelCount, laplacianMean);
-    if (((!(codec->WMISCP.bfBitstreamFormat != FREQUENCY || codec->m_Dparam->cThumbnailScale < 16)) ||
-        JxrDecoderFormatStateIsDcOnly(format)) && codec->m_bResetContext) {
+    if (JxrDecoderFormatStateShouldAdaptDcHuffman(format) &&
+        JxrDecoderFormatStateShouldResetContext(format)) {
         Int tableIndex;
         for (tableIndex = 2; tableIndex < 5; ++tableIndex) {
             JxrHuffmanStateSetAdapt(&state->huffmanStateSet, tableIndex);

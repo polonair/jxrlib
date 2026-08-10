@@ -19,7 +19,6 @@ extern const int dctIndex[3][16];
 *************************************************************************/
 Void JxrHpDecoderDecodeCbp(JxrDecoderSubbandContext* state)
 {
-    CWMImageStrCodec* codec = state->codec;
     JxrDecoderFormatState* format = &state->formatState;
     JxrEntropyBitReader* reader = &state->highpassReader;
     const COLORFORMAT cf = JxrDecoderFormatStateGetColorFormat(format);
@@ -32,7 +31,7 @@ Void JxrHpDecoderDecodeCbp(JxrDecoderSubbandContext* state)
     CAdaptiveHuffman* pAHCBP1 = JxrHighpassCbpStateGetCountHuffman(&state->highpassCbpState);
     CAdaptiveHuffman* pAHex1 = JxrHuffmanStateSetGet(&state->huffmanStateSet, 1);
 
-    JxrSubbandStreamRefillLevel1(codec, reader);
+    JxrDecoderFormatStateRefillLevel1(format, reader);
 
     for (i = 0; i < iChannel; i++) {
 
@@ -183,7 +182,6 @@ Void JxrHpDecoderDecodeCbp(JxrDecoderSubbandContext* state)
 static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
     Int macroblockX, Int macroblockY)
 {
-    CWMImageStrCodec* codec = state->codec;
     JxrDecoderFormatState* format = &state->formatState;
     JxrMacroblockState* macroblock = &state->macroblockState;
     CWMITile* pTile = JxrDecoderFormatStateGetCurrentTile(format);
@@ -230,13 +228,13 @@ static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
         Int iIndex = 0, iNumNonZero;
 
         if (JxrDecoderFormatStateHasFlexbits(format))
-            JxrSubbandStreamRefillLevel1(codec, flexbitsReader);
+            JxrDecoderFormatStateRefillLevel1(format, flexbitsReader);
 
         for (iBlock = 0; iBlock < iNBlocks; iBlock++) {
 
-            JxrSubbandStreamRefillLevel2(codec, highpassReader);
+            JxrDecoderFormatStateRefillLevel2(format, highpassReader);
             if (!JxrEntropyBitReaderSharesStream(highpassReader, flexbitsReader))
-                JxrSubbandStreamRefillLevel2(codec, flexbitsReader);
+                JxrDecoderFormatStateRefillLevel2(format, flexbitsReader);
 
             iQP = (JxrDecoderFormatStateIsTranscode(format) ? 1 : pTile->pQuantizerHP[iPlanes > 1 ? i : (iBlock > 3 ? (cf == YUV_420 ? iBlock - 3 : iBlock / 2 - 1) : 0)][JxrMacroblockStateGetHighpassQuantizerIndex(macroblock)].iQP);
 
@@ -245,7 +243,7 @@ static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
                     iSubblock, iIndex);
 
                 /** read AC values **/
-                assert (codec->m_Dparam->bSkipFlexbits == 0 || codec->WMISCP.bfBitstreamFormat == FREQUENCY || codec->WMISCP.sbSubband == SB_NO_FLEXBITS);
+                assert (!JxrDecoderFormatStateShouldSkipFlexbits(format) || !JxrDecoderFormatStateIsSpatial(format) || !JxrDecoderFormatStateHasFlexbits(format));
                 {
                     JxrHpBlockDecodingContext blockContext;
                     blockContext.huffmanStateSet = &state->huffmanStateSet;
@@ -256,7 +254,7 @@ static Int JxrHpDecoderDecodeCoefficients(JxrDecoderSubbandContext* state,
                     blockContext.coefficientOrder = pOrder;
                     blockContext.isChroma = bChroma;
                     blockContext.hasCoefficients = (iCBPCY & 1) != 0;
-                    blockContext.skipFlexbits = codec->m_Dparam->bSkipFlexbits;
+                    blockContext.skipFlexbits = JxrDecoderFormatStateShouldSkipFlexbits(format);
                     blockContext.modelBits = iModelBits;
                     blockContext.trimFlexBits = state->trimFlexBits;
                     blockContext.quantizationParameter = iQP;

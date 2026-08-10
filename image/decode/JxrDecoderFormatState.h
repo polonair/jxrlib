@@ -2,6 +2,7 @@
 #define JXR_DECODER_FORMAT_STATE_H
 
 #include "strcodec.h"
+#include "JxrEntropyReader.h"
 
 /* Read-only decoder format and tile configuration. */
 typedef struct JxrDecoderFormatState {
@@ -19,5 +20,9 @@ Bool JxrDecoderFormatStateShouldResetScan(const JxrDecoderFormatState* state);
 Bool JxrDecoderFormatStateShouldResetContext(const JxrDecoderFormatState* state);
 Bool JxrDecoderFormatStateIsTranscode(const JxrDecoderFormatState* state);
 Bool JxrDecoderFormatStateHasFlexbits(const JxrDecoderFormatState* state);
+Bool JxrDecoderFormatStateShouldSkipFlexbits(const JxrDecoderFormatState* state);
+Bool JxrDecoderFormatStateShouldAdaptDcHuffman(const JxrDecoderFormatState* state);
+Void JxrDecoderFormatStateRefillLevel1(JxrDecoderFormatState* state, JxrEntropyBitReader* reader);
+Void JxrDecoderFormatStateRefillLevel2(JxrDecoderFormatState* state, JxrEntropyBitReader* reader);
 
 #endif
