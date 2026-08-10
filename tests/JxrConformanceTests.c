@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include "JxrManagedBitIO.h"
 #include "strcodec.h"
+#include "decode.h"
 #include "JxrEntropyState.h"
 #include "JxrAdaptiveScan.h"
 #include "JxrCoefficientBuffer.h"
@@ -697,6 +698,60 @@ static int test_hp_coefficient_block_resolver(void)
     return block.values == plane1 && block.offset == 96 && block.count == 16;
 }
 
+static int test_decoder_format_snapshot_vectors(void)
+{
+    CWMImageStrCodec codec;
+    CWMDecoderParameters parameters;
+    CWMITile tiles[2];
+    JxrDecoderFormatState state;
+
+    memset(&codec, 0, sizeof(codec));
+    memset(&parameters, 0, sizeof(parameters));
+    memset(tiles, 0, sizeof(tiles));
+    codec.m_param.cfColorFormat = YUV_444;
+    codec.m_param.cNumChannels = 3;
+    codec.m_param.bTranscode = TRUE;
+    codec.WMISCP.bfBitstreamFormat = FREQUENCY;
+    codec.WMISCP.sbSubband = SB_DC_ONLY;
+    codec.pTile = tiles;
+    codec.cTileColumn = 1;
+    codec.m_bResetRGITotals = TRUE;
+    codec.m_bResetContext = TRUE;
+    parameters.bSkipFlexbits = TRUE;
+    parameters.cThumbnailScale = 16;
+    codec.m_Dparam = &parameters;
+    JxrDecoderFormatStateInit(&state, &codec);
+
+    if (JxrDecoderFormatStateGetColorFormat(&state) != YUV_444 ||
+        JxrDecoderFormatStateGetChannelCount(&state) != 3 ||
+        !JxrDecoderFormatStateIsDcOnly(&state) ||
+        !JxrDecoderFormatStateHasHighpass(&state) ||
+        JxrDecoderFormatStateGetCurrentTile(&state) != tiles + 1 ||
+        !JxrDecoderFormatStateShouldResetScan(&state) ||
+        !JxrDecoderFormatStateShouldResetContext(&state) ||
+        !JxrDecoderFormatStateIsTranscode(&state) ||
+        !JxrDecoderFormatStateHasFlexbits(&state) ||
+        !JxrDecoderFormatStateShouldSkipFlexbits(&state) ||
+        !JxrDecoderFormatStateShouldAdaptDcHuffman(&state)) return 0;
+
+    codec.m_param.cfColorFormat = Y_ONLY;
+    codec.m_param.cNumChannels = 1;
+    codec.m_param.bTranscode = FALSE;
+    codec.cTileColumn = 0;
+    codec.m_bResetRGITotals = FALSE;
+    codec.m_bResetContext = FALSE;
+    parameters.bSkipFlexbits = FALSE;
+    parameters.cThumbnailScale = 1;
+    return JxrDecoderFormatStateGetColorFormat(&state) == YUV_444 &&
+        JxrDecoderFormatStateGetChannelCount(&state) == 3 &&
+        JxrDecoderFormatStateGetCurrentTile(&state) == tiles + 1 &&
+        JxrDecoderFormatStateIsTranscode(&state) &&
+        JxrDecoderFormatStateShouldResetScan(&state) &&
+        JxrDecoderFormatStateShouldResetContext(&state) &&
+        JxrDecoderFormatStateShouldSkipFlexbits(&state) &&
+        JxrDecoderFormatStateShouldAdaptDcHuffman(&state);
+}
+
 static int test_decoder_subband_context(void)
 {
     CWMImageStrCodec codec;
@@ -884,6 +939,7 @@ int main(int argc, char** argv)
         { "legacy_bit_io_bridge_vectors", test_legacy_bit_io_bridge_vectors },
         { "legacy_bit_reader_authoritative_state_vectors", test_legacy_bit_reader_authoritative_state_vectors },
         { "hp_coefficient_block_resolver", test_hp_coefficient_block_resolver },
+        { "decoder_format_snapshot_vectors", test_decoder_format_snapshot_vectors },
         { "decoder_subband_context", test_decoder_subband_context },
         { "decoder_subband_shared_reader_vectors", test_decoder_subband_shared_reader_vectors },
         { "minimal_fixture", test_minimal_fixture },

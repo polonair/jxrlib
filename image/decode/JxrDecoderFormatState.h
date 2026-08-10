@@ -4,9 +4,22 @@
 #include "strcodec.h"
 #include "JxrEntropyReader.h"
 
-/* Read-only decoder format and tile configuration. */
+/* Read-only decoder configuration snapshot plus temporary native transport access. */
 typedef struct JxrDecoderFormatState {
+    /* Retained only for packet refill until WMPStream is ported. */
     CWMImageStrCodec* nativeCodec;
+    COLORFORMAT colorFormat;
+    Int channelCount;
+    Bool isSpatial;
+    Bool isDcOnly;
+    Bool hasHighpass;
+    CWMITile* currentTile;
+    Bool shouldResetScan;
+    Bool shouldResetContext;
+    Bool isTranscode;
+    Bool hasFlexbits;
+    Bool shouldSkipFlexbits;
+    Bool shouldAdaptDcHuffman;
 } JxrDecoderFormatState;
 
 Void JxrDecoderFormatStateInit(JxrDecoderFormatState* state, CWMImageStrCodec* nativeCodec);
