@@ -9,9 +9,9 @@
 #include "JxrHpBlockDecoder.h"
 #include "JxrEntropyLevelDecoder.h"
 #include "JxrEntropyReader.h"
+#include "JxrQuantizationIndexReader.h"
 
 extern const int dctIndex[3][16];
-U8 decodeQPIndex(BitIOInfo* input, U8 bitCount);
 
 /*************************************************************************
     DecodeCBP
@@ -291,7 +291,10 @@ Int JxrHpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
 {
     CWMImageStrCodec* codec = state->codec;
     CWMITile* tile = codec->pTile + codec->cTileColumn;
+    JxrEntropyBitReader highpassReader;
     Int tableIndex;
+
+    JxrEntropyBitReaderInit(&highpassReader, state->highpassInput);
 
     /** reset adaptive scan totals **/
     if (codec->m_bResetRGITotals) {
@@ -299,7 +302,7 @@ Int JxrHpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
         JxrAdaptiveScanResetTotals(state->verticalScan, 16);
     }
     if((codec->WMISCP.bfBitstreamFormat != SPATIAL) && (tile->cBitsHP > 0)) { // MB-based HP QP index
-        codec->MBInfo.iQIndexHP = decodeQPIndex(state->highpassInput, tile->cBitsHP);
+        codec->MBInfo.iQIndexHP = JxrQuantizationIndexReaderDecode(&highpassReader, tile->cBitsHP);
         if (codec->MBInfo.iQIndexHP >= tile->cNumQPHP)
             goto ErrorExit;
     }

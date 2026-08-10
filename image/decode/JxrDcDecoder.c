@@ -4,8 +4,7 @@
 #include "JxrEntropyReader.h"
 #include "JxrAdaptiveHuffman.h"
 #include "JxrHuffmanDecoder.h"
-
-U8 decodeQPIndex(BitIOInfo* input, U8 bitCount);
+#include "JxrQuantizationIndexReader.h"
 
 Int JxrDcDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, Int macroblockY)
 {
@@ -39,9 +38,9 @@ Int JxrDcDecoderDecodeSubband(JxrDecoderSubbandContext* state, Int macroblockX, 
     macroblock->iQIndexHP = 0;
 
     if (codec->WMISCP.bfBitstreamFormat == SPATIAL && codec->WMISCP.sbSubband != SB_DC_ONLY) {
-        if (tile->cBitsLP > 0) macroblock->iQIndexLP = decodeQPIndex(input, tile->cBitsLP);
+        if (tile->cBitsLP > 0) macroblock->iQIndexLP = JxrQuantizationIndexReaderDecode(&reader, tile->cBitsLP);
         if (codec->WMISCP.sbSubband != SB_NO_HIGHPASS && tile->cBitsHP > 0) {
-            macroblock->iQIndexHP = decodeQPIndex(input, tile->cBitsHP);
+            macroblock->iQIndexHP = JxrQuantizationIndexReaderDecode(&reader, tile->cBitsHP);
         }
     }
     if (tile->cBitsHP == 0 && tile->cNumQPHP > 1) macroblock->iQIndexHP = macroblock->iQIndexLP;

@@ -29,6 +29,7 @@
 #include "strcodec.h"
 #include "decode.h"
 #include "JxrEntropyReader.h"
+#include "JxrQuantizationIndexReader.h"
 #include "JxrAdaptiveHuffman.h"
 #include "JxrAdaptiveScan.h"
 #include "JxrCoefficientBuffer.h"
@@ -57,8 +58,9 @@ static Int AdaptDecFixed(CAdaptiveHuffman* state)
 
 U8 decodeQPIndex(BitIOInfo* input, U8 bitCount)
 {
-    if (JxrEntropyReaderRead(input, 1) == 0) return 0;
-    return (U8)(JxrEntropyReaderRead(input, bitCount) + 1);
+    JxrEntropyBitReader reader;
+    JxrEntropyBitReaderInit(&reader, input);
+    return JxrQuantizationIndexReaderDecode(&reader, bitCount);
 }
 
 /*************************************************************************

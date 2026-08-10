@@ -6,8 +6,7 @@
 #include "JxrEntropyReader.h"
 #include "JxrLpResidualDecoder.h"
 #include "JxrAdaptiveHuffman.h"
-
-U8 decodeQPIndex(BitIOInfo* input, U8 bitCount);
+#include "JxrQuantizationIndexReader.h"
 
 Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
         Int macroblockX, Int macroblockY)
@@ -33,7 +32,8 @@ Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
 
     readIS_L1(codec, pIO);
     if((codec->WMISCP.bfBitstreamFormat != SPATIAL) && (codec->pTile[codec->cTileColumn].cBitsLP > 0))  // MB-based LP QP index
-        pMBInfo->iQIndexLP = decodeQPIndex(pIO, codec->pTile[codec->cTileColumn].cBitsLP);
+        pMBInfo->iQIndexLP = JxrQuantizationIndexReaderDecode(&reader,
+            codec->pTile[codec->cTileColumn].cBitsLP);
 
     // set arrays
     for (k = 0; k < (Int) codec->m_param.cNumChannels; k++) {
