@@ -185,6 +185,27 @@ static int test_bit_input_buffer_state_vectors(void)
         JxrBitInputBufferStateNeedsRefill(&state, 4096);
 }
 
+typedef struct { U8* data; size_t length; size_t lastOffset; } JxrFakePacketSource;
+static Bool read_fake_packet(Void* context, size_t offset, U8* destination, size_t count)
+{
+    JxrFakePacketSource* source = (JxrFakePacketSource*)context;
+    if (offset + count > source->length) return FALSE;
+    memcpy(destination, source->data + offset, count); source->lastOffset = offset; return TRUE;
+}
+
+static int test_packet_source_vectors(void)
+{
+    U8 data[8192] = { 0 }, destination[4096];
+    JxrFakePacketSource fake = { data, sizeof(data), 0 };
+    JxrPacketSource source = { &fake, read_fake_packet };
+    JxrBitInputBufferState state;
+    data[4096] = 0x78; data[4097] = 0x56; data[4098] = 0x34; data[4099] = 0x12;
+    JxrBitInputBufferStateInit(&state, 0x10000000U, 0x10001000U, ~(UINTPTR_T)8192, 4096, 0);
+    if (!JxrBitInputBufferStateReadPacket(&state, &source, destination, 4096)) return 0;
+    return fake.lastOffset == 4096 && state.streamOffset == 8192 &&
+        state.shadow == 0x12345678U && state.startAddress == 0x10001000U;
+}
+
 static int test_explicit_entropy_context(void)
 {
     CCodingContext native; JxrEntropyContext state;
@@ -568,6 +589,7 @@ int main(int argc, char** argv)
         { "macroblock_state_vectors", test_macroblock_state_vectors },
         { "coefficient_plane_state_vectors", test_coefficient_plane_state_vectors },
         { "bit_input_buffer_state_vectors", test_bit_input_buffer_state_vectors },
+        { "packet_source_vectors", test_packet_source_vectors },
         { "explicit_entropy_context", test_explicit_entropy_context },
         { "adaptive_scan_vectors", test_adaptive_scan_vectors },
         { "adaptive_scan_state_vectors", test_adaptive_scan_state_vectors },

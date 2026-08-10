@@ -19,3 +19,15 @@ Void JxrBitInputBufferStateAdvancePacketStart(JxrBitInputBufferState* state, U32
 {
     state->startAddress = (state->startAddress + packetLength) & state->mask;
 }
+
+Bool JxrBitInputBufferStateReadPacket(JxrBitInputBufferState* state, JxrPacketSource* source,
+    U8* destination, U32 packetLength)
+{
+    U32 shadow;
+    if (!JxrPacketSourceRead(source, state->streamOffset, destination, packetLength)) return FALSE;
+    memcpy(&shadow, destination, sizeof(shadow));
+    state->shadow = shadow;
+    state->streamOffset += packetLength;
+    JxrBitInputBufferStateAdvancePacketStart(state, packetLength);
+    return TRUE;
+}
