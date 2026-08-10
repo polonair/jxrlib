@@ -9,6 +9,7 @@
 #include "JxrCoefficientBuffer.h"
 #include "JxrHuffmanDecoder.h"
 #include "JxrLpResidualDecoder.h"
+#include "JxrLowpassCbpState.h"
 #include "JxrBitMath.h"
 #include "JxrDecoderSubbandContext.h"
 #include "JxrHpCoefficientBlockResolver.h"
@@ -146,6 +147,26 @@ static int test_lp_residual_vectors(void)
         JxrLpResidualDecoderCombineSignedMagnitude(-2, 1, 2) == -9;
 }
 
+static int test_lowpass_cbp_state_vectors(void)
+{
+    Int zeroCount = 1;
+    Int maxCount = 1;
+    JxrLowpassCbpState state;
+
+    JxrLowpassCbpStateInit(&state, &zeroCount, &maxCount);
+    JxrLowpassCbpStateObserve(&state, 0, 3);
+    if (JxrLowpassCbpStateGetZeroCount(&state) != -2 ||
+        JxrLowpassCbpStateGetMaxCount(&state) != 2) return 0;
+    JxrLowpassCbpStateObserve(&state, 3, 3);
+    if (JxrLowpassCbpStateGetZeroCount(&state) != -1 ||
+        JxrLowpassCbpStateGetMaxCount(&state) != -1) return 0;
+    zeroCount = -8;
+    maxCount = 7;
+    JxrLowpassCbpStateObserve(&state, 0, 3);
+    return JxrLowpassCbpStateGetZeroCount(&state) == -8 &&
+        JxrLowpassCbpStateGetMaxCount(&state) == 7;
+}
+
 static int test_bit_math_vectors(void)
 {
     const U32 value = 0x12345678U;
@@ -255,8 +276,8 @@ static int test_decoder_subband_context(void)
         state.cbpCountHuffman == entropy.m_pAdaptHuffCBPCY1 &&
         state.highpassCbpModel == &entropy.m_aCBPModel &&
         state.trimFlexBits == entropy.m_iTrimFlexBits &&
-        state.lowpassCbpCountZero == &entropy.m_iCBPCountZero &&
-        state.lowpassCbpCountMax == &entropy.m_iCBPCountMax &&
+        JxrLowpassCbpStateGetZeroCount(&state.lowpassCbpState) == entropy.m_iCBPCountZero &&
+        JxrLowpassCbpStateGetMaxCount(&state.lowpassCbpState) == entropy.m_iCBPCountMax &&
         state.lowpassScan == entropy.m_aScanLowpass && state.horizontalScan == entropy.m_aScanHoriz &&
         state.verticalScan == entropy.m_aScanVert && state.cbp == codec.MBInfo.iCBP &&
         state.differentialCbp == codec.MBInfo.iDiffCBP;
@@ -362,6 +383,7 @@ int main(int argc, char** argv)
         { "coefficient_buffer_vectors", test_coefficient_buffer_vectors },
         { "huffman_decoder_vectors", test_huffman_decoder_vectors },
         { "lp_residual_vectors", test_lp_residual_vectors },
+        { "lowpass_cbp_state_vectors", test_lowpass_cbp_state_vectors },
         { "bit_math_vectors", test_bit_math_vectors },
         { "entropy_reader_signed_residual_vectors", test_entropy_reader_signed_residual_vectors },
         { "entropy_reader_state_vectors", test_entropy_reader_state_vectors },

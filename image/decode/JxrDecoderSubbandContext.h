@@ -3,6 +3,7 @@
 
 #include "strcodec.h"
 #include "JxrEntropyReader.h"
+#include "JxrLowpassCbpState.h"
 
 /*
  * Explicit view of the legacy state consumed by one macroblock subband
@@ -22,8 +23,7 @@ typedef struct JxrDecoderSubbandContext {
     CAdaptiveHuffman* cbpCountHuffman;
     CCBPModel* highpassCbpModel;
     Int trimFlexBits;
-    Int* lowpassCbpCountZero;
-    Int* lowpassCbpCountMax;
+    JxrLowpassCbpState lowpassCbpState;
     CAdaptiveScan* lowpassScan;
     CAdaptiveScan* horizontalScan;
     CAdaptiveScan* verticalScan;

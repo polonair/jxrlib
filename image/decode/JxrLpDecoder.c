@@ -45,8 +45,9 @@ Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
 
     /** in raw mode, this can take 6% of the bits in the extreme low rate case!!! **/
     if (cf == YUV_420 || cf == YUV_422 || cf == YUV_444) {
-        int iCountM = *state->lowpassCbpCountMax, iCountZ = *state->lowpassCbpCountZero;
-        int iMax = iFullPlanes * 4 - 5; /* actually (1 << iNChannels) - 1 **/
+        Int iCountM = JxrLowpassCbpStateGetMaxCount(&state->lowpassCbpState);
+        Int iCountZ = JxrLowpassCbpStateGetZeroCount(&state->lowpassCbpState);
+        Int iMax = iFullPlanes * 4 - 5; /* actually (1 << iNChannels) - 1 **/
         if (iCountZ <= 0 || iCountM < 0) {
             iCBP = 0;
             if (JxrEntropyBitReaderReadFlag(reader)) {
@@ -63,19 +64,7 @@ Int JxrLpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
             iCBP = JxrEntropyBitReaderRead(reader, iFullPlanes);
         }
 
-        iCountM += 1 - 4 * (iCBP == iMax);//(b + c - 2*a);
-        iCountZ += 1 - 4 * (iCBP == 0);//(a + b - 2*c);
-        if (iCountM < -8)
-            iCountM = -8;
-        else if (iCountM > 7)
-            iCountM = 7;
-        *state->lowpassCbpCountMax = iCountM;
-
-        if (iCountZ < -8)
-            iCountZ = -8;
-        else if (iCountZ > 7)
-            iCountZ = 7;
-        *state->lowpassCbpCountZero = iCountZ;
+        JxrLowpassCbpStateObserve(&state->lowpassCbpState, iCBP, iMax);
     }
     else { /** 1 or N channel **/
         for (iChannel = 0; iChannel < iChannels; iChannel++)
