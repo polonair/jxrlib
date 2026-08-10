@@ -29,6 +29,7 @@
 #include "windowsmediaphoto.h"
 #include "strcodec.h"
 #include "decode.h"
+#include "JxrTranscodeTileQuantizerState.h"
 
 EXTERN_C Void freePredInfo(CWMImageStrCodec *);
 
@@ -59,26 +60,6 @@ EXTERN_C Int copyTo(struct WMPStream *, struct WMPStream *, size_t);
 
 const static Bool bFlipV[O_MAX] = {FALSE, TRUE , FALSE, TRUE, TRUE , TRUE, FALSE, FALSE};
 const static Bool bFlipH[O_MAX] = {FALSE, FALSE, TRUE , TRUE, FALSE, TRUE, FALSE, TRUE};
-
-typedef struct CTileQPInfo
-{
-    U8 dcMode;
-    U8 dcIndex[MAX_CHANNELS];
-
-    Bool bUseDC;
-    U8 lpNum;
-    Bool bUseDCAlpha;
-    U8 lpNumAlpha;
-    U8 lpMode[16];
-    U8 lpIndex[16][MAX_CHANNELS];
-
-    Bool bUseLP;
-    U8 hpNum;
-    Bool bUseLPAlpha;
-    U8 hpNumAlpha;
-    U8 hpMode[16];
-    U8 hpIndex[16][MAX_CHANNELS];
-} CTileQPInfo;
 
 Void transcodeQuantizer(BitIOInfo * pIO, U8 cIndex[MAX_CHANNELS], U8 cChMode, size_t cChannel)
 {
@@ -128,7 +109,7 @@ Void transcodeQuantizersAlpha(BitIOInfo * pIO, U8 cIndex[16][MAX_CHANNELS], U32 
     }
 }
 
-Void transcodeTileHeader(CWMImageStrCodec * pSC, CTileQPInfo * pTileQPInfo)
+Void transcodeTileHeader(CWMImageStrCodec * pSC, JxrTranscodeTileQuantizerState * pTileQPInfo)
 {
     if(pSC->m_bCtxLeft && pSC->m_bCtxTop && pSC->m_bSecondary == FALSE){ // write packet headers
         CCodingContext * pContext = &pSC->m_pCodingContext[pSC->cTileColumn];
@@ -149,14 +130,14 @@ Void transcodeTileHeader(CWMImageStrCodec * pSC, CTileQPInfo * pTileQPInfo)
         if(pSC->WMISCP.bfBitstreamFormat == SPATIAL) {
             if(pSC->WMISCP.sbSubband != SB_DC_ONLY){
                 if((pSC->m_param.uQPMode & 2) != 0) // not LP uniform
-                    transcodeQuantizers(pContext->m_pIODC, pTileQPInfo->lpIndex, pTileQPInfo->lpMode, pTileQPInfo->lpNum, pSC->WMISCP.cChannel, pTileQPInfo->bUseDC);
+                    transcodeQuantizers(pContext->m_pIODC, pTileQPInfo->lowpassIndex, pTileQPInfo->lowpassMode, pTileQPInfo->lowpassQuantizerCount, pSC->WMISCP.cChannel, pTileQPInfo->useDcForLowpass);
                 if(pSCAlpha != NULL && (pSCAlpha->m_param.uQPMode & 2) != 0) // not LP uniform
-                    transcodeQuantizersAlpha(pContext->m_pIODC, pTileQPInfo->lpIndex, pTileQPInfo->lpNumAlpha, iAlphaPos, pTileQPInfo->bUseDCAlpha);
+                    transcodeQuantizersAlpha(pContext->m_pIODC, pTileQPInfo->lowpassIndex, pTileQPInfo->lowpassQuantizerCountAlpha, iAlphaPos, pTileQPInfo->useDcForLowpassAlpha);
                 if(pSC->WMISCP.sbSubband != SB_NO_HIGHPASS){
                     if((pSC->m_param.uQPMode & 4) != 0) // not HP uniform
-                        transcodeQuantizers(pContext->m_pIODC, pTileQPInfo->hpIndex, pTileQPInfo->hpMode, pTileQPInfo->hpNum, pSC->WMISCP.cChannel, pTileQPInfo->bUseLP);
+                        transcodeQuantizers(pContext->m_pIODC, pTileQPInfo->highpassIndex, pTileQPInfo->highpassMode, pTileQPInfo->highpassQuantizerCount, pSC->WMISCP.cChannel, pTileQPInfo->useLowpassForHighpass);
                     if(pSCAlpha != NULL && (pSCAlpha->m_param.uQPMode & 4) != 0) // not HP uniform
-                        transcodeQuantizersAlpha(pContext->m_pIODC, pTileQPInfo->hpIndex, pTileQPInfo->hpNumAlpha, iAlphaPos, pTileQPInfo->bUseLPAlpha);
+                        transcodeQuantizersAlpha(pContext->m_pIODC, pTileQPInfo->highpassIndex, pTileQPInfo->highpassQuantizerCountAlpha, iAlphaPos, pTileQPInfo->useLowpassForHighpassAlpha);
                 }
             }
         }
@@ -164,16 +145,16 @@ Void transcodeTileHeader(CWMImageStrCodec * pSC, CTileQPInfo * pTileQPInfo)
             if(pSC->WMISCP.sbSubband != SB_DC_ONLY){
                 writePacketHeader(pContext->m_pIOLP, 2, pID);
                 if((pSC->m_param.uQPMode & 2) != 0) // not LP uniform
-                    transcodeQuantizers(pContext->m_pIOLP, pTileQPInfo->lpIndex, pTileQPInfo->lpMode, pTileQPInfo->lpNum, pSC->WMISCP.cChannel, pTileQPInfo->bUseDC);
+                    transcodeQuantizers(pContext->m_pIOLP, pTileQPInfo->lowpassIndex, pTileQPInfo->lowpassMode, pTileQPInfo->lowpassQuantizerCount, pSC->WMISCP.cChannel, pTileQPInfo->useDcForLowpass);
                 if(pSCAlpha != NULL && (pSCAlpha->m_param.uQPMode & 2) != 0) // not LP uniform
-                    transcodeQuantizersAlpha(pContext->m_pIOLP, pTileQPInfo->lpIndex, pTileQPInfo->lpNumAlpha, iAlphaPos, pTileQPInfo->bUseDCAlpha);
+                    transcodeQuantizersAlpha(pContext->m_pIOLP, pTileQPInfo->lowpassIndex, pTileQPInfo->lowpassQuantizerCountAlpha, iAlphaPos, pTileQPInfo->useDcForLowpassAlpha);
 
                 if(pSC->WMISCP.sbSubband != SB_NO_HIGHPASS){
                     writePacketHeader(pContext->m_pIOAC, 3, pID);
                     if((pSC->m_param.uQPMode & 4) != 0) // not HP uniform
-                        transcodeQuantizers(pContext->m_pIOAC, pTileQPInfo->hpIndex, pTileQPInfo->hpMode, pTileQPInfo->hpNum, pSC->WMISCP.cChannel, pTileQPInfo->bUseLP);
+                        transcodeQuantizers(pContext->m_pIOAC, pTileQPInfo->highpassIndex, pTileQPInfo->highpassMode, pTileQPInfo->highpassQuantizerCount, pSC->WMISCP.cChannel, pTileQPInfo->useLowpassForHighpass);
                     if(pSCAlpha != NULL && (pSCAlpha->m_param.uQPMode & 4) != 0) // not HP uniform
-                        transcodeQuantizersAlpha(pContext->m_pIOAC, pTileQPInfo->hpIndex, pTileQPInfo->hpNumAlpha, iAlphaPos, pTileQPInfo->bUseLPAlpha);
+                        transcodeQuantizersAlpha(pContext->m_pIOAC, pTileQPInfo->highpassIndex, pTileQPInfo->highpassQuantizerCountAlpha, iAlphaPos, pTileQPInfo->useLowpassForHighpassAlpha);
 
                     if(pSC->WMISCP.sbSubband != SB_NO_FLEXBITS){
                         writePacketHeader(pContext->m_pIOFL, 4, pID);
@@ -183,12 +164,12 @@ Void transcodeTileHeader(CWMImageStrCodec * pSC, CTileQPInfo * pTileQPInfo)
                 }
             }
         }
-        pTile->cBitsLP = (pTileQPInfo->bUseDC ? 0 : dquantBits(pTileQPInfo->lpNum));
-        pTile->cBitsHP = (pTileQPInfo->bUseLP ? 0 : dquantBits(pTileQPInfo->hpNum));
+        pTile->cBitsLP = (pTileQPInfo->useDcForLowpass ? 0 : dquantBits(pTileQPInfo->lowpassQuantizerCount));
+        pTile->cBitsHP = (pTileQPInfo->useLowpassForHighpass ? 0 : dquantBits(pTileQPInfo->highpassQuantizerCount));
         if(pSCAlpha != NULL){
             pTile = pSCAlpha->pTile + pSC->cTileColumn;
-            pTile->cBitsLP = (pTileQPInfo->bUseDCAlpha ? 0 : dquantBits(pTileQPInfo->lpNumAlpha));
-            pTile->cBitsHP = (pTileQPInfo->bUseLPAlpha ? 0 : dquantBits(pTileQPInfo->hpNumAlpha));
+            pTile->cBitsLP = (pTileQPInfo->useDcForLowpassAlpha ? 0 : dquantBits(pTileQPInfo->lowpassQuantizerCountAlpha));
+            pTile->cBitsHP = (pTileQPInfo->useLowpassForHighpassAlpha ? 0 : dquantBits(pTileQPInfo->highpassQuantizerCountAlpha));
         }
     }
 }
@@ -480,7 +461,7 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
     CWMDecoderParameters aDecoderParam = {0};
     U8 * pIOHeaderDec, * pIOHeaderEnc;
     CCodingContext * pContext;
-    CTileQPInfo * pTileQPInfo = NULL;
+    JxrTranscodeTileQuantizerState * pTileQPInfo = NULL;
     ORIENTATION oO = pParam->oOrientation;
     size_t iAlphaPos = 0;
     size_t cUnit;
@@ -658,8 +639,8 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
         WriteWMIHeader(pSCEnc);
     }
     else{
-        pTileQPInfo = (CTileQPInfo *)malloc((oO == O_NONE ? 1 : (pSCEnc->WMISCP.cNumOfSliceMinus1H + 1) * (pSCEnc->WMISCP.cNumOfSliceMinus1V + 1)) * sizeof( CTileQPInfo));
-        if(pTileQPInfo == NULL || ((oO == O_NONE ? 1 : (pSCEnc->WMISCP.cNumOfSliceMinus1H + 1) * (pSCEnc->WMISCP.cNumOfSliceMinus1V + 1)) * sizeof( CTileQPInfo) < (oO == O_NONE ? 1 : (pSCEnc->WMISCP.cNumOfSliceMinus1H + 1) * (pSCEnc->WMISCP.cNumOfSliceMinus1V + 1))))
+        pTileQPInfo = (JxrTranscodeTileQuantizerState *)malloc((oO == O_NONE ? 1 : (pSCEnc->WMISCP.cNumOfSliceMinus1H + 1) * (pSCEnc->WMISCP.cNumOfSliceMinus1V + 1)) * sizeof(JxrTranscodeTileQuantizerState));
+        if(pTileQPInfo == NULL || ((oO == O_NONE ? 1 : (pSCEnc->WMISCP.cNumOfSliceMinus1H + 1) * (pSCEnc->WMISCP.cNumOfSliceMinus1V + 1)) * sizeof(JxrTranscodeTileQuantizerState) < (oO == O_NONE ? 1 : (pSCEnc->WMISCP.cNumOfSliceMinus1H + 1) * (pSCEnc->WMISCP.cNumOfSliceMinus1V + 1))))
             return ICERR_ERROR;
         
         if(StrEncInit(pSCEnc) != ICERR_OK)
@@ -805,58 +786,20 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
                     }
 
                 if(pSCEnc->m_bCtxLeft && pSCEnc->m_bCtxTop){ // a new tile, buffer tile DQuant info
-                    CTileQPInfo * pTmp = pTileQPInfo;
+                    JxrTranscodeTileQuantizerState * pTmp = pTileQPInfo;
                     
                     pTile = pSCDec->pTile + pSCDec->cTileColumn;
                     
                     if(oO != O_NONE)
                         pTmp += pSCEnc->cTileRow * (pSCEnc->WMISCP.cNumOfSliceMinus1V + 1) + pSCEnc->cTileColumn;
                     
-                    pTmp->dcMode = pTile->cChModeDC;
-                    for(i = 0; i < pSCEnc->WMISCP.cChannel; i ++)
-                        pTmp->dcIndex[i] = pTile->pQuantizerDC[i][0].iIndex;
-                    
-                    if(pSCEnc->WMISCP.sbSubband != SB_DC_ONLY){
-                        pTmp->bUseDC = pTile->bUseDC;
-                        pTmp->lpNum = pTile->cNumQPLP;
-                        if(pTmp->bUseDC == FALSE)
-                            for(j = 0; j < pTmp->lpNum; j ++){
-                                pTmp->lpMode[j] = pTile->cChModeLP[j];
-                                for(i = 0; i < pSCEnc->WMISCP.cChannel; i ++)
-                                    pTmp->lpIndex[j][i] = pTile->pQuantizerLP[i][j].iIndex;
-                            }
-                            
-                            if(pSCEnc->WMISCP.sbSubband != SB_NO_HIGHPASS){
-                                pTmp->bUseLP = pTile->bUseLP;
-                                pTmp->hpNum = pTile->cNumQPHP;
-                                if(pTmp->bUseLP == FALSE)
-                                    for(j = 0; j < pTmp->hpNum; j ++){
-                                        pTmp->hpMode[j] = pTile->cChModeHP[j];
-                                        for(i = 0; i < pSCEnc->WMISCP.cChannel; i ++)
-                                            pTmp->hpIndex[j][i] = pTile->pQuantizerHP[i][j].iIndex;
-                                    }
-                            }
-                    }
-
+                    JxrTranscodeTileQuantizerStateInit(pTmp);
+                    JxrTranscodeTileQuantizerStateCapturePrimary(pTmp, pTile,
+                        pSCEnc->WMISCP.cChannel, pSCEnc->WMISCP.sbSubband);
                     if(pParam->uAlphaMode > 0){
                         pTile = pSCDec->m_pNextSC->pTile + pSCDec->cTileColumn;
-
-                        pTmp->dcIndex[iAlphaPos] = pTile->pQuantizerDC[0][0].iIndex;
-
-                        if(pSCEnc->WMISCP.sbSubband != SB_DC_ONLY){
-                            pTmp->bUseDCAlpha = pTile->bUseDC;
-                            pTmp->lpNumAlpha = pTile->cNumQPLP;
-                            if(pTmp->bUseDCAlpha == FALSE)
-                                for(j = 0; j < pTmp->lpNumAlpha; j ++)
-                                    pTmp->lpIndex[j][iAlphaPos] = pTile->pQuantizerLP[0][j].iIndex;
-                            if(pSCEnc->WMISCP.sbSubband != SB_NO_HIGHPASS){
-                                pTmp->bUseLPAlpha = pTile->bUseLP;
-                                pTmp->hpNumAlpha = pTile->cNumQPHP;
-                                if(pTmp->bUseLPAlpha == FALSE)
-                                    for(j = 0; j < pTmp->hpNumAlpha; j ++)
-                                        pTmp->hpIndex[j][iAlphaPos] = pTile->pQuantizerHP[0][j].iIndex;
-                            }
-                        }
+                        JxrTranscodeTileQuantizerStateCaptureAlpha(pTmp, pTile, iAlphaPos,
+                            pSCEnc->WMISCP.sbSubband);
                     }
                 }
 

@@ -28,6 +28,7 @@
 #include "JxrDecoderSubbandContext.h"
 #include "JxrHpCoefficientBlockResolver.h"
 #include "JxrMacroblockRegionState.h"
+#include "JxrTranscodeTileQuantizerState.h"
 #include "JxrEntropyReader.h"
 #include "JxrLegacyBitReaderAdapter.h"
 #ifdef _WIN32
@@ -221,6 +222,68 @@ static int test_macroblock_region_state_vectors(void)
     state.roiRightPixels = 100;
     return !JxrMacroblockRegionStateIsTileStart(&state) &&
         !JxrMacroblockRegionStateShouldTransform(&state, FALSE);
+}
+
+static int test_transcode_tile_quantizer_state_vectors(void)
+{
+    CWMITile primaryTile;
+    CWMITile alphaTile;
+    CWMIQuantizer primaryDc[MAX_CHANNELS][1] = {{{0}}};
+    CWMIQuantizer primaryLp[MAX_CHANNELS][2] = {{{0}}};
+    CWMIQuantizer primaryHp[MAX_CHANNELS][2] = {{{0}}};
+    CWMIQuantizer alphaDc[1] = {{0}};
+    CWMIQuantizer alphaLp[2] = {{0}};
+    CWMIQuantizer alphaHp[2] = {{0}};
+    JxrTranscodeTileQuantizerState state;
+    size_t channel;
+
+    memset(&primaryTile, 0, sizeof(primaryTile));
+    memset(&alphaTile, 0, sizeof(alphaTile));
+    for (channel = 0; channel < MAX_CHANNELS; ++channel) {
+        primaryTile.pQuantizerDC[channel] = primaryDc[channel];
+        primaryTile.pQuantizerLP[channel] = primaryLp[channel];
+        primaryTile.pQuantizerHP[channel] = primaryHp[channel];
+        primaryDc[channel][0].iIndex = (U8)(10 + channel);
+        primaryLp[channel][0].iIndex = (U8)(20 + channel);
+        primaryLp[channel][1].iIndex = (U8)(30 + channel);
+        primaryHp[channel][0].iIndex = (U8)(40 + channel);
+        primaryHp[channel][1].iIndex = (U8)(50 + channel);
+    }
+    primaryTile.cChModeDC = 2;
+    primaryTile.cNumQPLP = 2;
+    primaryTile.cNumQPHP = 2;
+    primaryTile.cChModeLP[0] = 1;
+    primaryTile.cChModeLP[1] = 2;
+    primaryTile.cChModeHP[0] = 2;
+    primaryTile.cChModeHP[1] = 1;
+    primaryTile.bUseDC = FALSE;
+    primaryTile.bUseLP = FALSE;
+
+    alphaTile.pQuantizerDC[0] = alphaDc;
+    alphaTile.pQuantizerLP[0] = alphaLp;
+    alphaTile.pQuantizerHP[0] = alphaHp;
+    alphaDc[0].iIndex = 60;
+    alphaLp[0].iIndex = 61;
+    alphaLp[1].iIndex = 62;
+    alphaHp[0].iIndex = 63;
+    alphaHp[1].iIndex = 64;
+    alphaTile.cNumQPLP = 2;
+    alphaTile.cNumQPHP = 2;
+    alphaTile.bUseDC = TRUE;
+    alphaTile.bUseLP = TRUE;
+
+    JxrTranscodeTileQuantizerStateInit(&state);
+    JxrTranscodeTileQuantizerStateCapturePrimary(&state, &primaryTile, 3, SB_ALL);
+    JxrTranscodeTileQuantizerStateCaptureAlpha(&state, &alphaTile, 3, SB_ALL);
+    return state.dcMode == 2 && state.dcIndex[0] == 10 && state.dcIndex[2] == 12 &&
+        state.dcIndex[3] == 60 && !state.useDcForLowpass &&
+        state.lowpassQuantizerCount == 2 && state.lowpassMode[1] == 2 &&
+        state.lowpassIndex[1][2] == 32 && state.lowpassIndex[1][3] == 0 &&
+        !state.useLowpassForHighpass && state.highpassQuantizerCount == 2 &&
+        state.highpassMode[0] == 2 && state.highpassIndex[0][1] == 41 &&
+        state.highpassIndex[1][3] == 0 && state.useDcForLowpassAlpha &&
+        !state.useLowpassForHighpassAlpha && state.lowpassQuantizerCountAlpha == 2 &&
+        state.highpassQuantizerCountAlpha == 0;
 }
 
 static int test_bit_input_buffer_state_vectors(void)
@@ -1021,6 +1084,7 @@ int main(int argc, char** argv)
         { "macroblock_state_vectors", test_macroblock_state_vectors },
         { "coefficient_plane_state_vectors", test_coefficient_plane_state_vectors },
         { "macroblock_region_state_vectors", test_macroblock_region_state_vectors },
+        { "transcode_tile_quantizer_state_vectors", test_transcode_tile_quantizer_state_vectors },
         { "bit_input_buffer_state_vectors", test_bit_input_buffer_state_vectors },
         { "packet_source_vectors", test_packet_source_vectors },
         { "packet_executor_vectors", test_packet_executor_vectors },

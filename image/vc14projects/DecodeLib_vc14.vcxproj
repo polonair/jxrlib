@@ -173,6 +173,7 @@
     <ClCompile Include="..\decode\strInvTransform.c" />
     <ClCompile Include="..\decode\strPredQuantDec.c" />
     <ClCompile Include="..\decode\JXRTranscode.c" />
+    <ClCompile Include="..\decode\JxrTranscodeTileQuantizerState.c" />
     <ClCompile Include="..\decode\JxrEntropyReader.c" />
     <ClCompile Include="..\decode\JxrLegacyBitReaderAdapter.c" />
     <ClCompile Include="..\decode\JxrLegacyBitIoBridge.c" />
