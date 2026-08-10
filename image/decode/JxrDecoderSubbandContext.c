@@ -7,10 +7,32 @@ Void JxrDecoderSubbandContextInit(JxrDecoderSubbandContext* state,
     JxrDecoderFormatStateInit(&state->formatState, codec);
     JxrMacroblockStateInit(&state->macroblockState, &codec->MBInfo);
     JxrCoefficientPlaneStateInit(&state->coefficientPlanes, codec->p1MBbuffer);
-    JxrEntropyBitReaderInit(&state->dcReader, entropy->m_pIODC);
-    JxrEntropyBitReaderInit(&state->lowpassReader, entropy->m_pIOLP);
-    JxrEntropyBitReaderInit(&state->highpassReader, entropy->m_pIOAC);
-    JxrEntropyBitReaderInit(&state->flexbitsReader, entropy->m_pIOFL);
+    JxrSharedBitReaderStateInit(&state->dcSharedReaderState, entropy->m_pIODC);
+    JxrEntropyBitReaderInitShared(&state->dcReader, &state->dcSharedReaderState);
+    if (entropy->m_pIOLP == entropy->m_pIODC)
+        JxrEntropyBitReaderInitShared(&state->lowpassReader, &state->dcSharedReaderState);
+    else {
+        JxrSharedBitReaderStateInit(&state->lowpassSharedReaderState, entropy->m_pIOLP);
+        JxrEntropyBitReaderInitShared(&state->lowpassReader, &state->lowpassSharedReaderState);
+    }
+    if (entropy->m_pIOAC == entropy->m_pIODC)
+        JxrEntropyBitReaderInitShared(&state->highpassReader, &state->dcSharedReaderState);
+    else if (entropy->m_pIOAC == entropy->m_pIOLP)
+        JxrEntropyBitReaderInitShared(&state->highpassReader, state->lowpassReader.sharedState);
+    else {
+        JxrSharedBitReaderStateInit(&state->highpassSharedReaderState, entropy->m_pIOAC);
+        JxrEntropyBitReaderInitShared(&state->highpassReader, &state->highpassSharedReaderState);
+    }
+    if (entropy->m_pIOFL == entropy->m_pIODC)
+        JxrEntropyBitReaderInitShared(&state->flexbitsReader, &state->dcSharedReaderState);
+    else if (entropy->m_pIOFL == entropy->m_pIOLP)
+        JxrEntropyBitReaderInitShared(&state->flexbitsReader, state->lowpassReader.sharedState);
+    else if (entropy->m_pIOFL == entropy->m_pIOAC)
+        JxrEntropyBitReaderInitShared(&state->flexbitsReader, state->highpassReader.sharedState);
+    else {
+        JxrSharedBitReaderStateInit(&state->flexbitsSharedReaderState, entropy->m_pIOFL);
+        JxrEntropyBitReaderInitShared(&state->flexbitsReader, &state->flexbitsSharedReaderState);
+    }
     JxrAdaptiveModelStateInit(&state->dcModelState, &entropy->m_aModelDC);
     JxrAdaptiveModelStateInit(&state->lowpassModelState, &entropy->m_aModelLP);
     JxrAdaptiveModelStateInit(&state->highpassModelState, &entropy->m_aModelAC);

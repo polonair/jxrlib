@@ -622,6 +622,33 @@ static int test_decoder_subband_context(void)
         JxrMacroblockCbpStateGetDifferential(&state.macroblockCbpState, 0) == codec.MBInfo.iDiffCBP[0];
 }
 
+static int test_decoder_subband_shared_reader_vectors(void)
+{
+    union { U64 alignment; U8 bytes[PACKETLENGTH * 2 + sizeof(BitIOInfo)]; } storage;
+    BitIOInfo* input = (BitIOInfo*)(storage.bytes + PACKETLENGTH * 2);
+    CWMImageStrCodec codec;
+    CCodingContext entropy;
+    JxrDecoderSubbandContext state;
+
+    memset(&storage, 0, sizeof(storage));
+    memset(&codec, 0, sizeof(codec));
+    memset(&entropy, 0, sizeof(entropy));
+    input->pbStart = storage.bytes;
+    input->pbCurrent = storage.bytes;
+    input->iMask = -8192;
+    entropy.m_pIODC = input;
+    entropy.m_pIOLP = input;
+    entropy.m_pIOAC = input;
+    entropy.m_pIOFL = input;
+    JxrDecoderSubbandContextInit(&state, &codec, &entropy);
+    return state.dcReader.sharedState == &state.dcSharedReaderState &&
+        state.lowpassReader.sharedState == state.dcReader.sharedState &&
+        state.highpassReader.sharedState == state.dcReader.sharedState &&
+        state.flexbitsReader.sharedState == state.dcReader.sharedState &&
+        JxrEntropyBitReaderSharesStream(&state.dcReader, &state.lowpassReader) &&
+        JxrEntropyBitReaderSharesStream(&state.highpassReader, &state.flexbitsReader);
+}
+
 static int test_minimal_fixture(void)
 {
     return files_equal("minimal-profile/minimal-gray-16x16.bmp",
@@ -743,6 +770,7 @@ int main(int argc, char** argv)
         { "legacy_bit_reader_authoritative_state_vectors", test_legacy_bit_reader_authoritative_state_vectors },
         { "hp_coefficient_block_resolver", test_hp_coefficient_block_resolver },
         { "decoder_subband_context", test_decoder_subband_context },
+        { "decoder_subband_shared_reader_vectors", test_decoder_subband_shared_reader_vectors },
         { "minimal_fixture", test_minimal_fixture },
         { "minimal_round_trip", test_minimal_round_trip },
         { "real_image_round_trip", test_real_image_round_trip },

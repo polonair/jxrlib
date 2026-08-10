@@ -22,6 +22,10 @@ typedef struct JxrDecoderSubbandContext {
     JxrDecoderFormatState formatState;
     JxrMacroblockState macroblockState;
     JxrCoefficientPlaneState coefficientPlanes;
+    JxrSharedBitReaderState dcSharedReaderState;
+    JxrSharedBitReaderState lowpassSharedReaderState;
+    JxrSharedBitReaderState highpassSharedReaderState;
+    JxrSharedBitReaderState flexbitsSharedReaderState;
     JxrEntropyBitReader dcReader;
     JxrEntropyBitReader lowpassReader;
     JxrEntropyBitReader highpassReader;

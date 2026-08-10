@@ -3,14 +3,21 @@
 
 #include "JxrLegacyBitReaderAdapter.h"
 
-/* Explicit decoder-facing reader API; BitIOInfo remains inside the adapter. */
-typedef struct JxrEntropyBitReader {
+typedef struct JxrSharedBitReaderState {
     JxrLegacyBitReaderAdapter adapter;
+} JxrSharedBitReaderState;
+
+/* Explicit reader view: position/error are per caller; transport state may be shared. */
+typedef struct JxrEntropyBitReader {
+    JxrSharedBitReaderState ownedState;
+    JxrSharedBitReaderState* sharedState;
     U32 positionBits;
     Bool hasError;
 } JxrEntropyBitReader;
 
+Void JxrSharedBitReaderStateInit(JxrSharedBitReaderState* state, BitIOInfo* legacyStream);
 Void JxrEntropyBitReaderInit(JxrEntropyBitReader* state, BitIOInfo* legacyStream);
+Void JxrEntropyBitReaderInitShared(JxrEntropyBitReader* state, JxrSharedBitReaderState* sharedState);
 U32 JxrEntropyBitReaderPeek(JxrEntropyBitReader* state, U32 count);
 Void JxrEntropyBitReaderConsume(JxrEntropyBitReader* state, U32 count);
 U32 JxrEntropyBitReaderRead(JxrEntropyBitReader* state, U32 count);
