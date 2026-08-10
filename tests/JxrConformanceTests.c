@@ -17,6 +17,7 @@
 #include "JxrHighpassCbpState.h"
 #include "JxrMacroblockState.h"
 #include "JxrCoefficientPlaneState.h"
+#include "JxrBitInputBufferState.h"
 #include "JxrBitMath.h"
 #include "JxrDecoderSubbandContext.h"
 #include "JxrHpCoefficientBlockResolver.h"
@@ -165,6 +166,23 @@ static int test_coefficient_plane_state_vectors(void)
     block = JxrCoefficientPlaneStateGetBlock(&state, 1, 4, 16);
     return JxrCoefficientPlaneStateGetPlane(&state, 0) == plane0 &&
         block.values == plane1 && block.offset == 4 && block.count == 16;
+}
+
+static int test_bit_input_buffer_state_vectors(void)
+{
+    JxrBitInputBufferState state;
+    const UINTPTR_T ringMask = ~(UINTPTR_T)8192;
+
+    JxrBitInputBufferStateInit(&state, 0x10000000U, 0x10000fffU, ringMask, 4096, 0);
+    if (JxrBitInputBufferStateNeedsRefill(&state, 4096)) return 0;
+    state.currentAddress = 0x10001000U;
+    if (!JxrBitInputBufferStateNeedsRefill(&state, 4096)) return 0;
+    JxrBitInputBufferStateAdvancePacketStart(&state, 4096);
+    if (state.startAddress != 0x10001000U || state.streamOffset != 4096) return 0;
+    JxrBitInputBufferStateInit(&state, 0x00001000U, 0x00001000U, ringMask, 8192, 0x12345678U);
+    JxrBitInputBufferStateAdvancePacketStart(&state, 4096);
+    return state.startAddress == 0x00000000U && state.shadow == 0x12345678U &&
+        JxrBitInputBufferStateNeedsRefill(&state, 4096);
 }
 
 static int test_explicit_entropy_context(void)
@@ -526,6 +544,7 @@ int main(int argc, char** argv)
         { "highpass_cbp_state_vectors", test_highpass_cbp_state_vectors },
         { "macroblock_state_vectors", test_macroblock_state_vectors },
         { "coefficient_plane_state_vectors", test_coefficient_plane_state_vectors },
+        { "bit_input_buffer_state_vectors", test_bit_input_buffer_state_vectors },
         { "explicit_entropy_context", test_explicit_entropy_context },
         { "adaptive_scan_vectors", test_adaptive_scan_vectors },
         { "adaptive_scan_state_vectors", test_adaptive_scan_state_vectors },
