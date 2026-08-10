@@ -19,6 +19,7 @@
 #include "JxrCoefficientPlaneState.h"
 #include "JxrBitInputBufferState.h"
 #include "JxrBitCursorState.h"
+#include "JxrBitReaderCore.h"
 #include "JxrLegacyBitIoBridge.h"
 #include "JxrPacketExecutor.h"
 #include "JxrBitMath.h"
@@ -228,6 +229,27 @@ static int test_packet_executor_vectors(void)
     return fake.lastOffset == 4096 && ring[0] == 0x78 &&
         state.packetStartIndex == 4096 && state.streamOffset == 8192 &&
         state.shadow == 0x12345678U;
+}
+
+static int test_bit_reader_core_vectors(void)
+{
+    U8 data[8192] = { 0 }, ring[8192] = { 0 };
+    JxrFakePacketSource fake = { data, sizeof(data), 0 };
+    JxrPacketSource source = { &fake, read_fake_packet };
+    JxrBitReaderCore core;
+    Bool didRefill;
+
+    data[4096] = 0x78; data[4097] = 0x56; data[4098] = 0x34; data[4099] = 0x12;
+    JxrBitReaderCoreInit(&core, ring, sizeof(ring), 0, 0, 4096, 0,
+        0xa0000000U, 0);
+    if (JxrBitReaderCorePeek(&core, 4) != 10) return 0;
+    JxrBitReaderCoreConsume(&core, 4);
+    if (core.cursor.usedBits != 4 || core.input.currentIndex != 0) return 0;
+    if (!JxrBitReaderCoreTryRefill(&core, &source, 4096, &didRefill) || didRefill) return 0;
+    core.input.currentIndex = 4096;
+    if (!JxrBitReaderCoreTryRefill(&core, &source, 4096, &didRefill) || !didRefill) return 0;
+    return !core.hasError && ring[0] == 0x78 && core.input.packetStartIndex == 4096 &&
+        core.input.streamOffset == 8192 && core.input.shadow == 0x12345678U;
 }
 
 static int test_bit_cursor_state_vectors(void)
@@ -551,7 +573,7 @@ static int test_legacy_bit_reader_authoritative_state_vectors(void)
     legacy->uiAccumulator = 0xa0000000U;
     JxrLegacyBitReaderAdapterSyncInputBufferState(&adapter);
     JxrLegacyBitReaderAdapterConsume16(&adapter, 4);
-    if (adapter.bitCursor.usedBits != 4 || adapter.inputBufferState.currentIndex != 0 ||
+    if (adapter.core.cursor.usedBits != 4 || adapter.core.input.currentIndex != 0 ||
         legacy->cBitsUsed != 4 || !JxrLegacyBitReaderAdapterIsInputBufferStateCurrent(&adapter)) return 0;
     return JxrLegacyBitReaderAdapterPeek16(&adapter, 4) == 0;
 }
@@ -753,6 +775,7 @@ int main(int argc, char** argv)
         { "bit_input_buffer_state_vectors", test_bit_input_buffer_state_vectors },
         { "packet_source_vectors", test_packet_source_vectors },
         { "packet_executor_vectors", test_packet_executor_vectors },
+        { "bit_reader_core_vectors", test_bit_reader_core_vectors },
         { "bit_cursor_state_vectors", test_bit_cursor_state_vectors },
         { "bit_cursor_ring_wrap_vectors", test_bit_cursor_ring_wrap_vectors },
         { "explicit_entropy_context", test_explicit_entropy_context },

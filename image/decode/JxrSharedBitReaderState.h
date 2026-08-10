@@ -2,14 +2,12 @@
 #define JXR_SHARED_BIT_READER_STATE_H
 
 #include "strcodec.h"
-#include "JxrBitCursorState.h"
-#include "JxrBitInputBufferState.h"
+#include "JxrBitReaderCore.h"
 
 /* Shared transport state for all entropy readers that alias one BitIOInfo. */
 typedef struct JxrSharedBitReaderState {
     BitIOInfo* legacyStream;
-    JxrBitCursorState bitCursor;
-    JxrBitInputBufferState inputBufferState;
+    JxrBitReaderCore core;
 } JxrSharedBitReaderState;
 
 Void JxrSharedBitReaderStateInit(JxrSharedBitReaderState* state, BitIOInfo* legacyStream);

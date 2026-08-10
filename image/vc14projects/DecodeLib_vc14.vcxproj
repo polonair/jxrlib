@@ -197,6 +197,7 @@
     <ClCompile Include="..\decode\JxrCoefficientPlaneState.c" />
     <ClCompile Include="..\decode\JxrDecoderFormatState.c" />
     <ClCompile Include="..\decode\JxrBitInputBufferState.c" />
+    <ClCompile Include="..\decode\JxrBitReaderCore.c" />
     <ClCompile Include="..\decode\JxrBitCursorState.c" />
     <ClCompile Include="..\decode\JxrPacketSource.c" />
     <ClCompile Include="..\decode\JxrPacketExecutor.c" />
