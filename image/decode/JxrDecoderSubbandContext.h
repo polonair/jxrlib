@@ -11,10 +11,6 @@
 typedef struct JxrDecoderSubbandContext {
     CWMImageStrCodec* codec;
     CCodingContext* entropy;
-    BitIOInfo* dcInput;
-    BitIOInfo* lowpassInput;
-    BitIOInfo* highpassInput;
-    BitIOInfo* flexbitsInput;
     JxrEntropyBitReader dcReader;
     JxrEntropyBitReader lowpassReader;
     JxrEntropyBitReader highpassReader;

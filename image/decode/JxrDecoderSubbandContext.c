@@ -5,14 +5,10 @@ Void JxrDecoderSubbandContextInit(JxrDecoderSubbandContext* state,
 {
     state->codec = codec;
     state->entropy = entropy;
-    state->dcInput = entropy->m_pIODC;
-    state->lowpassInput = entropy->m_pIOLP;
-    state->highpassInput = entropy->m_pIOAC;
-    state->flexbitsInput = entropy->m_pIOFL;
-    JxrEntropyBitReaderInit(&state->dcReader, state->dcInput);
-    JxrEntropyBitReaderInit(&state->lowpassReader, state->lowpassInput);
-    JxrEntropyBitReaderInit(&state->highpassReader, state->highpassInput);
-    JxrEntropyBitReaderInit(&state->flexbitsReader, state->flexbitsInput);
+    JxrEntropyBitReaderInit(&state->dcReader, entropy->m_pIODC);
+    JxrEntropyBitReaderInit(&state->lowpassReader, entropy->m_pIOLP);
+    JxrEntropyBitReaderInit(&state->highpassReader, entropy->m_pIOAC);
+    JxrEntropyBitReaderInit(&state->flexbitsReader, entropy->m_pIOFL);
     state->dcModel = &entropy->m_aModelDC;
     state->lowpassModel = &entropy->m_aModelLP;
     state->highpassModel = &entropy->m_aModelAC;
