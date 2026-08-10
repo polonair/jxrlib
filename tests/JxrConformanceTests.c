@@ -27,6 +27,7 @@
 #include "JxrDecoderFormatState.h"
 #include "JxrDecoderSubbandContext.h"
 #include "JxrHpCoefficientBlockResolver.h"
+#include "JxrMacroblockRegionState.h"
 #include "JxrEntropyReader.h"
 #include "JxrLegacyBitReaderAdapter.h"
 #ifdef _WIN32
@@ -189,6 +190,37 @@ static int test_coefficient_plane_state_vectors(void)
         JxrCoefficientPlaneStateGetLength(&state, 0) == 256 &&
         JxrCoefficientPlaneStateGetLength(&state, 1) == 256 &&
         block.values == plane1 && block.offset == 4 && block.count == 16;
+}
+
+static int test_macroblock_region_state_vectors(void)
+{
+    JxrMacroblockRegionState state;
+
+    memset(&state, 0, sizeof(state));
+    state.macroblockX = 4;
+    state.macroblockY = 2;
+    state.tileLeftMacroblock = 4;
+    state.tileTopMacroblock = 0;
+    state.tileRightMacroblock = 8;
+    state.tileBottomMacroblock = 4;
+    state.roiLeftPixels = 70;
+    state.roiTopPixels = 20;
+    state.roiRightPixels = 100;
+    state.roiBottomPixels = 50;
+    if (!JxrMacroblockRegionStateIsTileStart(&state) ||
+        !JxrMacroblockRegionStateIntersectsEntropyRoi(&state, OL_NONE) ||
+        !JxrMacroblockRegionStateShouldTransform(&state, FALSE) ||
+        !JxrMacroblockRegionStateShouldTransform(&state, TRUE)) return 0;
+
+    state.roiLeftPixels = 128;
+    if (JxrMacroblockRegionStateIntersectsEntropyRoi(&state, OL_NONE) ||
+        !JxrMacroblockRegionStateIntersectsEntropyRoi(&state, OL_ONE)) return 0;
+
+    state.macroblockX = 10;
+    state.roiLeftPixels = 0;
+    state.roiRightPixels = 100;
+    return !JxrMacroblockRegionStateIsTileStart(&state) &&
+        !JxrMacroblockRegionStateShouldTransform(&state, FALSE);
 }
 
 static int test_bit_input_buffer_state_vectors(void)
@@ -988,6 +1020,7 @@ int main(int argc, char** argv)
         { "highpass_cbp_state_vectors", test_highpass_cbp_state_vectors },
         { "macroblock_state_vectors", test_macroblock_state_vectors },
         { "coefficient_plane_state_vectors", test_coefficient_plane_state_vectors },
+        { "macroblock_region_state_vectors", test_macroblock_region_state_vectors },
         { "bit_input_buffer_state_vectors", test_bit_input_buffer_state_vectors },
         { "packet_source_vectors", test_packet_source_vectors },
         { "packet_executor_vectors", test_packet_executor_vectors },

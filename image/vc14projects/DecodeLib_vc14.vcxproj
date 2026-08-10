@@ -185,6 +185,7 @@
     <ClCompile Include="..\decode\JxrHpDecoder.c" />
     <ClCompile Include="..\decode\JxrHpBlockDecoder.c" />
     <ClCompile Include="..\decode\JxrHpCoefficientBlockResolver.c" />
+    <ClCompile Include="..\decode\JxrMacroblockRegionState.c" />
     <ClCompile Include="..\decode\JxrHuffmanDecoder.c" />
     <ClCompile Include="..\decode\JxrLpResidualDecoder.c" />
     <ClCompile Include="..\decode\JxrLowpassCbpState.c" />

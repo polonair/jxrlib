@@ -28,6 +28,7 @@
 #include "strcodec.h"
 #include "JXRTrace.h"
 #include "decode.h"
+#include "JxrMacroblockRegionState.h"
 #include "strTransform.h"
 #include <math.h>
 #include "perfTimer.h"
@@ -309,7 +310,6 @@ Int readPackets(CWMImageStrCodec * pSC)
 /* inverse transform and overlap possible part of a macroblock */
 Int processMacroblockDec(CWMImageStrCodec * pSC)
 {
-    const OVERLAP olOverlap = pSC->WMISCP.olOverlap;
     // const Bool left = (pSC->cColumn == 0);
     const Bool /*top = (pSC->cRow == 0),*/ bottom = (pSC->cRow == pSC->cmbHeight);
     const Bool bottomORright = (bottom || pSC->cColumn == pSC->cmbWidth);
@@ -319,6 +319,13 @@ Int processMacroblockDec(CWMImageStrCodec * pSC)
     size_t j, jend = (pSC->m_pNextSC != NULL);
 
     for (j = 0; j <= jend; j++) {
+        JxrMacroblockRegionState region;
+        region.macroblockX = pSC->cColumn;
+        region.macroblockY = pSC->cRow;
+        region.roiLeftPixels = pSC->m_Dparam->cROILeftX;
+        region.roiTopPixels = pSC->m_Dparam->cROITopY;
+        region.roiRightPixels = pSC->m_Dparam->cROIRightX;
+        region.roiBottomPixels = pSC->m_Dparam->cROIBottomY;
         if(!bottomORright){
             CCodingContext *pContext;
             
@@ -334,22 +341,16 @@ Int processMacroblockDec(CWMImageStrCodec * pSC)
             if(readPackets(pSC) != ICERR_OK)
                 return ICERR_ERROR;
          
-            // check if we need to do entropy decode
-			if(!pSC->m_Dparam->bDecodeFullFrame){
-				if(pSC->cColumn == pSC->WMISCP.uiTileX[pSC->cTileColumn]){ // switching to a new tile
-					size_t rLeft = pSC->m_Dparam->cROILeftX, rRight = pSC->m_Dparam->cROIRightX;
-					size_t rTop = pSC->m_Dparam->cROITopY, rBottom = pSC->m_Dparam->cROIBottomY;
-					size_t rExt = (olOverlap == OL_NONE ? 0 : olOverlap == OL_ONE ? 2 : 10);
-					size_t tLeft = pSC->cColumn * 16, tTop = pSC->WMISCP.uiTileY[pSC->cTileRow] * 16;
-					size_t tRight = (pSC->cTileColumn != pSC->WMISCP.cNumOfSliceMinus1V ? pSC->WMISCP.uiTileX[pSC->cTileColumn + 1] : pSC->cmbWidth) * 16;
-					size_t tBottom = (pSC->cTileRow != pSC->WMISCP.cNumOfSliceMinus1H ? pSC->WMISCP.uiTileY[pSC->cTileRow + 1] : pSC->cmbHeight) * 16;
-
-					// tile overlaps with ROI?
-					pContext->m_bInROI = ((rLeft >= tRight + rExt || rTop >= tBottom + rExt || tLeft > rRight + rExt ||
-						tTop > rBottom + rExt || pSC->cRow * 16 > rBottom + rExt) ? FALSE : TRUE);
-				}
-			}
-
+            region.tileLeftMacroblock = pSC->WMISCP.uiTileX[pSC->cTileColumn];
+            region.tileTopMacroblock = pSC->WMISCP.uiTileY[pSC->cTileRow];
+            region.tileRightMacroblock = pSC->cTileColumn != pSC->WMISCP.cNumOfSliceMinus1V ?
+                pSC->WMISCP.uiTileX[pSC->cTileColumn + 1] : pSC->cmbWidth;
+            region.tileBottomMacroblock = pSC->cTileRow != pSC->WMISCP.cNumOfSliceMinus1H ?
+                pSC->WMISCP.uiTileY[pSC->cTileRow + 1] : pSC->cmbHeight;
+            if (!pSC->m_Dparam->bDecodeFullFrame &&
+                JxrMacroblockRegionStateIsTileStart(&region))
+                pContext->m_bInROI = JxrMacroblockRegionStateIntersectsEntropyRoi(&region,
+                    pSC->WMISCP.olOverlap);
             if(pSC->m_Dparam->bDecodeFullFrame || pContext->m_bInROI){                
                 size_t cbitStart = JXRTraceBitPosition(pContext->m_pIODC, FALSE);
                 if ((result = DecodeMacroblockDC(pSC, pContext, (Int)pSC->cColumn, (Int)pSC->cRow)) != ICERR_OK)
@@ -386,18 +387,12 @@ Int processMacroblockDec(CWMImageStrCodec * pSC)
             }
         }
 
-        if((!pSC->m_Dparam->bDecodeFullFrame) &&
-            ((pSC->cColumn * 16 > pSC->m_Dparam->cROIRightX  + 25) || (pSC->cColumn * 16 + 25 < pSC->m_Dparam->cROILeftX)
-            || (pSC->cRow * 16 > pSC->m_Dparam->cROIBottomY + 25) || (pSC->cRow * 16 + 25 < pSC->m_Dparam->cROITopY)))
-        {
-            // do nothing
-        }
-        else {
+        if (JxrMacroblockRegionStateShouldTransform(&region,
+            pSC->m_Dparam->bDecodeFullFrame)) {
             pSC->Transform(pSC);
             if (pSC->cColumn < pSC->cmbWidth && pSC->cRow < pSC->cmbHeight)
                 JXRTraceDumpStage("decoder", "reconstructed_samples", pSC, (Int)pSC->cColumn, (Int)pSC->cRow, JXRTraceOutput);
         }
-
         if (jend) {
             pSC->m_pNextSC->cRow = pSC->cRow;
             pSC->m_pNextSC->cColumn = pSC->cColumn;
