@@ -10,6 +10,7 @@ typedef struct JxrBitReaderCore {
     JxrBitCursorState cursor;
     JxrBitInputBufferState input;
     Bool hasError;
+    JxrPacketReadResult lastPacketRead;
 } JxrBitReaderCore;
 
 Void JxrBitReaderCoreInit(JxrBitReaderCore* state, U8* buffer, size_t length,

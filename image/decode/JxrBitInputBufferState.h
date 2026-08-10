@@ -19,6 +19,6 @@ Void JxrBitInputBufferStateInit(JxrBitInputBufferState* state, U8* buffer, size_
 Bool JxrBitInputBufferStateNeedsRefill(const JxrBitInputBufferState* state, U32 packetLength);
 Void JxrBitInputBufferStateAdvancePacketStart(JxrBitInputBufferState* state, U32 packetLength);
 Bool JxrBitInputBufferStateReadPacket(JxrBitInputBufferState* state, JxrPacketSource* source,
-    U32 packetLength);
+    U32 packetLength, JxrPacketReadResult* result);
 
 #endif

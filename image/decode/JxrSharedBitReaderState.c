@@ -70,7 +70,7 @@ Void JxrSharedBitReaderStateRefillLevel1(CWMImageStrCodec* codec, JxrSharedBitRe
             (UINTPTR_T)(state->core.input.buffer + state->core.input.packetStartIndex),
             (UINTPTR_T)(state->core.input.buffer + state->core.input.currentIndex),
             state->core.input.streamOffset, state->core.input.shadow,
-            wmpSource.lastReadResult);
+            state->core.lastPacketRead.nativeError);
     }
 }
 
@@ -84,6 +84,9 @@ Void JxrSharedBitReaderStateSyncFromLegacy(JxrSharedBitReaderState* state)
 {
     JxrLegacyBitIoBridgeRead(state->legacyStream, &state->core.cursor, &state->core.input);
     state->core.hasError = FALSE;
+    state->core.lastPacketRead.status = JxrPacketReadCompleted;
+    state->core.lastPacketRead.bytesRead = 0;
+    state->core.lastPacketRead.nativeError = WMP_errSuccess;
 }
 
 Bool JxrSharedBitReaderStateIsCurrent(const JxrSharedBitReaderState* state)

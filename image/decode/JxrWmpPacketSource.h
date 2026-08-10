@@ -6,7 +6,6 @@
 
 typedef struct JxrWmpPacketSource {
     struct WMPStream* stream;
-    ERR lastReadResult;
 } JxrWmpPacketSource;
 
 Void JxrWmpPacketSourceInit(JxrWmpPacketSource* state, struct WMPStream* stream,

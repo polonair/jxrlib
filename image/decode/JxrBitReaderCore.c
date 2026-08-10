@@ -9,6 +9,9 @@ Void JxrBitReaderCoreInit(JxrBitReaderCore* state, U8* buffer, size_t length,
     JxrBitInputBufferStateInit(&state->input, buffer, length, packetStartIndex,
         currentIndex, streamOffset, shadow);
     state->hasError = FALSE;
+    state->lastPacketRead.status = JxrPacketReadCompleted;
+    state->lastPacketRead.bytesRead = 0;
+    state->lastPacketRead.nativeError = WMP_errSuccess;
 }
 
 U32 JxrBitReaderCorePeek(JxrBitReaderCore* state, U32 count)
@@ -32,7 +35,8 @@ U32 JxrBitReaderCoreReadLong(JxrBitReaderCore* state, U32 count)
 Bool JxrBitReaderCoreTryRefill(JxrBitReaderCore* state, JxrPacketSource* source,
     U32 packetLength, Bool* didRefill)
 {
-    if (!JxrPacketExecutorTryRefill(&state->input, source, packetLength, didRefill)) {
+    if (!JxrPacketExecutorTryRefill(&state->input, source, packetLength, didRefill,
+        &state->lastPacketRead)) {
         state->hasError = TRUE;
         return FALSE;
     }

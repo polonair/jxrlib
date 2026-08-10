@@ -26,12 +26,13 @@ Void JxrBitInputBufferStateAdvancePacketStart(JxrBitInputBufferState* state, U32
 }
 
 Bool JxrBitInputBufferStateReadPacket(JxrBitInputBufferState* state, JxrPacketSource* source,
-    U32 packetLength)
+    U32 packetLength, JxrPacketReadResult* result)
 {
     U32 shadow;
     assert(state->packetStartIndex + packetLength <= state->length);
-    if (!JxrPacketSourceRead(source, state->streamOffset,
-        state->buffer + state->packetStartIndex, packetLength)) return FALSE;
+    *result = JxrPacketSourceRead(source, state->streamOffset,
+        state->buffer + state->packetStartIndex, packetLength);
+    if (result->status == JxrPacketReadFailed) return FALSE;
     memcpy(&shadow, state->buffer + state->packetStartIndex, sizeof(shadow));
     state->shadow = shadow;
     state->streamOffset += packetLength;

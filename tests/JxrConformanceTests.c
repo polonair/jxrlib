@@ -191,11 +191,41 @@ static int test_bit_input_buffer_state_vectors(void)
 }
 
 typedef struct { U8* data; size_t length; size_t lastOffset; } JxrFakePacketSource;
-static Bool read_fake_packet(Void* context, size_t offset, U8* destination, size_t count)
+static JxrPacketReadResult read_fake_packet(Void* context, size_t offset, U8* destination, size_t count)
 {
     JxrFakePacketSource* source = (JxrFakePacketSource*)context;
-    if (offset + count > source->length) return FALSE;
-    memcpy(destination, source->data + offset, count); source->lastOffset = offset; return TRUE;
+    JxrPacketReadResult result;
+    result.status = JxrPacketReadFailed;
+    result.bytesRead = 0;
+    result.nativeError = WMP_errFileIO;
+    if (offset + count > source->length) return result;
+    memcpy(destination, source->data + offset, count);
+    source->lastOffset = offset;
+    result.status = JxrPacketReadCompleted;
+    result.bytesRead = count;
+    result.nativeError = WMP_errSuccess;
+    return result;
+}
+
+static JxrPacketReadResult read_partial_packet(Void* context, size_t offset, U8* destination,
+    size_t count)
+{
+    JxrFakePacketSource* source = (JxrFakePacketSource*)context;
+    JxrPacketReadResult result;
+    size_t available;
+
+    result.status = JxrPacketReadFailed;
+    result.bytesRead = 0;
+    result.nativeError = WMP_errFileIO;
+    if (offset > source->length) return result;
+    available = source->length - offset;
+    if (available > count) available = count;
+    memcpy(destination, source->data + offset, available);
+    source->lastOffset = offset;
+    result.status = available == count ? JxrPacketReadCompleted : JxrPacketReadShort;
+    result.bytesRead = available;
+    result.nativeError = available == count ? WMP_errSuccess : WMP_errFileIO;
+    return result;
 }
 
 static int test_packet_source_vectors(void)
@@ -204,10 +234,12 @@ static int test_packet_source_vectors(void)
     JxrFakePacketSource fake = { data, sizeof(data), 0 };
     JxrPacketSource source = { &fake, read_fake_packet };
     JxrBitInputBufferState state;
+    JxrPacketReadResult result;
     data[4096] = 0x78; data[4097] = 0x56; data[4098] = 0x34; data[4099] = 0x12;
     JxrBitInputBufferStateInit(&state, ring, sizeof(ring), 0, 4096, 4096, 0);
-    if (!JxrBitInputBufferStateReadPacket(&state, &source, 4096)) return 0;
+    if (!JxrBitInputBufferStateReadPacket(&state, &source, 4096, &result)) return 0;
     return fake.lastOffset == 4096 && state.streamOffset == 8192 &&
+        result.status == JxrPacketReadCompleted && result.bytesRead == 4096 &&
         state.shadow == 0x12345678U && state.packetStartIndex == 4096 && ring[0] == 0x78;
 }
 
@@ -218,17 +250,43 @@ static int test_packet_executor_vectors(void)
     JxrPacketSource source = { &fake, read_fake_packet };
     JxrBitInputBufferState state;
     Bool didRefill;
+    JxrPacketReadResult result;
 
     JxrBitInputBufferStateInit(&state, ring, sizeof(ring), 0, 0, 4096, 0x12345678U);
-    if (!JxrPacketExecutorTryRefill(&state, &source, 4096, &didRefill) || didRefill)
+    if (!JxrPacketExecutorTryRefill(&state, &source, 4096, &didRefill, &result) || didRefill)
         return 0;
     data[4096] = 0x78; data[4097] = 0x56; data[4098] = 0x34; data[4099] = 0x12;
     state.currentIndex = 4096;
-    if (!JxrPacketExecutorTryRefill(&state, &source, 4096, &didRefill) || !didRefill)
+    if (!JxrPacketExecutorTryRefill(&state, &source, 4096, &didRefill, &result) || !didRefill)
         return 0;
     return fake.lastOffset == 4096 && ring[0] == 0x78 &&
         state.packetStartIndex == 4096 && state.streamOffset == 8192 &&
-        state.shadow == 0x12345678U;
+        state.shadow == 0x12345678U && result.status == JxrPacketReadCompleted;
+}
+
+static int test_packet_short_read_vectors(void)
+{
+    U8 data[4098] = { 0 }, ring[8192];
+    JxrFakePacketSource fake = { data, sizeof(data), 0 };
+    JxrPacketSource source = { &fake, read_partial_packet };
+    JxrBitReaderCore core;
+    Bool didRefill;
+    U32 expectedShadow;
+
+    memset(ring, 0x5a, sizeof(ring));
+    data[4096] = 0x78;
+    data[4097] = 0x56;
+    JxrBitReaderCoreInit(&core, ring, sizeof(ring), 0, 4096, 4096, 0,
+        0, 0);
+    if (!JxrBitReaderCoreTryRefill(&core, &source, 4096, &didRefill)) return 0;
+    memcpy(&expectedShadow, ring, sizeof(expectedShadow));
+    return didRefill && !core.hasError && fake.lastOffset == 4096 &&
+        core.lastPacketRead.status == JxrPacketReadShort &&
+        core.lastPacketRead.bytesRead == 2 &&
+        core.lastPacketRead.nativeError == WMP_errFileIO &&
+        ring[0] == 0x78 && ring[1] == 0x56 && ring[2] == 0x5a &&
+        core.input.shadow == expectedShadow && core.input.packetStartIndex == 4096 &&
+        core.input.streamOffset == 8192;
 }
 
 static int test_bit_reader_core_vectors(void)
@@ -775,6 +833,7 @@ int main(int argc, char** argv)
         { "bit_input_buffer_state_vectors", test_bit_input_buffer_state_vectors },
         { "packet_source_vectors", test_packet_source_vectors },
         { "packet_executor_vectors", test_packet_executor_vectors },
+        { "packet_short_read_vectors", test_packet_short_read_vectors },
         { "bit_reader_core_vectors", test_bit_reader_core_vectors },
         { "bit_cursor_state_vectors", test_bit_cursor_state_vectors },
         { "bit_cursor_ring_wrap_vectors", test_bit_cursor_ring_wrap_vectors },
