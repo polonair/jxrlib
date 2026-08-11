@@ -31,6 +31,7 @@
 #include "JxrMacroblockRegionState.h"
 #include "JxrDecoderTileQuantizerSyntaxReader.h"
 #include "JxrImagePlaneQuantizerHeaderReader.h"
+#include "JxrImagePlaneDescriptorReader.h"
 #include "JxrDecoderDcQuantizerHeaderApplier.h"
 #include "JxrDecoderLpQuantizerHeaderApplier.h"
 #include "JxrDecoderHpQuantizerHeaderApplier.h"
@@ -2669,64 +2670,25 @@ Int ReadImagePlaneHeader(CWMImageInfo* pII, CWMIStrCodecParam *pSCP,
 {
     ERR err = WMP_errSuccess;
 
-    pSC->cfColorFormat = getBit32_SB(pSB, 3); // internal color format
-    FailIf((pSC->cfColorFormat < Y_ONLY || pSC->cfColorFormat > NCOMPONENT), WMP_errUnsupportedFormat);
-    pSCP->cfColorFormat = pSC->cfColorFormat;  // this should be removed later
-    pSC->bScaledArith = getBit32_SB(pSB, 1); // lossless mode
-
-    // subbands
-    pSCP->sbSubband = getBit32_SB(pSB, 4);
-
-// color parameters
-    switch (pSC->cfColorFormat) {
-        case Y_ONLY:
-            pSC->cNumChannels = 1;
-            break;
-        case YUV_420:
-            pSC->cNumChannels = 3;
-            getBit32_SB(pSB, 1);
-            pII->cChromaCenteringX = (U8) getBit32_SB(pSB, 3);
-            getBit32_SB(pSB, 1);
-            pII->cChromaCenteringY = (U8) getBit32_SB(pSB, 3);
-            break; 
-        case YUV_422:
-            pSC->cNumChannels = 3;
-            getBit32_SB(pSB, 1);
-            pII->cChromaCenteringX = (U8) getBit32_SB(pSB, 3);
-            getBit32_SB(pSB, 4);
-            break; 
-        case YUV_444:
-            pSC->cNumChannels = 3;
-            getBit32_SB(pSB, 4);
-            getBit32_SB(pSB, 4);
-            break;
-        case NCOMPONENT:
-            pSC->cNumChannels = (Int) getBit32_SB(pSB, 4) + 1;
-            getBit32_SB(pSB, 4);
-            break;
-        case CMYK:
-            pSC->cNumChannels = 4;
-            break;
-        default:
-            break;
-    }
-
-// float and 32s additional parameters
-    switch (pII->bdBitDepth) {
-        case BD_16:
-        case BD_16S:
-        case BD_32:
-        case BD_32S:
-            pSCP->nLenMantissaOrShift = (U8) getBit32_SB(pSB, 8);
-            break;
-        case BD_32F:
-            pSCP->nLenMantissaOrShift = (U8) getBit32_SB(pSB, 8);//float conversion parameters
-            pSCP->nExpBias = (I8) getBit32_SB(pSB, 8);
-            break;
-        default:
-            break;
-    }
     {
+        JxrImagePlaneDescriptor descriptor;
+        if (!JxrImagePlaneDescriptorReaderRead(pSB, pII->bdBitDepth, &descriptor))
+            return ICERR_ERROR;
+        pSC->cfColorFormat = descriptor.colorFormat;
+        pSCP->cfColorFormat = descriptor.colorFormat;
+        pSC->bScaledArith = descriptor.scaledArithmetic;
+        pSCP->sbSubband = descriptor.subband;
+        pSC->cNumChannels = descriptor.channelCount;
+        if (descriptor.hasChromaCenteringX)
+            pII->cChromaCenteringX = descriptor.chromaCenteringX;
+        if (descriptor.hasChromaCenteringY)
+            pII->cChromaCenteringY = descriptor.chromaCenteringY;
+        if (descriptor.hasSampleConversion) {
+            pSCP->nLenMantissaOrShift = descriptor.mantissaOrShift;
+            if (pII->bdBitDepth == BD_32F)
+                pSCP->nExpBias = descriptor.exponentBias;
+        }
+    }    {
         JxrImagePlaneQuantizerHeader quantizers;
         if (!JxrImagePlaneQuantizerHeaderReaderRead(pSB, pSC->cNumChannels,
             pSCP->sbSubband, &quantizers))

@@ -43,6 +43,7 @@
 #include "JxrDecoderCodingContextResetter.h"
 #include "JxrDecoderPacketRowReader.h"
 #include "JxrImagePlaneQuantizerHeaderReader.h"
+#include "JxrImagePlaneDescriptorReader.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -664,6 +665,83 @@ static int test_decoder_tile_quantizer_syntax_vectors(void)
     flushToByte_SB(&simple);
     return detach_SB(&simple) == WMP_errSuccess &&
         CloseWS_Memory(&simpleStream) == WMP_errSuccess;
+}
+
+static int read_image_plane_descriptor_vector(const U8* data, size_t count,
+    BITDEPTH_BITS bitDepth, JxrImagePlaneDescriptor* descriptor)
+{
+    SimpleBitIO input;
+    struct WMPStream* stream = NULL;
+    Bool read;
+    memset(&input, 0, sizeof(input));
+    if (CreateWS_Memory(&stream, (Void*)data, count) != WMP_errSuccess ||
+        attach_SB(&input, stream) != WMP_errSuccess) {
+        if (stream != NULL) CloseWS_Memory(&stream);
+        return 0;
+    }
+    read = JxrImagePlaneDescriptorReaderRead(&input, bitDepth, descriptor);
+    flushToByte_SB(&input);
+    return read && detach_SB(&input) == WMP_errSuccess &&
+        CloseWS_Memory(&stream) == WMP_errSuccess;
+}
+
+static int test_image_plane_descriptor_reader_vectors(void)
+{
+    U8 data[16] = {0}; JxrBitWriter writer; JxrImagePlaneDescriptor descriptor;
+
+    JxrBitWriterInit(&writer, data, sizeof(data));
+    if (!JxrBitWriterWrite(&writer, Y_ONLY, 3) || !JxrBitWriterWrite(&writer, 1, 1) ||
+        !JxrBitWriterWrite(&writer, SB_ALL, 4) || !JxrBitWriterFlush(&writer) ||
+        !read_image_plane_descriptor_vector(data, JxrBitWriterBytes(&writer), BD_8, &descriptor) ||
+        descriptor.colorFormat != Y_ONLY || !descriptor.scaledArithmetic ||
+        descriptor.subband != SB_ALL || descriptor.channelCount != 1 ||
+        descriptor.hasChromaCenteringX || descriptor.hasSampleConversion) return 0;
+
+    JxrBitWriterInit(&writer, data, sizeof(data));
+    if (!JxrBitWriterWrite(&writer, YUV_420, 3) || !JxrBitWriterWrite(&writer, 0, 1) ||
+        !JxrBitWriterWrite(&writer, SB_NO_FLEXBITS, 4) || !JxrBitWriterWrite(&writer, 0, 1) ||
+        !JxrBitWriterWrite(&writer, 5, 3) || !JxrBitWriterWrite(&writer, 1, 1) ||
+        !JxrBitWriterWrite(&writer, 3, 3) || !JxrBitWriterWrite(&writer, 9, 8) ||
+        !JxrBitWriterFlush(&writer) ||
+        !read_image_plane_descriptor_vector(data, JxrBitWriterBytes(&writer), BD_16, &descriptor) ||
+        descriptor.colorFormat != YUV_420 || descriptor.channelCount != 3 ||
+        !descriptor.hasChromaCenteringX || !descriptor.hasChromaCenteringY ||
+        descriptor.chromaCenteringX != 5 || descriptor.chromaCenteringY != 3 ||
+        !descriptor.hasSampleConversion || descriptor.mantissaOrShift != 9) return 0;
+
+    JxrBitWriterInit(&writer, data, sizeof(data));
+    if (!JxrBitWriterWrite(&writer, YUV_422, 3) || !JxrBitWriterWrite(&writer, 0, 1) ||
+        !JxrBitWriterWrite(&writer, SB_NO_HIGHPASS, 4) || !JxrBitWriterWrite(&writer, 1, 1) ||
+        !JxrBitWriterWrite(&writer, 6, 3) || !JxrBitWriterWrite(&writer, 0, 4) ||
+        !JxrBitWriterWrite(&writer, 10, 8) || !JxrBitWriterFlush(&writer) ||
+        !read_image_plane_descriptor_vector(data, JxrBitWriterBytes(&writer), BD_32S, &descriptor) ||
+        descriptor.colorFormat != YUV_422 || descriptor.subband != SB_NO_HIGHPASS ||
+        !descriptor.hasChromaCenteringX || descriptor.hasChromaCenteringY ||
+        descriptor.chromaCenteringX != 6 || descriptor.mantissaOrShift != 10) return 0;
+
+    JxrBitWriterInit(&writer, data, sizeof(data));
+    if (!JxrBitWriterWrite(&writer, YUV_444, 3) || !JxrBitWriterWrite(&writer, 0, 1) ||
+        !JxrBitWriterWrite(&writer, SB_ALL, 4) || !JxrBitWriterWrite(&writer, 0, 4) ||
+        !JxrBitWriterWrite(&writer, 0, 4) || !JxrBitWriterFlush(&writer) ||
+        !read_image_plane_descriptor_vector(data, JxrBitWriterBytes(&writer), BD_8, &descriptor) ||
+        descriptor.colorFormat != YUV_444 || descriptor.channelCount != 3) return 0;
+
+    JxrBitWriterInit(&writer, data, sizeof(data));
+    if (!JxrBitWriterWrite(&writer, CMYK, 3) || !JxrBitWriterWrite(&writer, 0, 1) ||
+        !JxrBitWriterWrite(&writer, SB_ALL, 4) || !JxrBitWriterFlush(&writer) ||
+        !read_image_plane_descriptor_vector(data, JxrBitWriterBytes(&writer), BD_8, &descriptor) ||
+        descriptor.colorFormat != CMYK || descriptor.channelCount != 4) return 0;
+
+    JxrBitWriterInit(&writer, data, sizeof(data));
+    if (!JxrBitWriterWrite(&writer, NCOMPONENT, 3) || !JxrBitWriterWrite(&writer, 0, 1) ||
+        !JxrBitWriterWrite(&writer, SB_ALL, 4) || !JxrBitWriterWrite(&writer, 4, 4) ||
+        !JxrBitWriterWrite(&writer, 0, 4) || !JxrBitWriterWrite(&writer, 13, 8) ||
+        !JxrBitWriterWrite(&writer, 0x82, 8) || !JxrBitWriterFlush(&writer) ||
+        !read_image_plane_descriptor_vector(data, JxrBitWriterBytes(&writer), BD_32F, &descriptor) ||
+        descriptor.colorFormat != NCOMPONENT || descriptor.channelCount != 5 ||
+        !descriptor.hasSampleConversion || descriptor.mantissaOrShift != 13 ||
+        descriptor.exponentBias != -126) return 0;
+    return 1;
 }
 
 static int test_image_plane_quantizer_header_reader_vectors(void)
@@ -2406,6 +2484,7 @@ int main(int argc, char** argv)
         { "transcode_tile_extraction_decision_vectors", test_transcode_tile_extraction_decision_vectors },
         { "transcode_roi_geometry_vectors", test_transcode_roi_geometry_vectors },
         { "decoder_tile_quantizer_syntax_vectors", test_decoder_tile_quantizer_syntax_vectors },
+        { "image_plane_descriptor_reader_vectors", test_image_plane_descriptor_reader_vectors },
         { "image_plane_quantizer_header_reader_vectors", test_image_plane_quantizer_header_reader_vectors },
         { "decoder_dc_quantizer_header_applier_vectors", test_decoder_dc_quantizer_header_applier_vectors },
         { "decoder_lp_quantizer_header_applier_vectors", test_decoder_lp_quantizer_header_applier_vectors },
