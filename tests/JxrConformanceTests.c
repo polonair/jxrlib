@@ -40,6 +40,7 @@
 #include "JxrDecoderLpQuantizerHeaderApplier.h"
 #include "JxrDecoderHpQuantizerHeaderApplier.h"
 #include "JxrDecoderTileHeaderReader.h"
+#include "JxrDecoderCodingContextResetter.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -879,6 +880,48 @@ static int test_decoder_tile_header_reader_vectors(void)
     operations.readLp = NULL;
     return !JxrDecoderTileHeaderReaderRead(&config, &operations) &&
         !JxrDecoderTileHeaderReaderRead(NULL, &operations);
+}
+
+typedef struct JxrCodingContextResetterTestContext {
+    CCodingContext* contexts;
+    U8 indices[3];
+    U8 count;
+} JxrCodingContextResetterTestContext;
+
+static Void record_coding_context_reset(Void* context, CCodingContext* codingContext)
+{
+    JxrCodingContextResetterTestContext* testContext =
+        (JxrCodingContextResetterTestContext*)context;
+    testContext->indices[testContext->count++] = (U8)(codingContext - testContext->contexts);
+}
+
+static int test_decoder_coding_context_resetter_vectors(void)
+{
+    CCodingContext contexts[3];
+    JxrDecoderCodingContextResetterConfig config;
+    JxrDecoderCodingContextResetterOperations operations;
+    JxrCodingContextResetterTestContext context;
+
+    memset(contexts, 0, sizeof(contexts));
+    memset(&config, 0, sizeof(config));
+    memset(&operations, 0, sizeof(operations));
+    memset(&context, 0, sizeof(context));
+    context.contexts = contexts;
+    config.contexts = contexts;
+    config.contextCount = 3;
+    operations.context = &context;
+    operations.reset = record_coding_context_reset;
+    if (!JxrDecoderCodingContextResetterResetContexts(&config, &operations) ||
+        context.count != 1 || context.indices[0] != 0) return 0;
+
+    config.resetAll = TRUE;
+    context.count = 0;
+    if (!JxrDecoderCodingContextResetterResetContexts(&config, &operations) ||
+        context.count != 3 || context.indices[0] != 0 || context.indices[1] != 1 ||
+        context.indices[2] != 2) return 0;
+    config.contextCount = 0;
+    return !JxrDecoderCodingContextResetterResetContexts(&config, &operations) &&
+        !JxrDecoderCodingContextResetterResetContexts(NULL, &operations);
 }
 
 static int test_inverse_color_transform_vectors(void)
@@ -2230,6 +2273,7 @@ int main(int argc, char** argv)
         { "decoder_lp_quantizer_header_applier_vectors", test_decoder_lp_quantizer_header_applier_vectors },
         { "decoder_hp_quantizer_header_applier_vectors", test_decoder_hp_quantizer_header_applier_vectors },
         { "decoder_tile_header_reader_vectors", test_decoder_tile_header_reader_vectors },
+        { "decoder_coding_context_resetter_vectors", test_decoder_coding_context_resetter_vectors },
         { "inverse_color_transform_vectors", test_inverse_color_transform_vectors },
         { "sample_clipping_vectors", test_sample_clipping_vectors },
         { "float_sample_conversion_vectors", test_float_sample_conversion_vectors },

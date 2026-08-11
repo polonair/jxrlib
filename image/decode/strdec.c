@@ -34,6 +34,7 @@
 #include "JxrDecoderLpQuantizerHeaderApplier.h"
 #include "JxrDecoderHpQuantizerHeaderApplier.h"
 #include "JxrDecoderTileHeaderReader.h"
+#include "JxrDecoderCodingContextResetter.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -167,6 +168,26 @@ static Void JxrDecoderTileHeaderReaderLegacyReadHp(Void* context,
     UNREFERENCED_PARAMETER(context);
     readTileHeaderHP(codec, input);
 }
+static Void JxrDecoderCodingContextResetterLegacyReset(Void* context,
+    CCodingContext* codingContext)
+{
+    UNREFERENCED_PARAMETER(context);
+    ResetCodingContextDec(codingContext);
+}
+
+static Bool JxrDecoderResetCodingContextsLegacy(CWMImageStrCodec* codec, Bool resetAll)
+{
+    JxrDecoderCodingContextResetterConfig config;
+    JxrDecoderCodingContextResetterOperations operations;
+
+    config.contexts = codec->m_pCodingContext;
+    config.contextCount = codec->WMISCP.cNumOfSliceMinus1V + 1;
+    config.resetAll = resetAll;
+    operations.context = NULL;
+    operations.reset = JxrDecoderCodingContextResetterLegacyReset;
+    return JxrDecoderCodingContextResetterResetContexts(&config, &operations);
+}
+
 static Bool JxrDecoderPacketAttachmentLegacyDetach(Void* context, BitIOInfo* reader)
 {
     return detachISRead((CWMImageStrCodec*)context, reader) == WMP_errSuccess;
@@ -208,16 +229,9 @@ static Bool JxrDecoderPacketHeaderReaderLegacyStoreTrim(Void* context, U32 tileC
 Int readPackets(CWMImageStrCodec * pSC)
 {
     if (pSC->cColumn == 0 && pSC->cRow == pSC->WMISCP.uiTileY[pSC->cTileRow]) {
-        size_t k;
-
         if (pSC->m_bSecondary) {
-            if (pSC->cNumBitIO > 0) {
-                for (k = 0; k <= pSC->WMISCP.cNumOfSliceMinus1V; ++k)
-                    ResetCodingContextDec(&pSC->m_pCodingContext[k]);
-            }
-            else {
-                ResetCodingContextDec(&pSC->m_pCodingContext[0]);
-            }
+            if (!JxrDecoderResetCodingContextsLegacy(pSC, pSC->cNumBitIO > 0))
+                return ICERR_ERROR;
         }
         else {
             JxrDecoderBitstreamSet bitstreams;
@@ -256,8 +270,8 @@ Int readPackets(CWMImageStrCodec * pSC)
                 pSC->pIOHeader, pSC->m_ppBitIO);
             if (!JxrDecoderPacketHeaderReaderReadRow(&headerReader, &headerOperations))
                 return ICERR_ERROR;
-            for (k = 0; k <= pSC->WMISCP.cNumOfSliceMinus1V; ++k)
-                ResetCodingContextDec(&pSC->m_pCodingContext[k]);
+            if (!JxrDecoderResetCodingContextsLegacy(pSC, TRUE))
+                return ICERR_ERROR;
         }
     }
 
