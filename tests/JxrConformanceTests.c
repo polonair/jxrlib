@@ -489,6 +489,35 @@ static int test_transcode_coefficient_transform_422_vectors(void)
         !JxrTranscodeCoefficientTransformAc422(&source, &destination, &orientation);
 }
 
+static int test_transcode_coefficient_transform_420_vectors(void)
+{
+    PixelI sourceValues[64];
+    PixelI destinationValues[64];
+    JxrTranscodeCoefficientBuffer source;
+    JxrTranscodeCoefficientBuffer destination;
+    JxrTranscodeOrientationState orientation;
+    size_t index;
+
+    for (index = 0; index < 64; ++index) sourceValues[index] = (PixelI)(10 + index);
+    memset(destinationValues, 0, sizeof(destinationValues));
+    JxrTranscodeCoefficientBufferInit(&source, sourceValues, 0, 64);
+    JxrTranscodeCoefficientBufferInit(&destination, destinationValues, 0, 64);
+    JxrTranscodeOrientationStateInit(&orientation, O_RCW);
+    if (!JxrTranscodeCoefficientTransformDc420(&source, &destination, &orientation) ||
+        destinationValues[0] != 10 || destinationValues[1] != 12 ||
+        destinationValues[2] != -11 || destinationValues[3] != -13) return 0;
+
+    for (index = 0; index < 64; ++index) sourceValues[index] = (PixelI)(1000 + index);
+    memset(destinationValues, 0, sizeof(destinationValues));
+    if (!JxrTranscodeCoefficientTransformAc420(&source, &destination, &orientation) ||
+        destinationValues[dctIndex[0][1]] != sourceValues[16 + dctIndex[0][4]] ||
+        destinationValues[2 * 16 + dctIndex[0][1]] != sourceValues[dctIndex[0][4]]) return 0;
+
+    JxrTranscodeCoefficientBufferInit(&source, sourceValues, 62, 64);
+    return !JxrTranscodeCoefficientTransformDc420(&source, &destination, &orientation) &&
+        !JxrTranscodeCoefficientTransformAc420(&source, &destination, &orientation);
+}
+
 static int test_bit_input_buffer_state_vectors(void)
 {
     JxrBitInputBufferState state;
@@ -1293,6 +1322,7 @@ int main(int argc, char** argv)
         { "transcode_orientation_state_vectors", test_transcode_orientation_state_vectors },
         { "transcode_coefficient_transform_vectors", test_transcode_coefficient_transform_vectors },
         { "transcode_coefficient_transform_422_vectors", test_transcode_coefficient_transform_422_vectors },
+        { "transcode_coefficient_transform_420_vectors", test_transcode_coefficient_transform_420_vectors },
         { "bit_input_buffer_state_vectors", test_bit_input_buffer_state_vectors },
         { "packet_source_vectors", test_packet_source_vectors },
         { "packet_executor_vectors", test_packet_executor_vectors },

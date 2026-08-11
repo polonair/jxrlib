@@ -108,53 +108,6 @@ Void transcodeTileHeader(CWMImageStrCodec * pSC, JxrTranscodeTileQuantizerState 
         }
     }
 }
-Void transformDCBlock420(PixelI * pOrg, PixelI * pDst, const JxrTranscodeOrientationState * orientation)
-{
-    if(orientation->flipVertical)
-        pOrg[1] = -pOrg[1], pOrg[3] = -pOrg[3];
-
-    if(orientation->flipHorizontal)
-        pOrg[2] = -pOrg[2], pOrg[3] = -pOrg[3];
-
-    pDst[0] = pOrg[0], pDst[3] = pOrg[3];
-    if(orientation->transpose == FALSE)
-        pDst[1] = pOrg[1], pDst[2] = pOrg[2];
-    else
-        pDst[1] = pOrg[2], pDst[2] = pOrg[1];
-}
-
-Void transformACBlocks420(PixelI * pOrg, PixelI * pDst, const JxrTranscodeOrientationState * orientation)
-{
-    PixelI * pO, * pD;
-    const Int * pT = dctIndex[0];
-    size_t i, j, k;
-
-    for(j = 0, pO = pOrg; j < 4; j ++, pO += 16){
-        if(orientation->flipVertical)
-            for(i = 0; i < 16; i += 4)
-                pO[pT[i + 1]] = -pO[pT[i + 1]], pO[pT[i + 3]] = -pO[pT[i + 3]];
-        
-        if(orientation->flipHorizontal)
-            for(i = 0; i < 4; i ++)
-                pO[pT[i + 4]] = -pO[pT[i + 4]], pO[pT[i + 12]] = -pO[pT[i + 12]];
-    }
-
-    for(j = 0; j < 2; j ++)
-        for(i = 0; i < 2; i ++){
-            size_t ii = (orientation->flipVertical ? 1 - i : i);
-            size_t jj = (orientation->flipHorizontal ? 1 - j : j);
-
-            if(orientation->transpose == FALSE)
-                memcpy(pDst + (jj * 2 + ii) * 16, pOrg + (j * 2 + i) * 16, 16 * sizeof(PixelI));
-            else{
-                pO = pOrg + (j * 2 + i) * 16;
-                pD = pDst + (ii * 2 + jj) * 16;
-                for(k = 1; k < 16; k ++)
-                    pD[pT[k]] = pO[pT[(k >> 2) + ((k & 3) << 2)]];
-            }
-        }
-}
-
 Int getROI(CWMImageInfo * pII, CCoreParameters * pCore, CWMIStrCodecParam * pSCP, CWMTranscodingParam * pParam)
 {
     const ORIENTATION oO = pParam->oOrientation;
@@ -713,8 +666,14 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
                 }
                 if(pSCEnc->WMISCP.cfColorFormat == YUV_420)
                     for(i = 0; i < 2; i ++){
-                        transformDCBlock420(pMBInfo[cOff].iBlockDC[i + 1], pSCEnc->MBInfo.iBlockDC[i + 1], &orientation);
-                        transformACBlocks420(pFrameBuf + cOff * cUnit + 256 + i * 64, pMBBuf + 256 + i * 64, &orientation);
+                        JxrTranscodeCoefficientBuffer sourceDc, destinationDc, sourceAc, destinationAc;
+                        JxrTranscodeCoefficientBufferInit(&sourceDc, pMBInfo[cOff].iBlockDC[i + 1], 0, 4);
+                        JxrTranscodeCoefficientBufferInit(&destinationDc, pSCEnc->MBInfo.iBlockDC[i + 1], 0, 4);
+                        JxrTranscodeCoefficientBufferInit(&sourceAc, pFrameBuf + cOff * cUnit + 256 + i * 64, 0, 64);
+                        JxrTranscodeCoefficientBufferInit(&destinationAc, pMBBuf + 256 + i * 64, 0, 64);
+                        if(JxrTranscodeCoefficientTransformDc420(&sourceDc, &destinationDc, &orientation) == FALSE ||
+                            JxrTranscodeCoefficientTransformAc420(&sourceAc, &destinationAc, &orientation) == FALSE)
+                            return ICERR_ERROR;
                     }
                 else if(pSCEnc->WMISCP.cfColorFormat == YUV_422)
                     for(i = 0; i < 2; i ++){

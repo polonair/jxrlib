@@ -182,3 +182,89 @@ Bool JxrTranscodeCoefficientTransformAc422(JxrTranscodeCoefficientBuffer* source
         }
     return TRUE;
 }
+
+Bool JxrTranscodeCoefficientTransformDc420(JxrTranscodeCoefficientBuffer* source,
+    JxrTranscodeCoefficientBuffer* destination,
+    const JxrTranscodeOrientationState* orientation)
+{
+    PixelI* sourceValues;
+    PixelI* destinationValues;
+
+    if (!JxrTranscodeCoefficientBufferHasRange(source, 4) ||
+        !JxrTranscodeCoefficientBufferHasRange(destination, 4) || orientation == NULL)
+        return FALSE;
+    sourceValues = source->values + source->offset;
+    destinationValues = destination->values + destination->offset;
+    if (orientation->flipVertical) {
+        sourceValues[1] = -sourceValues[1];
+        sourceValues[3] = -sourceValues[3];
+    }
+    if (orientation->flipHorizontal) {
+        sourceValues[2] = -sourceValues[2];
+        sourceValues[3] = -sourceValues[3];
+    }
+    destinationValues[0] = sourceValues[0];
+    destinationValues[3] = sourceValues[3];
+    if (!orientation->transpose) {
+        destinationValues[1] = sourceValues[1];
+        destinationValues[2] = sourceValues[2];
+    }
+    else {
+        destinationValues[1] = sourceValues[2];
+        destinationValues[2] = sourceValues[1];
+    }
+    return TRUE;
+}
+
+Bool JxrTranscodeCoefficientTransformAc420(JxrTranscodeCoefficientBuffer* source,
+    JxrTranscodeCoefficientBuffer* destination,
+    const JxrTranscodeOrientationState* orientation)
+{
+    PixelI* sourceValues;
+    PixelI* destinationValues;
+    PixelI* sourceBlock;
+    PixelI* destinationBlock;
+    const Int* transformIndex = dctIndex[0];
+    size_t blockRow;
+    size_t blockColumn;
+    size_t coefficient;
+
+    if (!JxrTranscodeCoefficientBufferHasRange(source, 64) ||
+        !JxrTranscodeCoefficientBufferHasRange(destination, 64) || orientation == NULL)
+        return FALSE;
+    sourceValues = source->values + source->offset;
+    destinationValues = destination->values + destination->offset;
+    for (blockRow = 0, sourceBlock = sourceValues; blockRow < 4; ++blockRow,
+        sourceBlock += JXR_TRANSCODE_AC_COEFFICIENT_COUNT) {
+        if (orientation->flipVertical)
+            for (coefficient = 0; coefficient < JXR_TRANSCODE_AC_COEFFICIENT_COUNT;
+                coefficient += 4) {
+                sourceBlock[transformIndex[coefficient + 1]] = -sourceBlock[transformIndex[coefficient + 1]];
+                sourceBlock[transformIndex[coefficient + 3]] = -sourceBlock[transformIndex[coefficient + 3]];
+            }
+        if (orientation->flipHorizontal)
+            for (coefficient = 0; coefficient < 4; ++coefficient) {
+                sourceBlock[transformIndex[coefficient + 4]] = -sourceBlock[transformIndex[coefficient + 4]];
+                sourceBlock[transformIndex[coefficient + 12]] = -sourceBlock[transformIndex[coefficient + 12]];
+            }
+    }
+    for (blockRow = 0; blockRow < 2; ++blockRow)
+        for (blockColumn = 0; blockColumn < 2; ++blockColumn) {
+            size_t destinationRow = orientation->flipVertical ? 1 - blockColumn : blockColumn;
+            size_t destinationColumn = orientation->flipHorizontal ? 1 - blockRow : blockRow;
+            sourceBlock = sourceValues + (blockRow * 2 + blockColumn) * JXR_TRANSCODE_AC_COEFFICIENT_COUNT;
+            if (!orientation->transpose)
+                memcpy(destinationValues + (destinationColumn * 2 + destinationRow) *
+                    JXR_TRANSCODE_AC_COEFFICIENT_COUNT, sourceBlock,
+                    JXR_TRANSCODE_AC_COEFFICIENT_COUNT * sizeof(PixelI));
+            else {
+                destinationBlock = destinationValues + (destinationRow * 2 + destinationColumn) *
+                    JXR_TRANSCODE_AC_COEFFICIENT_COUNT;
+                for (coefficient = 1; coefficient < JXR_TRANSCODE_AC_COEFFICIENT_COUNT;
+                    ++coefficient)
+                    destinationBlock[transformIndex[coefficient]] =
+                        sourceBlock[transformIndex[(coefficient >> 2) + ((coefficient & 3) << 2)]];
+            }
+        }
+    return TRUE;
+}
