@@ -45,6 +45,7 @@
 #include "JxrIndexTableReader.h"
 #include "JxrDecoderStreamInitializer.h"
 #include "JxrDecoderBitstreamSet.h"
+#include "JxrDecoderPacketAttachment.h"
 #include "JxrEntropyReader.h"
 #include "JxrLegacyBitReaderAdapter.h"
 #ifdef _WIN32
@@ -974,6 +975,96 @@ static int test_decoder_bitstream_set_vectors(void)
     return !JxrDecoderBitstreamSetInit(&bitstreams, TRUE, SPATIAL, MAX_TILES, 0, SB_ALL);
 }
 
+typedef struct JxrPacketAttachmentTestContext {
+    U32 detachCount;
+    U32 attachCount;
+    U32 seekCount;
+    BitIOInfo* lastReader;
+    struct WMPStream* lastStream;
+    U64 lastOffset;
+    Bool failAttach;
+} JxrPacketAttachmentTestContext;
+
+static Bool detach_packet_attachment_test(Void* context, BitIOInfo* reader)
+{
+    JxrPacketAttachmentTestContext* test = (JxrPacketAttachmentTestContext*)context;
+    ++test->detachCount;
+    reader->pWS = NULL;
+    return TRUE;
+}
+
+static Bool attach_packet_attachment_test(Void* context, BitIOInfo* reader, struct WMPStream* stream)
+{
+    JxrPacketAttachmentTestContext* test = (JxrPacketAttachmentTestContext*)context;
+    ++test->attachCount;
+    test->lastReader = reader;
+    test->lastStream = stream;
+    if (test->failAttach) return FALSE;
+    reader->pWS = stream;
+    return TRUE;
+}
+
+static Bool seek_packet_attachment_test(Void* context, struct WMPStream* stream, U64 offset)
+{
+    JxrPacketAttachmentTestContext* test = (JxrPacketAttachmentTestContext*)context;
+    ++test->seekCount;
+    test->lastStream = stream;
+    test->lastOffset = offset;
+    return TRUE;
+}
+
+static int test_decoder_packet_attachment_vectors(void)
+{
+    JxrDecoderBitstreamSet bitstreams;
+    JxrDecoderPacketAttachmentConfig config;
+    JxrDecoderPacketAttachmentOperations operations;
+    JxrPacketAttachmentTestContext context;
+    BitIOInfo header, storage[6];
+    BitIOInfo* readers[6];
+    size_t offsets[4] = { 100, 200, 300, 400 };
+    struct WMPStream* primary = (struct WMPStream*)(size_t)1;
+    struct WMPStream* external[12];
+    U32 index;
+
+    memset(&context, 0, sizeof(context));
+    memset(&header, 0, sizeof(header));
+    memset(storage, 0, sizeof(storage));
+    for (index = 0; index < 6; ++index) readers[index] = &storage[index];
+    for (index = 0; index < 12; ++index) external[index] = (struct WMPStream*)(size_t)(index + 10);
+    operations.context = &context;
+    operations.detach = detach_packet_attachment_test;
+    operations.attach = attach_packet_attachment_test;
+    operations.seek = seek_packet_attachment_test;
+
+    if (!JxrDecoderBitstreamSetInit(&bitstreams, FALSE, SPATIAL, 0, 0, SB_ALL)) return 0;
+    JxrDecoderPacketAttachmentConfigInit(&config, &bitstreams, 0, 1, FALSE, &header, NULL,
+        NULL, 12, primary, NULL, 0);
+    if (!JxrDecoderPacketAttachmentAttachRow(&config, &operations) || context.detachCount != 1 ||
+        context.seekCount != 1 || context.lastOffset != 12 || context.attachCount != 1 ||
+        header.pWS != primary) return 0;
+
+    memset(&context, 0, sizeof(context));
+    if (!JxrDecoderBitstreamSetInit(&bitstreams, TRUE, SPATIAL, 1, 1, SB_ALL)) return 0;
+    readers[0]->pWS = primary; readers[1]->pWS = primary;
+    JxrDecoderPacketAttachmentConfigInit(&config, &bitstreams, 1, 2, FALSE, NULL, readers,
+        offsets, 10, primary, NULL, 0);
+    if (!JxrDecoderPacketAttachmentAttachRow(&config, &operations) || context.detachCount != 2 ||
+        context.seekCount != 2 || context.lastOffset != 410 || context.attachCount != 2 ||
+        readers[0]->pWS != primary || readers[1]->pWS != primary) return 0;
+
+    memset(&context, 0, sizeof(context));
+    if (!JxrDecoderBitstreamSetInit(&bitstreams, TRUE, FREQUENCY, 1, 1, SB_NO_FLEXBITS)) return 0;
+    for (index = 0; index < 6; ++index) readers[index]->pWS = primary;
+    JxrDecoderPacketAttachmentConfigInit(&config, &bitstreams, 1, 2, TRUE, NULL, readers,
+        NULL, 0, NULL, external, 12);
+    if (!JxrDecoderPacketAttachmentAttachRow(&config, &operations) || context.detachCount != 6 ||
+        context.seekCount != 0 || context.attachCount != 6 || readers[0]->pWS != external[6] ||
+        readers[5]->pWS != external[11]) return 0;
+
+    context.failAttach = TRUE;
+    return !JxrDecoderPacketAttachmentAttachRow(&config, &operations);
+}
+
 static int test_bit_input_buffer_state_vectors(void)
 {
     JxrBitInputBufferState state;
@@ -1793,6 +1884,7 @@ int main(int argc, char** argv)
         { "index_table_reader_vectors", test_index_table_reader_vectors },
         { "decoder_stream_initializer_vectors", test_decoder_stream_initializer_vectors },
         { "decoder_bitstream_set_vectors", test_decoder_bitstream_set_vectors },
+        { "decoder_packet_attachment_vectors", test_decoder_packet_attachment_vectors },
         { "bit_input_buffer_state_vectors", test_bit_input_buffer_state_vectors },
         { "packet_source_vectors", test_packet_source_vectors },
         { "packet_executor_vectors", test_packet_executor_vectors },

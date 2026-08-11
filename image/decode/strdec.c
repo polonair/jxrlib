@@ -38,6 +38,7 @@
 #include "JxrVariableLengthWordReader.h"
 #include "JxrIndexTableReader.h"
 #include "JxrDecoderStreamInitializer.h"
+#include "JxrDecoderPacketAttachment.h"
 #include "strTransform.h"
 #include <math.h>
 #include "perfTimer.h"
@@ -172,6 +173,23 @@ Int readTileHeaderHP(CWMImageStrCodec * pSC, BitIOInfo * pIO)
     }
     return ICERR_OK;
 }
+static Bool JxrDecoderPacketAttachmentLegacyDetach(Void* context, BitIOInfo* reader)
+{
+    return detachISRead((CWMImageStrCodec*)context, reader) == WMP_errSuccess;
+}
+
+static Bool JxrDecoderPacketAttachmentLegacyAttach(Void* context, BitIOInfo* reader,
+    struct WMPStream* stream)
+{
+    return attachISRead(reader, stream, (CWMImageStrCodec*)context) == WMP_errSuccess;
+}
+
+static Bool JxrDecoderPacketAttachmentLegacySeek(Void* context, struct WMPStream* stream,
+    U64 offset)
+{
+    UNREFERENCED_PARAMETER(context);
+    return stream->SetPos(stream, (size_t)offset) == WMP_errSuccess;
+}
 Int readPackets(CWMImageStrCodec * pSC)
 {
     if(pSC->cColumn == 0 && pSC->cRow == pSC->WMISCP.uiTileY[pSC->cTileRow]){ // start of a new horizontal slice
@@ -189,38 +207,29 @@ Int readPackets(CWMImageStrCodec * pSC)
             }
         }
         else {
-            // get sizes of each packet and update index table
-            for(k = 0; k < pSC->cNumBitIO; k ++){
-                if(pSC->ppWStream != NULL){ // new API
-                    unsigned cBands = (pSC->WMISCP.bfBitstreamFormat == SPATIAL ? 1 : pSC->cSB);
-                    struct WMPStream ** ppWS = pSC->ppWStream + (pSC->WMISCP.cNumOfSliceMinus1V + 1) * pSC->cTileRow * cBands
-                        + k / cBands * cBands + (k % cBands);
+            JxrDecoderBitstreamSet bitstreams;
+            JxrDecoderPacketAttachmentConfig attachment;
+            JxrDecoderPacketAttachmentOperations attachmentOperations;
+            U32 tileRowCount = pSC->WMISCP.cNumOfSliceMinus1H + 1;
+            U32 externalStreamCount = tileRowCount * (pSC->cNumBitIO == 0 ? 1 : (U32)pSC->cNumBitIO);
 
-                    if(pSC->cTileRow > 0 && pSC->m_ppBitIO[k]->pWS != NULL)     // attached to the same packet of the tile on top
-                        detachISRead(pSC, pSC->m_ppBitIO[k]);    // detach it
-                    
-                    if(ppWS[0] != NULL)
-                        attachISRead(pSC->m_ppBitIO[k], ppWS[0], pSC); // need to attach it
-                }
-                else{
-                    if(pSC->cTileRow > 0)
-                        detachISRead(pSC, pSC->m_ppBitIO[k]);
-                    pSC->WMISCP.pWStream->SetPos(pSC->WMISCP.pWStream, pSC->pIndexTable[pSC->cNumBitIO * pSC->cTileRow + k] + pSC->cHeaderSize);
-                    attachISRead(pSC->m_ppBitIO[k], pSC->WMISCP.pWStream, pSC);
-                }
+            if (!JxrDecoderBitstreamSetInit(&bitstreams, pSC->m_param.bIndexTable,
+                pSC->WMISCP.bfBitstreamFormat, pSC->WMISCP.cNumOfSliceMinus1V,
+                pSC->WMISCP.cNumOfSliceMinus1H, pSC->WMISCP.sbSubband) ||
+                bitstreams.bitstreamCount != pSC->cNumBitIO)
+            {
+                return ICERR_ERROR;
             }
-            
-            if(pSC->cNumBitIO == 0){
-                detachISRead(pSC, pSC->pIOHeader);
-                if(pSC->ppWStream != NULL){// new API
-                    attachISRead(pSC->pIOHeader, pSC->ppWStream[0], pSC); // need to attach it
-                }
-                else{
-                    pSC->WMISCP.pWStream->SetPos(pSC->WMISCP.pWStream, pSC->cHeaderSize);
-                    attachISRead(pSC->pIOHeader, pSC->WMISCP.pWStream, pSC);
-                }
-            }
-            
+            attachmentOperations.context = pSC;
+            attachmentOperations.detach = JxrDecoderPacketAttachmentLegacyDetach;
+            attachmentOperations.attach = JxrDecoderPacketAttachmentLegacyAttach;
+            attachmentOperations.seek = JxrDecoderPacketAttachmentLegacySeek;
+            JxrDecoderPacketAttachmentConfigInit(&attachment, &bitstreams, (U32)pSC->cTileRow,
+                tileRowCount, pSC->ppWStream != NULL, pSC->pIOHeader, pSC->m_ppBitIO,
+                pSC->pIndexTable, (U64)pSC->cHeaderSize, pSC->WMISCP.pWStream,
+                pSC->ppWStream, externalStreamCount);
+            if (!JxrDecoderPacketAttachmentAttachRow(&attachment, &attachmentOperations))
+                return ICERR_ERROR;
             for(k = 0; k <= pSC->WMISCP.cNumOfSliceMinus1V; k ++){
                 U8 pID = (U8)((pSC->cTileRow * (pSC->WMISCP.cNumOfSliceMinus1V + 1) + k) & 0x1F);
                 
