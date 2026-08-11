@@ -32,6 +32,7 @@
 #include "JxrTranscodeQuantizerWriter.h"
 #include "JxrTranscodeTileHeaderWriter.h"
 #include "JxrTranscodeOrientationState.h"
+#include "JxrTranscodeCoefficientTransform.h"
 #include "JxrEntropyReader.h"
 #include "JxrLegacyBitReaderAdapter.h"
 #ifdef _WIN32
@@ -421,6 +422,40 @@ static int test_transcode_orientation_state_vectors(void)
                 (state.transpose ? 23U : 19U)) return 0;
     }
     return 1;
+}
+
+static int test_transcode_coefficient_transform_vectors(void)
+{
+    PixelI sourceValues[300];
+    PixelI destinationValues[300];
+    JxrTranscodeCoefficientBuffer source;
+    JxrTranscodeCoefficientBuffer destination;
+    JxrTranscodeOrientationState orientation;
+    size_t index;
+
+    for (index = 0; index < 300; ++index) sourceValues[index] = (PixelI)index;
+    memset(destinationValues, 0, sizeof(destinationValues));
+    JxrTranscodeCoefficientBufferInit(&source, sourceValues, 4, 300);
+    JxrTranscodeCoefficientBufferInit(&destination, destinationValues, 8, 300);
+    JxrTranscodeOrientationStateInit(&orientation, O_RCW);
+    if (!JxrTranscodeCoefficientTransformDc444(&source, &destination, &orientation) ||
+        destinationValues[8] != 4 || destinationValues[9] != 8 ||
+        destinationValues[10] != 12 || destinationValues[11] != 16 ||
+        destinationValues[12] != -5 || destinationValues[13] != -9 ||
+        destinationValues[14] != -13 || destinationValues[15] != -17 ||
+        sourceValues[5] != -5 || sourceValues[19] != -19) return 0;
+
+    for (index = 0; index < 256; ++index) sourceValues[index] = (PixelI)(1000 + index);
+    memset(destinationValues, 0, sizeof(destinationValues));
+    JxrTranscodeCoefficientBufferInit(&source, sourceValues, 0, 256);
+    JxrTranscodeCoefficientBufferInit(&destination, destinationValues, 0, 256);
+    JxrTranscodeOrientationStateInit(&orientation, O_FLIPH);
+    if (!JxrTranscodeCoefficientTransformAc444(&source, &destination, &orientation) ||
+        destinationValues[12 * 16] != 1000 || destinationValues[0] != 1192 ||
+        sourceValues[dctIndex[0][4]] != -(1000 + dctIndex[0][4])) return 0;
+
+    JxrTranscodeCoefficientBufferInit(&source, sourceValues, 250, 256);
+    return !JxrTranscodeCoefficientTransformAc444(&source, &destination, &orientation);
 }
 
 static int test_bit_input_buffer_state_vectors(void)
@@ -1225,6 +1260,7 @@ int main(int argc, char** argv)
         { "transcode_quantizer_writer_vectors", test_transcode_quantizer_writer_vectors },
         { "transcode_tile_header_writer_vectors", test_transcode_tile_header_writer_vectors },
         { "transcode_orientation_state_vectors", test_transcode_orientation_state_vectors },
+        { "transcode_coefficient_transform_vectors", test_transcode_coefficient_transform_vectors },
         { "bit_input_buffer_state_vectors", test_bit_input_buffer_state_vectors },
         { "packet_source_vectors", test_packet_source_vectors },
         { "packet_executor_vectors", test_packet_executor_vectors },

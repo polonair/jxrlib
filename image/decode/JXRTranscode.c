@@ -33,6 +33,7 @@
 #include "JxrTranscodeQuantizerWriter.h"
 #include "JxrTranscodeTileHeaderWriter.h"
 #include "JxrTranscodeOrientationState.h"
+#include "JxrTranscodeCoefficientTransform.h"
 
 EXTERN_C Void freePredInfo(CWMImageStrCodec *);
 
@@ -107,25 +108,6 @@ Void transcodeTileHeader(CWMImageStrCodec * pSC, JxrTranscodeTileQuantizerState 
         }
     }
 }
-Void transformDCBlock(PixelI * pOrg, PixelI * pDst, const JxrTranscodeOrientationState * orientation)
-{
-    size_t i;
-
-    if(orientation->flipVertical)
-        for(i = 0; i < 16; i += 4)
-            pOrg[i + 1] = -pOrg[i + 1], pOrg[i + 3] = -pOrg[i + 3];
-
-    if(orientation->flipHorizontal)
-        for(i = 0; i < 4; i ++)
-            pOrg[i + 4] = -pOrg[i + 4], pOrg[i + 12] = -pOrg[i + 12];
-
-    if(orientation->transpose == FALSE)
-        memcpy(pDst, pOrg, 16 * sizeof(PixelI));
-    else
-        for(i = 0; i < 16; i ++)
-            pDst[i] = pOrg[(i >> 2) + ((i & 3) << 2)];
-}
-
 Void transformDCBlock422(PixelI * pOrg, PixelI * pDst, const JxrTranscodeOrientationState * orientation)
 {
     assert(orientation->transpose == FALSE);
@@ -155,38 +137,6 @@ Void transformDCBlock420(PixelI * pOrg, PixelI * pDst, const JxrTranscodeOrienta
         pDst[1] = pOrg[1], pDst[2] = pOrg[2];
     else
         pDst[1] = pOrg[2], pDst[2] = pOrg[1];
-}
-
-Void transformACBlocks(PixelI * pOrg, PixelI * pDst, const JxrTranscodeOrientationState * orientation)
-{
-    PixelI * pO, * pD;
-    const Int * pT = dctIndex[0];
-    size_t i, j, k;
-
-    for(j = 0, pO = pOrg; j < 16; j ++, pO += 16){
-        if(orientation->flipVertical)
-            for(i = 0; i < 16; i += 4)
-                pO[pT[i + 1]] = -pO[pT[i + 1]], pO[pT[i + 3]] = -pO[pT[i + 3]];
-        
-        if(orientation->flipHorizontal)
-            for(i = 0; i < 4; i ++)
-                pO[pT[i + 4]] = -pO[pT[i + 4]], pO[pT[i + 12]] = -pO[pT[i + 12]];
-    }
-
-    for(j = 0; j < 4; j ++)
-        for(i = 0; i < 4; i ++){
-            size_t ii = (orientation->flipVertical ? 3 - i : i);
-            size_t jj = (orientation->flipHorizontal ? 3 - j : j);
-
-            if(orientation->transpose == FALSE)
-                memcpy(pDst + (jj * 4 + ii) * 16, pOrg + (j * 4 + i) * 16, 16 * sizeof(PixelI));
-            else{
-                pO = pOrg + (j * 4 + i) * 16;
-                pD = pDst + (ii * 4 + jj) * 16;
-                for(k = 1; k < 16; k ++)
-                    pD[pT[k]] = pO[pT[(k >> 2) + ((k & 3) << 2)]];
-            }
-        }
 }
 
 Void transformACBlocks422(PixelI * pOrg, PixelI * pDst, const JxrTranscodeOrientationState * orientation)
@@ -795,8 +745,14 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
                 size_t cOff = (pSCEnc->cRow - 1) * pSCEnc->cmbWidth + pSCEnc->cColumn - 1;
                 
                 for(i = 0; i < ((pSCEnc->m_param.cfColorFormat == YUV_420 || pSCEnc->m_param.cfColorFormat == YUV_422) ? 1 : pSCEnc->m_param.cNumChannels); i ++){
-                    transformDCBlock(pMBInfo[cOff].iBlockDC[i], pSCEnc->MBInfo.iBlockDC[i], &orientation);
-                    transformACBlocks(pFrameBuf + cOff * cUnit + i * 256, pMBBuf + 256 * i, &orientation);
+                    JxrTranscodeCoefficientBuffer sourceDc, destinationDc, sourceAc, destinationAc;
+                    JxrTranscodeCoefficientBufferInit(&sourceDc, pMBInfo[cOff].iBlockDC[i], 0, 16);
+                    JxrTranscodeCoefficientBufferInit(&destinationDc, pSCEnc->MBInfo.iBlockDC[i], 0, 16);
+                    JxrTranscodeCoefficientBufferInit(&sourceAc, pFrameBuf + cOff * cUnit + i * 256, 0, 256);
+                    JxrTranscodeCoefficientBufferInit(&destinationAc, pMBBuf + 256 * i, 0, 256);
+                    if(JxrTranscodeCoefficientTransformDc444(&sourceDc, &destinationDc, &orientation) == FALSE ||
+                        JxrTranscodeCoefficientTransformAc444(&sourceAc, &destinationAc, &orientation) == FALSE)
+                        return ICERR_ERROR;
                 }
                 if(pSCEnc->WMISCP.cfColorFormat == YUV_420)
                     for(i = 0; i < 2; i ++){
@@ -827,8 +783,14 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
                     getTilePos(pSCEnc->m_pNextSC, cColumn, cRow);
                     pSCEnc->m_pNextSC->MBInfo = pSCDec->m_pNextSC->MBInfo;
 
-                    transformDCBlock(pMBInfoAlpha[cOff].iBlockDC[0], pSCEnc->m_pNextSC->MBInfo.iBlockDC[0], &orientation);
-                    transformACBlocks(pFrameBufAlpha + cOff * 256, MBBufAlpha, &orientation);
+                    JxrTranscodeCoefficientBuffer sourceDc, destinationDc, sourceAc, destinationAc;
+                    JxrTranscodeCoefficientBufferInit(&sourceDc, pMBInfoAlpha[cOff].iBlockDC[0], 0, 16);
+                    JxrTranscodeCoefficientBufferInit(&destinationDc, pSCEnc->m_pNextSC->MBInfo.iBlockDC[0], 0, 16);
+                    JxrTranscodeCoefficientBufferInit(&sourceAc, pFrameBufAlpha + cOff * 256, 0, 256);
+                    JxrTranscodeCoefficientBufferInit(&destinationAc, MBBufAlpha, 0, 256);
+                    if(JxrTranscodeCoefficientTransformDc444(&sourceDc, &destinationDc, &orientation) == FALSE ||
+                        JxrTranscodeCoefficientTransformAc444(&sourceAc, &destinationAc, &orientation) == FALSE)
+                        return ICERR_ERROR;
 
                     pSCEnc->m_pNextSC->MBInfo.iQIndexLP = pMBInfoAlpha[cOff].iQIndexLP;
                     pSCEnc->m_pNextSC->MBInfo.iQIndexHP = pMBInfoAlpha[cOff].iQIndexHP;
