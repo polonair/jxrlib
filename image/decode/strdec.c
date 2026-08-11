@@ -2240,32 +2240,22 @@ Int decodeThumbnail(CWMImageStrCodec * pSC)
     {
         const CWMImageInfo* pII = &pSC->WMII;
 
-#define fixupThumb(type, nCh) \
-for(iRow = iFirstRow; iRow < cHeight; iRow += tScale) {\
-    size_t iOffsetY;\
-    for(iColumn = iFirstColumn, iOffsetY = pOffsetY[iRow >> nBits]; iColumn < cWidth; iColumn += tScale){\
-        type *pT = (type*)((U8 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iOffsetY);\
-        pT[iB] = pT[1] = pT[iR]; \
-    } \
-} \
-break
-
         switch (pII->bdBitDepth)
         {
             case BD_8:
-                fixupThumb(U8, (pII->cBitsPerUnit >> 3));
+                JxrMonochromeExpansionReplicateByteAtScaledOffsets((U8*)pSC->WMIBI.pv, pOffsetX, pOffsetY, iFirstRow, cHeight, iFirstColumn, cWidth, tScale, nBits, iR, iB);
                 break;
 
             case BD_16:
             case BD_16S:
             case BD_16F:
-                fixupThumb(U16, (pII->cBitsPerUnit >> 3) / sizeof(U16));
+                JxrMonochromeExpansionReplicateUInt16AtScaledOffsets((U16*)pSC->WMIBI.pv, pOffsetX, pOffsetY, iFirstRow, cHeight, iFirstColumn, cWidth, tScale, nBits, iR, iB);
                 break;
 
             case BD_32:
             case BD_32S:
             case BD_32F:
-                fixupThumb(U32, (pII->cBitsPerUnit >> 3) / sizeof(float));
+                JxrMonochromeExpansionReplicateUInt32AtScaledOffsets((U32*)pSC->WMIBI.pv, pOffsetX, pOffsetY, iFirstRow, cHeight, iFirstColumn, cWidth, tScale, nBits, iR, iB);
                 break;
 
             case BD_5:

@@ -18,5 +18,14 @@ Void JxrMonochromeExpansionReplicateUInt16AtOffsets(U16* buffer, const size_t* x
 Void JxrMonochromeExpansionReplicateUInt32AtOffsets(U32* buffer, const size_t* xOffsets,
     const size_t* yOffsets, size_t firstRow, size_t endRow, size_t firstColumn,
     size_t endColumn);
+Void JxrMonochromeExpansionReplicateByteAtScaledOffsets(U8* buffer, const size_t* xOffsets,
+    const size_t* yOffsets, size_t firstRow, size_t endRow, size_t firstColumn,
+    size_t endColumn, size_t scale, size_t scaleBits, size_t sourceIndex, size_t blueIndex);
+Void JxrMonochromeExpansionReplicateUInt16AtScaledOffsets(U16* buffer, const size_t* xOffsets,
+    const size_t* yOffsets, size_t firstRow, size_t endRow, size_t firstColumn,
+    size_t endColumn, size_t scale, size_t scaleBits, size_t sourceIndex, size_t blueIndex);
+Void JxrMonochromeExpansionReplicateUInt32AtScaledOffsets(U32* buffer, const size_t* xOffsets,
+    const size_t* yOffsets, size_t firstRow, size_t endRow, size_t firstColumn,
+    size_t endColumn, size_t scale, size_t scaleBits, size_t sourceIndex, size_t blueIndex);
 
 #endif
