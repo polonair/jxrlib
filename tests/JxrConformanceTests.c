@@ -34,6 +34,7 @@
 #include "JxrTranscodeOrientationState.h"
 #include "JxrTranscodeCoefficientTransform.h"
 #include "JxrTranscodeTileExtractionDecision.h"
+#include "JxrTranscodeRoiGeometry.h"
 #include "JxrEntropyReader.h"
 #include "JxrLegacyBitReaderAdapter.h"
 #ifdef _WIN32
@@ -552,6 +553,45 @@ static int test_transcode_tile_extraction_decision_vectors(void)
     decision.hasTransform = FALSE;
     decision.roiLeftPixels = 1;
     return !JxrTranscodeTileExtractionDecisionCanUseFastPath(&decision);
+}
+
+static int test_transcode_roi_geometry_vectors(void)
+{
+    JxrTranscodeRoiGeometryRequest request;
+    JxrTranscodeRoiGeometryResult result;
+
+    memset(&request, 0, sizeof(request));
+    request.imageWidth = 100;
+    request.imageHeight = 80;
+    request.extraLeft = 3;
+    request.extraTop = 5;
+    request.extraRight = 1;
+    request.extraBottom = 2;
+    request.requestedLeft = 10;
+    request.requestedTop = 10;
+    request.requestedWidth = 20;
+    request.requestedHeight = 20;
+    request.overlap = OL_NONE;
+    if (!JxrTranscodeRoiGeometryCalculate(&request, &result) ||
+        result.expandedLeft != 13 || result.expandedTop != 15 ||
+        result.macroblockLeft != 0 || result.macroblockTop != 0 ||
+        result.macroblockRight != 3 || result.macroblockBottom != 3 ||
+        result.extraLeft != 13 || result.extraTop != 15 ||
+        result.extraRight != 15 || result.extraBottom != 13) return 0;
+
+    request.requestedLeft = 0;
+    request.requestedTop = 0;
+    request.requestedWidth = 5;
+    request.requestedHeight = 5;
+    request.overlap = OL_TWO;
+    if (!JxrTranscodeRoiGeometryCalculate(&request, &result) ||
+        result.expandedLeft != 0 || result.expandedTop != 0 ||
+        result.expandedWidth != 18 || result.expandedHeight != 20 ||
+        result.macroblockRight != 2 || result.macroblockBottom != 2) return 0;
+
+    request.requestedLeft = 99;
+    request.requestedWidth = 2;
+    return !JxrTranscodeRoiGeometryCalculate(&request, &result);
 }
 
 static int test_bit_input_buffer_state_vectors(void)
@@ -1360,6 +1400,7 @@ int main(int argc, char** argv)
         { "transcode_coefficient_transform_422_vectors", test_transcode_coefficient_transform_422_vectors },
         { "transcode_coefficient_transform_420_vectors", test_transcode_coefficient_transform_420_vectors },
         { "transcode_tile_extraction_decision_vectors", test_transcode_tile_extraction_decision_vectors },
+        { "transcode_roi_geometry_vectors", test_transcode_roi_geometry_vectors },
         { "bit_input_buffer_state_vectors", test_bit_input_buffer_state_vectors },
         { "packet_source_vectors", test_packet_source_vectors },
         { "packet_executor_vectors", test_packet_executor_vectors },

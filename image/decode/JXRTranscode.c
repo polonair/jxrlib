@@ -35,6 +35,7 @@
 #include "JxrTranscodeOrientationState.h"
 #include "JxrTranscodeCoefficientTransform.h"
 #include "JxrTranscodeTileExtractionDecision.h"
+#include "JxrTranscodeRoiGeometry.h"
 
 EXTERN_C Void freePredInfo(CWMImageStrCodec *);
 
@@ -113,49 +114,44 @@ Int getROI(CWMImageInfo * pII, CCoreParameters * pCore, CWMIStrCodecParam * pSCP
 {
     const ORIENTATION oO = pParam->oOrientation;
     JxrTranscodeOrientationState orientation;
-    size_t iLeft, iTop, cWidth, cHeight, i, j;
+    JxrTranscodeRoiGeometryRequest request;
+    JxrTranscodeRoiGeometryResult result;
+    size_t i, j;
     size_t mbLeft, mbRight, mbTop, mbBottom;
-    JxrTranscodeOrientationStateInit(&orientation, oO);
     size_t * iTile = (size_t *)malloc(MAX_TILES * sizeof(size_t));
 
     if(iTile == NULL)
         return ICERR_ERROR;
-    
-    if(pParam->cLeftX + pParam->cWidth > pII->cWidth || pParam->cTopY + pParam->cHeight > pII->cHeight) // invalid region
+    JxrTranscodeOrientationStateInit(&orientation, oO);
+    memset(&request, 0, sizeof(request));
+    request.imageWidth = pII->cWidth;
+    request.imageHeight = pII->cHeight;
+    request.extraLeft = pCore->cExtraPixelsLeft;
+    request.extraTop = pCore->cExtraPixelsTop;
+    request.extraRight = pCore->cExtraPixelsRight;
+    request.extraBottom = pCore->cExtraPixelsBottom;
+    request.requestedLeft = pParam->cLeftX;
+    request.requestedTop = pParam->cTopY;
+    request.requestedWidth = pParam->cWidth;
+    request.requestedHeight = pParam->cHeight;
+    request.overlap = pSCP->olOverlap;
+    request.ignoreOverlap = pParam->bIgnoreOverlap;
+    if(JxrTranscodeRoiGeometryCalculate(&request, &result) == FALSE)
         return ICERR_ERROR;
-
-    cWidth = pParam->cWidth, cHeight = pParam->cHeight;
-    iLeft = pParam->cLeftX + pCore->cExtraPixelsLeft, iTop = pParam->cTopY + pCore->cExtraPixelsTop;
-    if(pSCP->olOverlap != OL_NONE && pParam->bIgnoreOverlap == FALSE){ // include pixels borrowed
-        size_t cBlurred = (pSCP->olOverlap == OL_TWO ? 10 : 2);
-
-        if(iLeft > cBlurred)
-            iLeft -= cBlurred, cWidth += cBlurred;
-        else
-            cWidth += iLeft, iLeft = 0;
-        if(iTop > cBlurred)
-            iTop -= cBlurred, cHeight += cBlurred;
-        else
-            cHeight += iTop, iTop = 0;
-        cWidth += cBlurred, cHeight += cBlurred;
-        if(iLeft + cWidth > pII->cWidth + pCore->cExtraPixelsLeft + pCore->cExtraPixelsRight)
-            cWidth = pII->cWidth  + pCore->cExtraPixelsLeft + pCore->cExtraPixelsRight - iLeft;
-        if(iTop + cHeight > pII->cHeight + pCore->cExtraPixelsTop + pCore->cExtraPixelsBottom)
-            cHeight = pII->cHeight + pCore->cExtraPixelsTop + pCore->cExtraPixelsBottom - iTop;
-    }
-
-    mbTop = (iTop >> 4), mbLeft = (iLeft >> 4);
-    mbBottom = (iTop + cHeight + 15) >> 4, mbRight = (iLeft + cWidth + 15) >> 4;
-    pCore->cExtraPixelsLeft += pParam->cLeftX - (mbLeft << 4);
-    pCore->cExtraPixelsRight = ((mbRight - mbLeft) << 4) - pParam->cWidth - pCore->cExtraPixelsLeft;
-    pCore->cExtraPixelsTop += pParam->cTopY - (mbTop << 4);
-    pCore->cExtraPixelsBottom = ((mbBottom - mbTop) << 4) - pParam->cHeight - pCore->cExtraPixelsTop;
-
-    pII->cWidth = ((mbRight - mbLeft) << 4) - pCore->cExtraPixelsLeft - pCore->cExtraPixelsRight;
-    pII->cHeight = ((mbBottom - mbTop) << 4) - pCore->cExtraPixelsTop - pCore->cExtraPixelsBottom;
-    pParam->cLeftX = iLeft, pParam->cTopY = iTop;
-    pParam->cWidth = cWidth, pParam->cHeight = cHeight;
-
+    pCore->cExtraPixelsLeft = result.extraLeft;
+    pCore->cExtraPixelsTop = result.extraTop;
+    pCore->cExtraPixelsRight = result.extraRight;
+    pCore->cExtraPixelsBottom = result.extraBottom;
+    pII->cWidth = result.imageWidth;
+    pII->cHeight = result.imageHeight;
+    pParam->cLeftX = result.expandedLeft;
+    pParam->cTopY = result.expandedTop;
+    pParam->cWidth = result.expandedWidth;
+    pParam->cHeight = result.expandedHeight;
+    mbLeft = result.macroblockLeft;
+    mbRight = result.macroblockRight;
+    mbTop = result.macroblockTop;
+    mbBottom = result.macroblockBottom;
     // extra pixels in transformed space
     if(orientation.flipHorizontal)
         JxrTranscodeSwapSize(&pCore->cExtraPixelsLeft, &pCore->cExtraPixelsRight);
