@@ -35,6 +35,7 @@
 #include "JxrFloatSampleConversion.h"
 #include "JxrMonochromeExpansion.h"
 #include "JxrDecoderRoiRowRange.h"
+#include "JxrVariableLengthWordReader.h"
 #include "strTransform.h"
 #include <math.h>
 #include "perfTimer.h"
@@ -2270,43 +2271,16 @@ Int decodeThumbnail(CWMImageStrCodec * pSC)
     return ICERR_OK;
 }
 
-/*************************************************************************
-    Read variable length byte aligned integer
-*************************************************************************/
-static size_t GetVLWordEsc(BitIOInfo* pIO, Int *iEscape)
-{
-    size_t s;
-
-    if (iEscape)
-        *iEscape = 0;
-
-    s = getBit32(pIO, 8);
-    if (s == 0xfd || s == 0xfe || s == 0xff) {
-        if (iEscape)
-            *iEscape = (Int) s;
-        s = 0;
-    }
-    else if (s < 0xfb) {
-        s = (s << 8) | getBit32(pIO, 8);
-    }
-    else {
-        s -= 0xfb;
-        if (s) {
-            s = getBit32(pIO, 16) << 16;
-            s = (s | getBit32(pIO, 16)) << 16;
-            s <<= 16;
-        }
-        s |= (getBit32(pIO, 16) << 16);
-        s |= getBit32(pIO, 16);
-    }
-    return s;
-}
+// Variable-length index words are implemented by JxrVariableLengthWordReader.
 
 //================================================================
 Int readIndexTable(CWMImageStrCodec * pSC)
 {
     BitIOInfo* pIO = pSC->pIOHeader;
+    JxrDecoderBitSource source;
+    U64 variableLengthWord;
     readIS_L1(pSC, pIO);
+    JxrVariableLengthWordReaderInitLegacy(&source, pIO);
 
     if(pSC->cNumBitIO > 0){
         size_t *pTable = pSC->pIndexTable;
@@ -2319,11 +2293,15 @@ Int readIndexTable(CWMImageStrCodec * pSC)
         //iBits = getBit16(pIO, 5) + 1; // how many bits per entry
         for(i = 0; i < iEntry; i ++){
             readIS_L1(pSC, pIO);
-            pTable[i] = GetVLWordEsc(pIO, NULL);  // escape handling is not important since the respective band is not accessed
+            if(!JxrVariableLengthWordReaderRead(&source, &variableLengthWord, NULL))
+                return ICERR_ERROR;
+            pTable[i] = (size_t)variableLengthWord;
         }
     }
 
-    pSC->cHeaderSize = GetVLWordEsc(pIO, NULL);  // escape handling is not important
+    if(!JxrVariableLengthWordReaderRead(&source, &variableLengthWord, NULL))
+        return ICERR_ERROR;
+    pSC->cHeaderSize = (size_t)variableLengthWord;
     flushToByte(pIO);    
     
     pSC->cHeaderSize += getPosRead(pSC->pIOHeader); // get header length

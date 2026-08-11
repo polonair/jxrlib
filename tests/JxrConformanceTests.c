@@ -41,6 +41,7 @@
 #include "JxrFloatSampleConversion.h"
 #include "JxrMonochromeExpansion.h"
 #include "JxrDecoderRoiRowRange.h"
+#include "JxrVariableLengthWordReader.h"
 #include "JxrEntropyReader.h"
 #include "JxrLegacyBitReaderAdapter.h"
 #ifdef _WIN32
@@ -776,6 +777,35 @@ static int test_decoder_roi_row_range_vectors(void)
         JxrDecoderRoiRowRangeGetOutputHeight(17, 2) == 1 &&
         JxrDecoderRoiRowRangeGetOutputHeight(31, 2) == 15 &&
         JxrDecoderRoiRowRangeGetOutputHeight(32, 2) == 16;
+}
+
+static int test_variable_length_word_vectors(void)
+{
+    U8 data[24] = { 0 };
+    JxrBitWriter writer;
+    JxrBitReader reader;
+    JxrDecoderBitSource source;
+    U64 value;
+    U8 escape;
+
+    JxrBitWriterInit(&writer, data, sizeof(data));
+    if (!JxrBitWriterWrite(&writer, 0xfd, 8) || !JxrBitWriterWrite(&writer, 0xfe, 8) ||
+        !JxrBitWriterWrite(&writer, 0xff, 8) || !JxrBitWriterWrite(&writer, 0x12, 8) ||
+        !JxrBitWriterWrite(&writer, 0x34, 8) || !JxrBitWriterWrite(&writer, 0xfb, 8) ||
+        !JxrBitWriterWrite(&writer, 0xabcd, 16) || !JxrBitWriterWrite(&writer, 0xef01, 16) ||
+        !JxrBitWriterWrite(&writer, 0xfc, 8) || !JxrBitWriterWrite(&writer, 0x1111, 16) ||
+        !JxrBitWriterWrite(&writer, 0x2222, 16) || !JxrBitWriterWrite(&writer, 0x3333, 16) ||
+        !JxrBitWriterWrite(&writer, 0x4444, 16) || !JxrBitWriterFlush(&writer)) return 0;
+    JxrBitReaderInit(&reader, data, JxrBitWriterBytes(&writer));
+    JxrDecoderBitSourceInit(&source, &reader, read_decoder_test_bits);
+    if (!JxrVariableLengthWordReaderRead(&source, &value, &escape) || value != 0 || escape != 0xfd ||
+        !JxrVariableLengthWordReaderRead(&source, &value, &escape) || value != 0 || escape != 0xfe ||
+        !JxrVariableLengthWordReaderRead(&source, &value, &escape) || value != 0 || escape != 0xff ||
+        !JxrVariableLengthWordReaderRead(&source, &value, &escape) || value != 0x1234 || escape != 0 ||
+        !JxrVariableLengthWordReaderRead(&source, &value, &escape) || value != 0xabcdef01 || escape != 0 ||
+        !JxrVariableLengthWordReaderRead(&source, &value, &escape)) return 0;
+    return value == 0x1111222233334444 && escape == 0 &&
+        !JxrVariableLengthWordReaderRead(&source, &value, &escape);
 }
 
 static int test_bit_input_buffer_state_vectors(void)
@@ -1593,6 +1623,7 @@ int main(int argc, char** argv)
         { "monochrome_expansion_offset_vectors", test_monochrome_expansion_offset_vectors },
         { "monochrome_expansion_thumbnail_vectors", test_monochrome_expansion_thumbnail_vectors },
         { "decoder_roi_row_range_vectors", test_decoder_roi_row_range_vectors },
+        { "variable_length_word_vectors", test_variable_length_word_vectors },
         { "bit_input_buffer_state_vectors", test_bit_input_buffer_state_vectors },
         { "packet_source_vectors", test_packet_source_vectors },
         { "packet_executor_vectors", test_packet_executor_vectors },
