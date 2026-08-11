@@ -41,6 +41,7 @@
 #include "JxrDecoderHpQuantizerHeaderApplier.h"
 #include "JxrDecoderTileHeaderReader.h"
 #include "JxrDecoderCodingContextResetter.h"
+#include "JxrDecoderPacketRowReader.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -922,6 +923,98 @@ static int test_decoder_coding_context_resetter_vectors(void)
     config.contextCount = 0;
     return !JxrDecoderCodingContextResetterResetContexts(&config, &operations) &&
         !JxrDecoderCodingContextResetterResetContexts(NULL, &operations);
+}
+
+typedef struct JxrPacketRowReaderTestContext {
+    U8 events[6];
+    U8 count;
+} JxrPacketRowReaderTestContext;
+
+static Void record_packet_row_event(JxrPacketRowReaderTestContext* context, U8 value)
+{ context->events[context->count++] = value; }
+
+static Bool packet_row_test_detach(Void* context, BitIOInfo* reader)
+{
+    UNREFERENCED_PARAMETER(reader);
+    record_packet_row_event((JxrPacketRowReaderTestContext*)context, 0);
+    return TRUE;
+}
+
+static Bool packet_row_test_attach(Void* context, BitIOInfo* reader, struct WMPStream* stream)
+{
+    UNREFERENCED_PARAMETER(reader);
+    UNREFERENCED_PARAMETER(stream);
+    record_packet_row_event((JxrPacketRowReaderTestContext*)context, 1);
+    return TRUE;
+}
+
+static Bool packet_row_test_seek(Void* context, struct WMPStream* stream, U64 offset)
+{
+    UNREFERENCED_PARAMETER(stream);
+    UNREFERENCED_PARAMETER(offset);
+    record_packet_row_event((JxrPacketRowReaderTestContext*)context, 2);
+    return TRUE;
+}
+
+static Bool packet_row_test_read_header(Void* context, BitIOInfo* reader,
+    U8 packetType, U8 packetId)
+{
+    UNREFERENCED_PARAMETER(reader);
+    UNREFERENCED_PARAMETER(packetType);
+    UNREFERENCED_PARAMETER(packetId);
+    record_packet_row_event((JxrPacketRowReaderTestContext*)context, 3);
+    return TRUE;
+}
+
+static Bool packet_row_test_store_trim(Void* context, U32 tileColumn, Int value)
+{
+    UNREFERENCED_PARAMETER(tileColumn);
+    UNREFERENCED_PARAMETER(value);
+    record_packet_row_event((JxrPacketRowReaderTestContext*)context, 4);
+    return TRUE;
+}
+
+static Void packet_row_test_reset(Void* context, CCodingContext* codingContext)
+{
+    UNREFERENCED_PARAMETER(codingContext);
+    record_packet_row_event((JxrPacketRowReaderTestContext*)context, 5);
+}
+
+static int test_decoder_packet_row_reader_vectors(void)
+{
+    CWMImageStrCodec codec;
+    CCodingContext codingContext;
+    BitIOInfo headerInput;
+    JxrDecoderPacketRowReaderOperations operations;
+    JxrPacketRowReaderTestContext context;
+
+    memset(&codec, 0, sizeof(codec));
+    memset(&codingContext, 0, sizeof(codingContext));
+    memset(&headerInput, 0, sizeof(headerInput));
+    memset(&operations, 0, sizeof(operations));
+    memset(&context, 0, sizeof(context));
+    headerInput.pWS = (struct WMPStream*)1;
+    codec.pIOHeader = &headerInput;
+    codec.WMISCP.pWStream = (struct WMPStream*)1;
+    codec.m_pCodingContext = &codingContext;
+    codec.WMISCP.bfBitstreamFormat = SPATIAL;
+    codec.WMISCP.sbSubband = SB_ALL;
+    operations.attachment.context = &context;
+    operations.attachment.detach = packet_row_test_detach;
+    operations.attachment.attach = packet_row_test_attach;
+    operations.attachment.seek = packet_row_test_seek;
+    operations.header.context = &context;
+    operations.header.readHeader = packet_row_test_read_header;
+    operations.header.storeTrim = packet_row_test_store_trim;
+    operations.resetter.context = &context;
+    operations.resetter.reset = packet_row_test_reset;
+    if (!JxrDecoderPacketRowReaderRead(&codec, &operations) || context.count != 6 ||
+        context.events[0] != 0 || context.events[1] != 2 || context.events[2] != 1 ||
+        context.events[3] != 3 || context.events[4] != 4 || context.events[5] != 5) return 0;
+
+    codec.cNumBitIO = 1;
+    return !JxrDecoderPacketRowReaderRead(&codec, &operations) &&
+        !JxrDecoderPacketRowReaderRead(NULL, &operations);
 }
 
 static int test_inverse_color_transform_vectors(void)
@@ -2274,6 +2367,7 @@ int main(int argc, char** argv)
         { "decoder_hp_quantizer_header_applier_vectors", test_decoder_hp_quantizer_header_applier_vectors },
         { "decoder_tile_header_reader_vectors", test_decoder_tile_header_reader_vectors },
         { "decoder_coding_context_resetter_vectors", test_decoder_coding_context_resetter_vectors },
+        { "decoder_packet_row_reader_vectors", test_decoder_packet_row_reader_vectors },
         { "inverse_color_transform_vectors", test_inverse_color_transform_vectors },
         { "sample_clipping_vectors", test_sample_clipping_vectors },
         { "float_sample_conversion_vectors", test_float_sample_conversion_vectors },

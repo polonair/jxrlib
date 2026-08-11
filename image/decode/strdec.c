@@ -35,6 +35,7 @@
 #include "JxrDecoderHpQuantizerHeaderApplier.h"
 #include "JxrDecoderTileHeaderReader.h"
 #include "JxrDecoderCodingContextResetter.h"
+#include "JxrDecoderPacketRowReader.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -234,43 +235,19 @@ Int readPackets(CWMImageStrCodec * pSC)
                 return ICERR_ERROR;
         }
         else {
-            JxrDecoderBitstreamSet bitstreams;
-            JxrDecoderPacketAttachmentConfig attachment;
-            JxrDecoderPacketAttachmentOperations attachmentOperations;
-            JxrDecoderPacketHeaderReaderConfig headerReader;
-            JxrDecoderPacketHeaderReaderOperations headerOperations;
-            U32 tileRowCount = pSC->WMISCP.cNumOfSliceMinus1H + 1;
-            U32 externalStreamCount = tileRowCount *
-                (pSC->cNumBitIO == 0 ? 1 : (U32)pSC->cNumBitIO);
+            JxrDecoderPacketRowReaderOperations packetRowOperations;
 
-            if (!JxrDecoderBitstreamSetInit(&bitstreams, pSC->m_param.bIndexTable,
-                pSC->WMISCP.bfBitstreamFormat, pSC->WMISCP.cNumOfSliceMinus1V,
-                pSC->WMISCP.cNumOfSliceMinus1H, pSC->WMISCP.sbSubband) ||
-                bitstreams.bitstreamCount != pSC->cNumBitIO)
-            {
-                return ICERR_ERROR;
-            }
-            attachmentOperations.context = pSC;
-            attachmentOperations.detach = JxrDecoderPacketAttachmentLegacyDetach;
-            attachmentOperations.attach = JxrDecoderPacketAttachmentLegacyAttach;
-            attachmentOperations.seek = JxrDecoderPacketAttachmentLegacySeek;
-            JxrDecoderPacketAttachmentConfigInit(&attachment, &bitstreams, (U32)pSC->cTileRow,
-                tileRowCount, pSC->ppWStream != NULL, pSC->pIOHeader, pSC->m_ppBitIO,
-                pSC->pIndexTable, (U64)pSC->cHeaderSize, pSC->WMISCP.pWStream,
-                pSC->ppWStream, externalStreamCount);
-            if (!JxrDecoderPacketAttachmentAttachRow(&attachment, &attachmentOperations))
-                return ICERR_ERROR;
-
-            headerOperations.context = pSC;
-            headerOperations.readHeader = JxrDecoderPacketHeaderReaderLegacyRead;
-            headerOperations.readTrim = JxrDecoderPacketHeaderReaderLegacyReadTrim;
-            headerOperations.storeTrim = JxrDecoderPacketHeaderReaderLegacyStoreTrim;
-            JxrDecoderPacketHeaderReaderConfigInit(&headerReader, &bitstreams,
-                (U32)pSC->cTileRow, pSC->m_param.bTrimFlexbitsFlag,
-                pSC->pIOHeader, pSC->m_ppBitIO);
-            if (!JxrDecoderPacketHeaderReaderReadRow(&headerReader, &headerOperations))
-                return ICERR_ERROR;
-            if (!JxrDecoderResetCodingContextsLegacy(pSC, TRUE))
+            packetRowOperations.attachment.context = pSC;
+            packetRowOperations.attachment.detach = JxrDecoderPacketAttachmentLegacyDetach;
+            packetRowOperations.attachment.attach = JxrDecoderPacketAttachmentLegacyAttach;
+            packetRowOperations.attachment.seek = JxrDecoderPacketAttachmentLegacySeek;
+            packetRowOperations.header.context = pSC;
+            packetRowOperations.header.readHeader = JxrDecoderPacketHeaderReaderLegacyRead;
+            packetRowOperations.header.readTrim = JxrDecoderPacketHeaderReaderLegacyReadTrim;
+            packetRowOperations.header.storeTrim = JxrDecoderPacketHeaderReaderLegacyStoreTrim;
+            packetRowOperations.resetter.context = NULL;
+            packetRowOperations.resetter.reset = JxrDecoderCodingContextResetterLegacyReset;
+            if (!JxrDecoderPacketRowReaderRead(pSC, &packetRowOperations))
                 return ICERR_ERROR;
         }
     }
