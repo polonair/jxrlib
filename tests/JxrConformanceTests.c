@@ -46,6 +46,7 @@
 #include "JxrDecoderStreamInitializer.h"
 #include "JxrDecoderBitstreamSet.h"
 #include "JxrDecoderPacketAttachment.h"
+#include "JxrDecoderPacketHeaderReader.h"
 #include "JxrEntropyReader.h"
 #include "JxrLegacyBitReaderAdapter.h"
 #ifdef _WIN32
@@ -1065,6 +1066,87 @@ static int test_decoder_packet_attachment_vectors(void)
     return !JxrDecoderPacketAttachmentAttachRow(&config, &operations);
 }
 
+typedef struct JxrPacketHeaderReaderTestContext {
+    U8 packetTypes[16];
+    U8 packetIds[16];
+    U32 packetCount;
+    U32 trimValue;
+    Int trims[4];
+    U8 failedPacketType;
+} JxrPacketHeaderReaderTestContext;
+
+static Bool read_packet_header_test(Void* context, BitIOInfo* reader, U8 packetType, U8 packetId)
+{
+    JxrPacketHeaderReaderTestContext* test = (JxrPacketHeaderReaderTestContext*)context;
+    UNREFERENCED_PARAMETER(reader);
+    test->packetTypes[test->packetCount] = packetType;
+    test->packetIds[test->packetCount++] = packetId;
+    return packetType != test->failedPacketType;
+}
+
+static Bool read_packet_trim_test(Void* context, BitIOInfo* reader, U32* value)
+{
+    UNREFERENCED_PARAMETER(reader);
+    *value = ((JxrPacketHeaderReaderTestContext*)context)->trimValue;
+    return TRUE;
+}
+
+static Bool store_packet_trim_test(Void* context, U32 tileColumn, Int value)
+{
+    ((JxrPacketHeaderReaderTestContext*)context)->trims[tileColumn] = value;
+    return TRUE;
+}
+
+static int test_decoder_packet_header_reader_vectors(void)
+{
+    JxrDecoderBitstreamSet bitstreams;
+    JxrDecoderPacketHeaderReaderConfig config;
+    JxrDecoderPacketHeaderReaderOperations operations;
+    JxrPacketHeaderReaderTestContext context;
+    BitIOInfo storage[4];
+    BitIOInfo* readers[4];
+    U32 index;
+
+    memset(storage, 0, sizeof(storage));
+    for (index = 0; index < 4; ++index) {
+        readers[index] = &storage[index];
+        readers[index]->pWS = (struct WMPStream*)(size_t)(index + 1);
+    }
+    operations.context = &context;
+    operations.readHeader = read_packet_header_test;
+    operations.readTrim = read_packet_trim_test;
+    operations.storeTrim = store_packet_trim_test;
+
+    memset(&context, 0, sizeof(context));
+    context.trimValue = 9;
+    context.failedPacketType = 0xff;
+    if (!JxrDecoderBitstreamSetInit(&bitstreams, TRUE, SPATIAL, 1, 0, SB_ALL)) return 0;
+    JxrDecoderPacketHeaderReaderConfigInit(&config, &bitstreams, 15, TRUE, NULL, readers);
+    if (!JxrDecoderPacketHeaderReaderReadRow(&config, &operations) || context.packetCount != 2 ||
+        context.packetTypes[0] != 0 || context.packetTypes[1] != 0 ||
+        context.packetIds[0] != 30 || context.packetIds[1] != 31 ||
+        context.trims[0] != 9 || context.trims[1] != 9) return 0;
+
+    memset(&context, 0, sizeof(context));
+    context.failedPacketType = 0xff;
+    if (!JxrDecoderBitstreamSetInit(&bitstreams, TRUE, FREQUENCY, 0, 0, SB_DC_ONLY)) return 0;
+    JxrDecoderPacketHeaderReaderConfigInit(&config, &bitstreams, 31, FALSE, NULL, readers);
+    if (!JxrDecoderPacketHeaderReaderReadRow(&config, &operations) || context.packetCount != 1 ||
+        context.packetTypes[0] != 1 || context.packetIds[0] != 31) return 0;
+
+    memset(&context, 0, sizeof(context));
+    context.trimValue = 6;
+    context.failedPacketType = 4;
+    if (!JxrDecoderBitstreamSetInit(&bitstreams, TRUE, FREQUENCY, 0, 0, SB_ALL)) return 0;
+    JxrDecoderPacketHeaderReaderConfigInit(&config, &bitstreams, 0, TRUE, NULL, readers);
+    if (!JxrDecoderPacketHeaderReaderReadRow(&config, &operations) || context.packetCount != 4 ||
+        context.packetTypes[0] != 1 || context.packetTypes[1] != 2 ||
+        context.packetTypes[2] != 3 || context.packetTypes[3] != 4 || context.trims[0] != 6) return 0;
+
+    context.failedPacketType = 2;
+    return !JxrDecoderPacketHeaderReaderReadRow(&config, &operations);
+}
+
 static int test_bit_input_buffer_state_vectors(void)
 {
     JxrBitInputBufferState state;
@@ -1885,6 +1967,7 @@ int main(int argc, char** argv)
         { "decoder_stream_initializer_vectors", test_decoder_stream_initializer_vectors },
         { "decoder_bitstream_set_vectors", test_decoder_bitstream_set_vectors },
         { "decoder_packet_attachment_vectors", test_decoder_packet_attachment_vectors },
+        { "decoder_packet_header_reader_vectors", test_decoder_packet_header_reader_vectors },
         { "bit_input_buffer_state_vectors", test_bit_input_buffer_state_vectors },
         { "packet_source_vectors", test_packet_source_vectors },
         { "packet_executor_vectors", test_packet_executor_vectors },

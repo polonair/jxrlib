@@ -8,6 +8,7 @@ typedef struct JxrDecoderBitstreamSet {
     U32 subbandCount;
     U32 bitstreamsPerTile;
     U32 bitstreamCount;
+    Bool isSpatial;
     Bool usesHeaderStream;
 } JxrDecoderBitstreamSet;
 

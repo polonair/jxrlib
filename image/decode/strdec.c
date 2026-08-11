@@ -39,6 +39,7 @@
 #include "JxrIndexTableReader.h"
 #include "JxrDecoderStreamInitializer.h"
 #include "JxrDecoderPacketAttachment.h"
+#include "JxrDecoderPacketHeaderReader.h"
 #include "strTransform.h"
 #include <math.h>
 #include "perfTimer.h"
@@ -190,19 +191,38 @@ static Bool JxrDecoderPacketAttachmentLegacySeek(Void* context, struct WMPStream
     UNREFERENCED_PARAMETER(context);
     return stream->SetPos(stream, (size_t)offset) == WMP_errSuccess;
 }
+static Bool JxrDecoderPacketHeaderReaderLegacyRead(Void* context, BitIOInfo* reader,
+    U8 packetType, U8 packetId)
+{
+    UNREFERENCED_PARAMETER(context);
+    return readPacketHeader(reader, packetType, packetId) == ICERR_OK;
+}
+
+static Bool JxrDecoderPacketHeaderReaderLegacyReadTrim(Void* context, BitIOInfo* reader,
+    U32* value)
+{
+    UNREFERENCED_PARAMETER(context);
+    *value = getBit16(reader, 4);
+    return TRUE;
+}
+
+static Bool JxrDecoderPacketHeaderReaderLegacyStoreTrim(Void* context, U32 tileColumn,
+    Int value)
+{
+    ((CWMImageStrCodec*)context)->m_pCodingContext[tileColumn].m_iTrimFlexBits = value;
+    return TRUE;
+}
 Int readPackets(CWMImageStrCodec * pSC)
 {
-    if(pSC->cColumn == 0 && pSC->cRow == pSC->WMISCP.uiTileY[pSC->cTileRow]){ // start of a new horizontal slice
+    if (pSC->cColumn == 0 && pSC->cRow == pSC->WMISCP.uiTileY[pSC->cTileRow]) {
         size_t k;
-        
+
         if (pSC->m_bSecondary) {
-             if(pSC->cNumBitIO > 0){
-                for(k = 0; k <= pSC->WMISCP.cNumOfSliceMinus1V; k ++){
-                    // reset coding contexts
+            if (pSC->cNumBitIO > 0) {
+                for (k = 0; k <= pSC->WMISCP.cNumOfSliceMinus1V; ++k)
                     ResetCodingContextDec(&pSC->m_pCodingContext[k]);
-                }
             }
-            else{ // for multiple decoding calls!
+            else {
                 ResetCodingContextDec(&pSC->m_pCodingContext[0]);
             }
         }
@@ -210,8 +230,11 @@ Int readPackets(CWMImageStrCodec * pSC)
             JxrDecoderBitstreamSet bitstreams;
             JxrDecoderPacketAttachmentConfig attachment;
             JxrDecoderPacketAttachmentOperations attachmentOperations;
+            JxrDecoderPacketHeaderReaderConfig headerReader;
+            JxrDecoderPacketHeaderReaderOperations headerOperations;
             U32 tileRowCount = pSC->WMISCP.cNumOfSliceMinus1H + 1;
-            U32 externalStreamCount = tileRowCount * (pSC->cNumBitIO == 0 ? 1 : (U32)pSC->cNumBitIO);
+            U32 externalStreamCount = tileRowCount *
+                (pSC->cNumBitIO == 0 ? 1 : (U32)pSC->cNumBitIO);
 
             if (!JxrDecoderBitstreamSetInit(&bitstreams, pSC->m_param.bIndexTable,
                 pSC->WMISCP.bfBitstreamFormat, pSC->WMISCP.cNumOfSliceMinus1V,
@@ -230,64 +253,41 @@ Int readPackets(CWMImageStrCodec * pSC)
                 pSC->ppWStream, externalStreamCount);
             if (!JxrDecoderPacketAttachmentAttachRow(&attachment, &attachmentOperations))
                 return ICERR_ERROR;
-            for(k = 0; k <= pSC->WMISCP.cNumOfSliceMinus1V; k ++){
-                U8 pID = (U8)((pSC->cTileRow * (pSC->WMISCP.cNumOfSliceMinus1V + 1) + k) & 0x1F);
-                
-                // read packet header
-                if(pSC->WMISCP.bfBitstreamFormat == SPATIAL){
-                    BitIOInfo * pIO = (pSC->cNumBitIO == 0 ? pSC->pIOHeader : pSC->m_ppBitIO[k]);
 
-                    if(pIO->pWS == NULL || readPacketHeader(pIO, 0, pID) != ICERR_OK)
-                        return ICERR_ERROR;
-                    pSC->m_pCodingContext[k].m_iTrimFlexBits = (pSC->m_param.bTrimFlexbitsFlag) ? getBit16(pIO, 4) : 0;
-                }
-                else{
-                    if(pSC->m_ppBitIO[k * pSC->cSB + 0] == NULL || readPacketHeader(pSC->m_ppBitIO[k * pSC->cSB + 0], 1, pID) != ICERR_OK)
-                        return ICERR_ERROR;
-                    if(pSC->cSB > 1){
-                        if(pSC->m_ppBitIO[k * pSC->cSB + 1] == NULL || readPacketHeader(pSC->m_ppBitIO[k * pSC->cSB + 1], 2, pID) != ICERR_OK)
-                            return ICERR_ERROR;
-                    }
-                    if(pSC->cSB > 2){
-                        if(pSC->m_ppBitIO[k * pSC->cSB + 2] == NULL || readPacketHeader(pSC->m_ppBitIO[k * pSC->cSB + 2], 3, pID) != ICERR_OK)
-                            return ICERR_ERROR;
-//                        readTileHeaderHP(pSC, pSC->m_ppBitIO[k * pSC->cSB + 2]);
-                    }
-                    if(pSC->cSB > 3){
-                        if(pSC->m_ppBitIO[k * pSC->cSB + 3] == NULL)
-                            return ICERR_ERROR;
-                        readPacketHeader(pSC->m_ppBitIO[k * pSC->cSB + 3], 4, pID);  // bad flexbits packet doesn't generate an error
-                        pSC->m_pCodingContext[k].m_iTrimFlexBits = (pSC->m_param.bTrimFlexbitsFlag) ? getBit16(pSC->m_ppBitIO[k * pSC->cSB + 3], 4) : 0;
-                    }
-                }
-
-                // reset coding contexts
+            headerOperations.context = pSC;
+            headerOperations.readHeader = JxrDecoderPacketHeaderReaderLegacyRead;
+            headerOperations.readTrim = JxrDecoderPacketHeaderReaderLegacyReadTrim;
+            headerOperations.storeTrim = JxrDecoderPacketHeaderReaderLegacyStoreTrim;
+            JxrDecoderPacketHeaderReaderConfigInit(&headerReader, &bitstreams,
+                (U32)pSC->cTileRow, pSC->m_param.bTrimFlexbitsFlag,
+                pSC->pIOHeader, pSC->m_ppBitIO);
+            if (!JxrDecoderPacketHeaderReaderReadRow(&headerReader, &headerOperations))
+                return ICERR_ERROR;
+            for (k = 0; k <= pSC->WMISCP.cNumOfSliceMinus1V; ++k)
                 ResetCodingContextDec(&pSC->m_pCodingContext[k]);
-            }
         }
     }
-    
-    if(pSC->m_bCtxLeft && pSC->m_bCtxTop && pSC->m_bSecondary == FALSE){
-        CCodingContext *pContext = &pSC->m_pCodingContext[pSC->cTileColumn];
-        
+
+    if (pSC->m_bCtxLeft && pSC->m_bCtxTop && pSC->m_bSecondary == FALSE) {
+        CCodingContext* pContext = &pSC->m_pCodingContext[pSC->cTileColumn];
+
         readTileHeaderDC(pSC, pContext->m_pIODC);
-        if(pSC->m_pNextSC != NULL)
+        if (pSC->m_pNextSC != NULL)
             readTileHeaderDC(pSC->m_pNextSC, pContext->m_pIODC);
-        if(pSC->cSB > 1){
+        if (pSC->cSB > 1) {
             readTileHeaderLP(pSC, pContext->m_pIOLP);
-            if(pSC->m_pNextSC != NULL)
+            if (pSC->m_pNextSC != NULL)
                 readTileHeaderLP(pSC->m_pNextSC, pContext->m_pIOLP);
         }
-        if(pSC->cSB > 2){
+        if (pSC->cSB > 2) {
             readTileHeaderHP(pSC, pContext->m_pIOAC);
-            if(pSC->m_pNextSC != NULL)
+            if (pSC->m_pNextSC != NULL)
                 readTileHeaderHP(pSC->m_pNextSC, pContext->m_pIOAC);
         }
     }
 
     return ICERR_OK;
 }
-
 /* inverse transform and overlap possible part of a macroblock */
 Int processMacroblockDec(CWMImageStrCodec * pSC)
 {

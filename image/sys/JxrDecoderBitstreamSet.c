@@ -24,6 +24,7 @@ Bool JxrDecoderBitstreamSetInit(JxrDecoderBitstreamSet* bitstreams,
     bitstreams->subbandCount = subbandCount;
     bitstreams->bitstreamsPerTile = format == SPATIAL ? 1 : subbandCount;
     bitstreams->usesHeaderStream = !hasIndexTable;
+    bitstreams->isSpatial = format == SPATIAL;
     bitstreams->bitstreamCount = hasIndexTable ?
         bitstreams->tileColumnCount * bitstreams->bitstreamsPerTile : 0;
     return bitstreams->bitstreamCount <= MAX_TILES * 4;
