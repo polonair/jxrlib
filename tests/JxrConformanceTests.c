@@ -42,6 +42,7 @@
 #include "JxrDecoderTileHeaderReader.h"
 #include "JxrDecoderCodingContextResetter.h"
 #include "JxrDecoderPacketRowReader.h"
+#include "JxrImagePlaneQuantizerHeaderReader.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -663,6 +664,28 @@ static int test_decoder_tile_quantizer_syntax_vectors(void)
     flushToByte_SB(&simple);
     return detach_SB(&simple) == WMP_errSuccess &&
         CloseWS_Memory(&simpleStream) == WMP_errSuccess;
+}
+
+static int test_image_plane_quantizer_header_reader_vectors(void)
+{
+    U8 data[16] = {0}; JxrBitWriter writer; SimpleBitIO input;
+    struct WMPStream* stream = NULL; JxrImagePlaneQuantizerHeader header;
+    JxrBitWriterInit(&writer, data, sizeof(data));
+    if (!JxrBitWriterWrite(&writer, 1, 1) || !JxrBitWriterWrite(&writer, 0, 2) ||
+        !JxrBitWriterWrite(&writer, 7, 8) || !JxrBitWriterWrite(&writer, 0, 1) ||
+        !JxrBitWriterWrite(&writer, 1, 1) || !JxrBitWriterWrite(&writer, 1, 2) ||
+        !JxrBitWriterWrite(&writer, 8, 8) || !JxrBitWriterWrite(&writer, 9, 8) ||
+        !JxrBitWriterWrite(&writer, 0, 1) || !JxrBitWriterWrite(&writer, 1, 1) ||
+        !JxrBitWriterWrite(&writer, 2, 2) || !JxrBitWriterWrite(&writer, 10, 8) ||
+        !JxrBitWriterWrite(&writer, 11, 8) || !JxrBitWriterWrite(&writer, 12, 8) ||
+        !JxrBitWriterFlush(&writer) ||
+        CreateWS_Memory(&stream, data, JxrBitWriterBytes(&writer)) != WMP_errSuccess) return 0;
+    memset(&input, 0, sizeof(input)); attach_SB(&input, stream);
+    if (!JxrImagePlaneQuantizerHeaderReaderRead(&input, 3, SB_ALL, &header)) return 0;
+    flushToByte_SB(&input); detach_SB(&input); CloseWS_Memory(&stream);
+    return header.quantizerMode == 0x720 && header.hasDc && header.hasLp && header.hasHp &&
+        header.dcMode == 0 && header.lpMode == 1 && header.hpMode == 2 &&
+        header.dcIndices[0] == 7 && header.lpIndices[1] == 9 && header.hpIndices[2] == 12;
 }
 
 static int test_decoder_dc_quantizer_header_applier_vectors(void)
@@ -2383,6 +2406,7 @@ int main(int argc, char** argv)
         { "transcode_tile_extraction_decision_vectors", test_transcode_tile_extraction_decision_vectors },
         { "transcode_roi_geometry_vectors", test_transcode_roi_geometry_vectors },
         { "decoder_tile_quantizer_syntax_vectors", test_decoder_tile_quantizer_syntax_vectors },
+        { "image_plane_quantizer_header_reader_vectors", test_image_plane_quantizer_header_reader_vectors },
         { "decoder_dc_quantizer_header_applier_vectors", test_decoder_dc_quantizer_header_applier_vectors },
         { "decoder_lp_quantizer_header_applier_vectors", test_decoder_lp_quantizer_header_applier_vectors },
         { "decoder_hp_quantizer_header_applier_vectors", test_decoder_hp_quantizer_header_applier_vectors },

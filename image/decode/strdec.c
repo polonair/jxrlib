@@ -30,6 +30,7 @@
 #include "decode.h"
 #include "JxrMacroblockRegionState.h"
 #include "JxrDecoderTileQuantizerSyntaxReader.h"
+#include "JxrImagePlaneQuantizerHeaderReader.h"
 #include "JxrDecoderDcQuantizerHeaderApplier.h"
 #include "JxrDecoderLpQuantizerHeaderApplier.h"
 #include "JxrDecoderHpQuantizerHeaderApplier.h"
@@ -89,6 +90,14 @@ U8 readQuantizerSB(U8 pQPIndex[MAX_CHANNELS], SimpleBitIO * pIO, size_t cChannel
 // packet header: 00000000 00000000 00000001 ?????xxx
 // xxx:           000(spatial) 001(DC) 010(AD) 011(AC) 100(FL) 101-111(reserved)
 // ?????:         (iTileY * cNumOfSliceV + iTileX) % 32
+static Void applyImagePlaneQuantizer(U8 destination[MAX_CHANNELS], const U8 source[MAX_CHANNELS], U8 mode, size_t channelCount)
+{
+    size_t channel;
+    destination[0] = source[0];
+    if (mode == 1) destination[1] = source[1];
+    else if (mode > 0)
+        for (channel = 1; channel < channelCount; ++channel) destination[channel] = source[channel];
+}
 Int readPacketHeader(BitIOInfo * pIO, U8 ptPacketType, U8 pID)
 {
     JxrDecoderBitSource source;
@@ -2717,44 +2726,23 @@ Int ReadImagePlaneHeader(CWMImageInfo* pII, CWMIStrCodecParam *pSCP,
         default:
             break;
     }
-
-        // quantization
-    pSC->uQPMode = 0;
-    if(getBit32_SB(pSB, 1) == 1) // DC uniform
-        pSC->uQPMode += (readQuantizerSB(pSC->uiQPIndexDC, pSB, pSC->cNumChannels) << 3);
-    else
-        pSC->uQPMode ++;
-    if(pSCP->sbSubband != SB_DC_ONLY){
-        if(getBit32_SB(pSB, 1) == 0){ // don't use DC QP
-            pSC->uQPMode += 0x200;
-            if(getBit32_SB(pSB, 1) == 1) // LP uniform
-                pSC->uQPMode += (readQuantizerSB(pSC->uiQPIndexLP, pSB, pSC->cNumChannels) << 5);
-            else
-                pSC->uQPMode += 2;
-        }
-        else
-            pSC->uQPMode += ((pSC->uQPMode & 1) << 1) + ((pSC->uQPMode & 0x18) << 2);
-
-        if(pSCP->sbSubband != SB_NO_HIGHPASS){
-            if(getBit32_SB(pSB, 1) == 0){ // don't use LP QP
-                pSC->uQPMode += 0x400;
-                if(getBit32_SB(pSB, 1) == 1) // HP uniform
-                    pSC->uQPMode += (readQuantizerSB(pSC->uiQPIndexHP, pSB, pSC->cNumChannels) << 7);
-                else
-                    pSC->uQPMode += 4;
-            }
-            else
-                pSC->uQPMode += ((pSC->uQPMode & 2) << 1) + ((pSC->uQPMode & 0x60) << 2);
-        }
+    {
+        JxrImagePlaneQuantizerHeader quantizers;
+        if (!JxrImagePlaneQuantizerHeaderReaderRead(pSB, pSC->cNumChannels,
+            pSCP->sbSubband, &quantizers))
+            return ICERR_ERROR;
+        pSC->uQPMode = quantizers.quantizerMode;
+        if (quantizers.hasDc)
+            applyImagePlaneQuantizer(pSC->uiQPIndexDC, quantizers.dcIndices,
+                quantizers.dcMode, pSC->cNumChannels);
+        if (quantizers.hasLp)
+            applyImagePlaneQuantizer(pSC->uiQPIndexLP, quantizers.lpIndices,
+                quantizers.lpMode, pSC->cNumChannels);
+        if (quantizers.hasHp)
+            applyImagePlaneQuantizer(pSC->uiQPIndexHP, quantizers.hpIndices,
+                quantizers.hpMode, pSC->cNumChannels);
     }
-
-    if(pSCP->sbSubband == SB_DC_ONLY)
-        pSC->uQPMode |= 0x200;
-    else if(pSCP->sbSubband == SB_NO_HIGHPASS)
-        pSC->uQPMode |= 0x400;
-    
-
-    FailIf((pSC->uQPMode & 0x600) == 0, WMP_errInvalidParameter); // frame level QPs must be specified independently!
+FailIf((pSC->uQPMode & 0x600) == 0, WMP_errInvalidParameter); // frame level QPs must be specified independently!
 
     flushToByte_SB(pSB);  // remove this later
 
