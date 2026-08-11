@@ -39,6 +39,7 @@
 #include "JxrDecoderDcQuantizerHeaderApplier.h"
 #include "JxrDecoderLpQuantizerHeaderApplier.h"
 #include "JxrDecoderHpQuantizerHeaderApplier.h"
+#include "JxrDecoderTileHeaderReader.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -796,6 +797,88 @@ static int test_decoder_hp_quantizer_header_applier_vectors(void)
     hpSyntax.count = 0;
     return !JxrDecoderHpQuantizerHeaderApplierApply(&codec, &hpSyntax) &&
         !JxrDecoderHpQuantizerHeaderApplierApply(NULL, &hpSyntax);
+}
+
+typedef struct JxrTileHeaderReaderTestContext {
+    CWMImageStrCodec* primary;
+    U8 events[6];
+    U8 eventCount;
+} JxrTileHeaderReaderTestContext;
+
+static Void record_tile_header_reader_event(JxrTileHeaderReaderTestContext* context,
+    CWMImageStrCodec* codec, U8 subband)
+{
+    context->events[context->eventCount++] = (U8)(subband +
+        (codec == context->primary ? 0 : 1));
+}
+
+static Void read_tile_header_reader_dc(Void* context, CWMImageStrCodec* codec,
+    BitIOInfo* input)
+{
+    UNREFERENCED_PARAMETER(input);
+    record_tile_header_reader_event((JxrTileHeaderReaderTestContext*)context, codec, 0);
+}
+
+static Void read_tile_header_reader_lp(Void* context, CWMImageStrCodec* codec,
+    BitIOInfo* input)
+{
+    UNREFERENCED_PARAMETER(input);
+    record_tile_header_reader_event((JxrTileHeaderReaderTestContext*)context, codec, 2);
+}
+
+static Void read_tile_header_reader_hp(Void* context, CWMImageStrCodec* codec,
+    BitIOInfo* input)
+{
+    UNREFERENCED_PARAMETER(input);
+    record_tile_header_reader_event((JxrTileHeaderReaderTestContext*)context, codec, 4);
+}
+
+static int test_decoder_tile_header_reader_vectors(void)
+{
+    CWMImageStrCodec primary;
+    CWMImageStrCodec secondary;
+    BitIOInfo dcInput;
+    BitIOInfo lpInput;
+    BitIOInfo hpInput;
+    JxrDecoderTileHeaderReaderConfig config;
+    JxrDecoderTileHeaderReaderOperations operations;
+    JxrTileHeaderReaderTestContext context;
+
+    memset(&primary, 0, sizeof(primary));
+    memset(&secondary, 0, sizeof(secondary));
+    memset(&dcInput, 0, sizeof(dcInput));
+    memset(&lpInput, 0, sizeof(lpInput));
+    memset(&hpInput, 0, sizeof(hpInput));
+    memset(&config, 0, sizeof(config));
+    memset(&operations, 0, sizeof(operations));
+    memset(&context, 0, sizeof(context));
+    context.primary = &primary;
+    config.primaryCodec = &primary;
+    config.secondaryCodec = &secondary;
+    config.dcInput = &dcInput;
+    config.lpInput = &lpInput;
+    config.hpInput = &hpInput;
+    config.subbandCount = 3;
+    operations.context = &context;
+    operations.readDc = read_tile_header_reader_dc;
+    operations.readLp = read_tile_header_reader_lp;
+    operations.readHp = read_tile_header_reader_hp;
+    if (!JxrDecoderTileHeaderReaderRead(&config, &operations) || context.eventCount != 6 ||
+        context.events[0] != 0 || context.events[1] != 1 || context.events[2] != 2 ||
+        context.events[3] != 3 || context.events[4] != 4 || context.events[5] != 5) return 0;
+
+    config.secondaryCodec = NULL;
+    config.subbandCount = 1;
+    context.eventCount = 0;
+    if (!JxrDecoderTileHeaderReaderRead(&config, &operations) || context.eventCount != 1 ||
+        context.events[0] != 0) return 0;
+    config.primaryCodec = NULL;
+    if (JxrDecoderTileHeaderReaderRead(&config, &operations)) return 0;
+    config.primaryCodec = &primary;
+    config.subbandCount = 2;
+    operations.readLp = NULL;
+    return !JxrDecoderTileHeaderReaderRead(&config, &operations) &&
+        !JxrDecoderTileHeaderReaderRead(NULL, &operations);
 }
 
 static int test_inverse_color_transform_vectors(void)
@@ -2146,6 +2229,7 @@ int main(int argc, char** argv)
         { "decoder_dc_quantizer_header_applier_vectors", test_decoder_dc_quantizer_header_applier_vectors },
         { "decoder_lp_quantizer_header_applier_vectors", test_decoder_lp_quantizer_header_applier_vectors },
         { "decoder_hp_quantizer_header_applier_vectors", test_decoder_hp_quantizer_header_applier_vectors },
+        { "decoder_tile_header_reader_vectors", test_decoder_tile_header_reader_vectors },
         { "inverse_color_transform_vectors", test_inverse_color_transform_vectors },
         { "sample_clipping_vectors", test_sample_clipping_vectors },
         { "float_sample_conversion_vectors", test_float_sample_conversion_vectors },

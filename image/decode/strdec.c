@@ -33,6 +33,7 @@
 #include "JxrDecoderDcQuantizerHeaderApplier.h"
 #include "JxrDecoderLpQuantizerHeaderApplier.h"
 #include "JxrDecoderHpQuantizerHeaderApplier.h"
+#include "JxrDecoderTileHeaderReader.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -145,6 +146,27 @@ Int readTileHeaderHP(CWMImageStrCodec * pSC, BitIOInfo * pIO)
     }
     return ICERR_OK;
 }
+
+static Void JxrDecoderTileHeaderReaderLegacyReadDc(Void* context,
+    CWMImageStrCodec* codec, BitIOInfo* input)
+{
+    UNREFERENCED_PARAMETER(context);
+    readTileHeaderDC(codec, input);
+}
+
+static Void JxrDecoderTileHeaderReaderLegacyReadLp(Void* context,
+    CWMImageStrCodec* codec, BitIOInfo* input)
+{
+    UNREFERENCED_PARAMETER(context);
+    readTileHeaderLP(codec, input);
+}
+
+static Void JxrDecoderTileHeaderReaderLegacyReadHp(Void* context,
+    CWMImageStrCodec* codec, BitIOInfo* input)
+{
+    UNREFERENCED_PARAMETER(context);
+    readTileHeaderHP(codec, input);
+}
 static Bool JxrDecoderPacketAttachmentLegacyDetach(Void* context, BitIOInfo* reader)
 {
     return detachISRead((CWMImageStrCodec*)context, reader) == WMP_errSuccess;
@@ -241,20 +263,21 @@ Int readPackets(CWMImageStrCodec * pSC)
 
     if (pSC->m_bCtxLeft && pSC->m_bCtxTop && pSC->m_bSecondary == FALSE) {
         CCodingContext* pContext = &pSC->m_pCodingContext[pSC->cTileColumn];
+        JxrDecoderTileHeaderReaderConfig tileHeaders;
+        JxrDecoderTileHeaderReaderOperations tileHeaderOperations;
 
-        readTileHeaderDC(pSC, pContext->m_pIODC);
-        if (pSC->m_pNextSC != NULL)
-            readTileHeaderDC(pSC->m_pNextSC, pContext->m_pIODC);
-        if (pSC->cSB > 1) {
-            readTileHeaderLP(pSC, pContext->m_pIOLP);
-            if (pSC->m_pNextSC != NULL)
-                readTileHeaderLP(pSC->m_pNextSC, pContext->m_pIOLP);
-        }
-        if (pSC->cSB > 2) {
-            readTileHeaderHP(pSC, pContext->m_pIOAC);
-            if (pSC->m_pNextSC != NULL)
-                readTileHeaderHP(pSC->m_pNextSC, pContext->m_pIOAC);
-        }
+        tileHeaders.primaryCodec = pSC;
+        tileHeaders.secondaryCodec = pSC->m_pNextSC;
+        tileHeaders.dcInput = pContext->m_pIODC;
+        tileHeaders.lpInput = pContext->m_pIOLP;
+        tileHeaders.hpInput = pContext->m_pIOAC;
+        tileHeaders.subbandCount = (U8)pSC->cSB;
+        tileHeaderOperations.context = NULL;
+        tileHeaderOperations.readDc = JxrDecoderTileHeaderReaderLegacyReadDc;
+        tileHeaderOperations.readLp = JxrDecoderTileHeaderReaderLegacyReadLp;
+        tileHeaderOperations.readHp = JxrDecoderTileHeaderReaderLegacyReadHp;
+        if (!JxrDecoderTileHeaderReaderRead(&tileHeaders, &tileHeaderOperations))
+            return ICERR_ERROR;
     }
 
     return ICERR_OK;
