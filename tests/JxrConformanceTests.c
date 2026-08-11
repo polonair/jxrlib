@@ -33,6 +33,7 @@
 #include "JxrTranscodeTileHeaderWriter.h"
 #include "JxrTranscodeOrientationState.h"
 #include "JxrTranscodeCoefficientTransform.h"
+#include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrEntropyReader.h"
 #include "JxrLegacyBitReaderAdapter.h"
 #ifdef _WIN32
@@ -516,6 +517,41 @@ static int test_transcode_coefficient_transform_420_vectors(void)
     JxrTranscodeCoefficientBufferInit(&source, sourceValues, 62, 64);
     return !JxrTranscodeCoefficientTransformDc420(&source, &destination, &orientation) &&
         !JxrTranscodeCoefficientTransformAc420(&source, &destination, &orientation);
+}
+
+static int test_transcode_tile_extraction_decision_vectors(void)
+{
+    U32 columns[2] = { 0, 2 };
+    U32 rows[2] = { 0, 2 };
+    JxrTranscodeTileExtractionDecision decision;
+
+    memset(&decision, 0, sizeof(decision));
+    decision.tileColumns = columns;
+    decision.tileColumnCount = 2;
+    decision.macroblockWidth = 4;
+    decision.tileRows = rows;
+    decision.tileRowCount = 2;
+    decision.macroblockHeight = 4;
+    decision.roiWidthPixels = 32;
+    decision.roiHeightPixels = 32;
+    decision.sourceOverlap = OL_NONE;
+    decision.sourceLayout = SPATIAL;
+    decision.targetLayout = SPATIAL;
+    decision.sourceSubband = SB_ALL;
+    decision.targetSubband = SB_ALL;
+    if (!JxrTranscodeTileExtractionDecisionCanUseFastPath(&decision) ||
+        !decision.ignoreOverlap ||
+        JxrTranscodeTileExtractionDecisionIsBoundary(columns, 2, 4, 17) ||
+        !JxrTranscodeTileExtractionDecisionIsBoundary(columns, 2, 4, 64)) return 0;
+
+    decision.targetSubband = SB_DC_ONLY;
+    if (JxrTranscodeTileExtractionDecisionCanUseFastPath(&decision)) return 0;
+    decision.targetSubband = SB_ALL;
+    decision.hasTransform = TRUE;
+    if (JxrTranscodeTileExtractionDecisionCanUseFastPath(&decision)) return 0;
+    decision.hasTransform = FALSE;
+    decision.roiLeftPixels = 1;
+    return !JxrTranscodeTileExtractionDecisionCanUseFastPath(&decision);
 }
 
 static int test_bit_input_buffer_state_vectors(void)
@@ -1323,6 +1359,7 @@ int main(int argc, char** argv)
         { "transcode_coefficient_transform_vectors", test_transcode_coefficient_transform_vectors },
         { "transcode_coefficient_transform_422_vectors", test_transcode_coefficient_transform_422_vectors },
         { "transcode_coefficient_transform_420_vectors", test_transcode_coefficient_transform_420_vectors },
+        { "transcode_tile_extraction_decision_vectors", test_transcode_tile_extraction_decision_vectors },
         { "bit_input_buffer_state_vectors", test_bit_input_buffer_state_vectors },
         { "packet_source_vectors", test_packet_source_vectors },
         { "packet_executor_vectors", test_packet_executor_vectors },

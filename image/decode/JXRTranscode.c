@@ -34,6 +34,7 @@
 #include "JxrTranscodeTileHeaderWriter.h"
 #include "JxrTranscodeOrientationState.h"
 #include "JxrTranscodeCoefficientTransform.h"
+#include "JxrTranscodeTileExtractionDecision.h"
 
 EXTERN_C Void freePredInfo(CWMImageStrCodec *);
 
@@ -217,35 +218,35 @@ Int getROI(CWMImageInfo * pII, CCoreParameters * pCore, CWMIStrCodecParam * pSCP
     return ICERR_OK;
 }
 
-Bool isTileBoundary(U32 * pTilePos, U32 cTiles, U32 cMBs, U32 iPos)
-{
-    U32 i;
-    
-    for(i = 0; i < cTiles; i ++)
-        if(iPos == pTilePos[i] * 16)
-            break;
-
-    return ((i < cTiles || (iPos + 15) / 16 >= cMBs) ? TRUE : FALSE);
-}
-
 Bool isTileExtraction(CWMImageStrCodec * pSC, CWMTranscodingParam * pParam)
 {
-    if(pParam->bIgnoreOverlap == FALSE && pSC->WMISCP.olOverlap == OL_NONE)
-        pParam->bIgnoreOverlap = TRUE;
+    JxrTranscodeTileExtractionDecision decision = {0};
 
-    if(pParam->bIgnoreOverlap == TRUE && pParam->oOrientation == O_NONE && pParam->bfBitstreamFormat == pSC->WMISCP.bfBitstreamFormat){
-        if(pParam->bfBitstreamFormat == SPATIAL && pParam->sbSubband != pSC->WMISCP.sbSubband)
-            return FALSE;
-
-        return (isTileBoundary(pSC->WMISCP.uiTileX, pSC->WMISCP.cNumOfSliceMinus1V + 1, (U32)pSC->cmbWidth, (U32)(pParam->cLeftX + pSC->m_param.cExtraPixelsLeft)) &&
-            isTileBoundary(pSC->WMISCP.uiTileY, pSC->WMISCP.cNumOfSliceMinus1H + 1, (U32)pSC->cmbHeight, (U32)(pParam->cTopY + pSC->m_param.cExtraPixelsTop)) &&
-            isTileBoundary(pSC->WMISCP.uiTileX, pSC->WMISCP.cNumOfSliceMinus1V + 1, (U32)pSC->cmbWidth, (U32)(pParam->cLeftX + pParam->cWidth + pSC->m_param.cExtraPixelsLeft)) &&
-            isTileBoundary(pSC->WMISCP.uiTileY, pSC->WMISCP.cNumOfSliceMinus1H + 1, (U32)pSC->cmbHeight, (U32)(pParam->cTopY + pParam->cHeight + pSC->m_param.cExtraPixelsTop)));
+    decision.tileColumns = pSC->WMISCP.uiTileX;
+    decision.tileColumnCount = pSC->WMISCP.cNumOfSliceMinus1V + 1;
+    decision.macroblockWidth = (U32)pSC->cmbWidth;
+    decision.tileRows = pSC->WMISCP.uiTileY;
+    decision.tileRowCount = pSC->WMISCP.cNumOfSliceMinus1H + 1;
+    decision.macroblockHeight = (U32)pSC->cmbHeight;
+    decision.roiLeftPixels = pParam->cLeftX;
+    decision.roiTopPixels = pParam->cTopY;
+    decision.roiWidthPixels = pParam->cWidth;
+    decision.roiHeightPixels = pParam->cHeight;
+    decision.extraLeftPixels = pSC->m_param.cExtraPixelsLeft;
+    decision.extraTopPixels = pSC->m_param.cExtraPixelsTop;
+    decision.sourceOverlap = pSC->WMISCP.olOverlap;
+    decision.ignoreOverlap = pParam->bIgnoreOverlap;
+    decision.hasTransform = pParam->oOrientation != O_NONE;
+    decision.sourceLayout = pSC->WMISCP.bfBitstreamFormat;
+    decision.targetLayout = pParam->bfBitstreamFormat;
+    decision.sourceSubband = pSC->WMISCP.sbSubband;
+    decision.targetSubband = pParam->sbSubband;
+    {
+        Bool canUseFastPath = JxrTranscodeTileExtractionDecisionCanUseFastPath(&decision);
+        pParam->bIgnoreOverlap = decision.ignoreOverlap;
+        return canUseFastPath;
     }
-
-    return FALSE;
 }
-
 Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut, CWMTranscodingParam * pParam)
 {
     PixelI * pMBBuf, MBBufAlpha[256]; // shared buffer, decoder <=> encoder bridge
