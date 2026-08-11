@@ -37,6 +37,7 @@
 #include "JxrTranscodeRoiGeometry.h"
 #include "JxrDecoderTileQuantizerSyntaxReader.h"
 #include "JxrInverseColorTransform.h"
+#include "JxrSampleClipping.h"
 #include "JxrEntropyReader.h"
 #include "JxrLegacyBitReaderAdapter.h"
 #ifdef _WIN32
@@ -651,6 +652,24 @@ static int test_inverse_color_transform_vectors(void)
     cyan = -5; magenta = 7; yellow = -8; black = 2;
     JxrInverseColorTransformApplyCmyk(&cyan, &magenta, &yellow, &black);
     return cyan == 7 && magenta == 8 && yellow == -1 && black == -2;
+}
+
+static int test_sample_clipping_vectors(void)
+{
+    return JxrSampleClippingClamp(-2, 0, 31) == 0 &&
+        JxrSampleClippingClamp(15, 0, 31) == 15 &&
+        JxrSampleClippingClamp(32, 0, 31) == 31 &&
+        JxrSampleClippingClamp(64, 0, 63) == 63 &&
+        JxrSampleClippingClamp(1024, 0, 1023) == 1023 &&
+        JxrSampleClippingToByte(-1) == 0 &&
+        JxrSampleClippingToByte(128) == 128 &&
+        JxrSampleClippingToByte(256) == 255 &&
+        JxrSampleClippingToUInt16(-1) == 0 &&
+        JxrSampleClippingToUInt16(32768) == 32768 &&
+        JxrSampleClippingToUInt16(65536) == 65535 &&
+        JxrSampleClippingToInt16(-32769) == -32768 &&
+        JxrSampleClippingToInt16(-1) == -1 &&
+        JxrSampleClippingToInt16(32768) == 32767;
 }
 
 static int test_bit_input_buffer_state_vectors(void)
@@ -1462,6 +1481,7 @@ int main(int argc, char** argv)
         { "transcode_roi_geometry_vectors", test_transcode_roi_geometry_vectors },
         { "decoder_tile_quantizer_syntax_vectors", test_decoder_tile_quantizer_syntax_vectors },
         { "inverse_color_transform_vectors", test_inverse_color_transform_vectors },
+        { "sample_clipping_vectors", test_sample_clipping_vectors },
         { "bit_input_buffer_state_vectors", test_bit_input_buffer_state_vectors },
         { "packet_source_vectors", test_packet_source_vectors },
         { "packet_executor_vectors", test_packet_executor_vectors },

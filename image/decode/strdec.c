@@ -31,6 +31,7 @@
 #include "JxrMacroblockRegionState.h"
 #include "JxrDecoderTileQuantizerSyntaxReader.h"
 #include "JxrInverseColorTransform.h"
+#include "JxrSampleClipping.h"
 #include "strTransform.h"
 #include <math.h>
 #include "perfTimer.h"
@@ -376,11 +377,6 @@ Int processMacroblockDec(CWMImageStrCodec * pSC)
 
 // Inverse color conversion is implemented by JxrInverseColorTransform.
 
-#define _CLIP2(l, v, h) ((v) < (l) ? (l) : ((h) < (v) ? (h) : (v)))
-#define _CLIP8(v) ((U8)_CLIP2(0, v, 255))
-#define _CLIP16(v) ((I16)_CLIP2(-32768, v, 32767))
-#define _CLIPU16(v) ((U16)_CLIP2(0, v, 65535))
-
 #define min(a,b) (((a) < (b)) ? (a) : (b))
 
 //inverseConvert: Inverse conversion from float RGB to RGBE
@@ -606,7 +602,7 @@ Void outputNChannel(CWMImageStrCodec * pSC, size_t iFirstRow, size_t iFirstColum
                     for(iChannel = 0; iChannel < cChannel; iChannel ++){
                         PixelI p = ((pChannel[iChannel & 15][((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 15]] + iBias) >> iShift);
                         
-                        pDst[iChannel] = _CLIP8(p);
+                        pDst[iChannel] = JxrSampleClippingToByte(p);
                     }
                 }
             }
@@ -621,7 +617,7 @@ Void outputNChannel(CWMImageStrCodec * pSC, size_t iFirstRow, size_t iFirstColum
                         PixelI p = ((pChannel[iChannel & 15][((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 15]] + iBias) >> iShift);
                         
                         p <<= nLen;
-                        pDst[iChannel] = _CLIPU16(p);
+                        pDst[iChannel] = JxrSampleClippingToUInt16(p);
                     }
                 }
             }
@@ -636,7 +632,7 @@ Void outputNChannel(CWMImageStrCodec * pSC, size_t iFirstRow, size_t iFirstColum
                         PixelI p = ((pChannel[iChannel & 15][((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 15]] + iBias) >> iShift);
 
                         p <<= nLen;                        
-                        pDst[iChannel] = _CLIP16(p);
+                        pDst[iChannel] = JxrSampleClippingToInt16(p);
                     }
                 }
             }
@@ -787,7 +783,7 @@ Int outputMBRowAlpha(CWMImageStrCodec * pSC)
             for(iRow = iFirstRow; iRow < cHeight; iRow ++)
                 for(iColumn = iFirstColumn, iY = pOffsetY[iRow]; iColumn < cWidth; iColumn ++){
                     PixelI a = ((pA[((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 15]] + iBias) >> iShift);
-                    ((U8 *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY)[iAlphaPos] = _CLIP8(a);
+                    ((U8 *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY)[iAlphaPos] = JxrSampleClippingToByte(a);
                 }
         }
         else if(bd == BD_16){
@@ -796,7 +792,7 @@ Int outputMBRowAlpha(CWMImageStrCodec * pSC)
             for(iRow = iFirstRow; iRow < cHeight; iRow ++)
                 for(iColumn = iFirstColumn, iY = pOffsetY[iRow]; iColumn < cWidth; iColumn ++){
                     PixelI a = (((pA[((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 15]] + iBias) >> iShift) << nLen);
-                    ((U16 *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY)[iAlphaPos] = _CLIPU16(a);
+                    ((U16 *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY)[iAlphaPos] = JxrSampleClippingToUInt16(a);
                 }
         }
         else if(bd == BD_16S){
@@ -805,7 +801,7 @@ Int outputMBRowAlpha(CWMImageStrCodec * pSC)
             for(iRow = iFirstRow; iRow < cHeight; iRow ++)
                 for(iColumn = iFirstColumn, iY = pOffsetY[iRow]; iColumn < cWidth; iColumn ++){
                     PixelI a = (((pA[((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 15]] + iBias) >> iShift) << nLen);
-                    ((I16 *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY)[iAlphaPos] = _CLIP16(a);
+                    ((I16 *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY)[iAlphaPos] = JxrSampleClippingToInt16(a);
                 }
         }
         else if(bd == BD_16F){
@@ -982,7 +978,7 @@ Int outputMBRow(CWMImageStrCodec * pSC)
                             
                             pDst = (U8 *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY;
                             if ((g | b | r | a) & ~0xff)
-                                pDst[iR] = _CLIP8(r), pDst[1] = _CLIP8(g), pDst[iB] = _CLIP8(b), pDst[3] = _CLIP8(a);
+                                pDst[iR] = JxrSampleClippingToByte(r), pDst[1] = JxrSampleClippingToByte(g), pDst[iB] = JxrSampleClippingToByte(b), pDst[3] = JxrSampleClippingToByte(a);
                             else
                                 pDst[iR] = (U8)r, pDst[1] = (U8)g, pDst[iB] = (U8)b, pDst[3] = (U8)(a);
                         }
@@ -1000,7 +996,7 @@ Int outputMBRow(CWMImageStrCodec * pSC)
                             g >>= iShift, b >>= iShift, r >>= iShift, a >>= iShift;
                             pDst = (U8 *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY;
                             if ((g | b | r | a) & ~0xff)
-                                pDst[iR] = _CLIP8(r), pDst[1] = _CLIP8(g), pDst[iB] = _CLIP8(b), pDst[3] = _CLIP8(a);
+                                pDst[iR] = JxrSampleClippingToByte(r), pDst[1] = JxrSampleClippingToByte(g), pDst[iB] = JxrSampleClippingToByte(b), pDst[3] = JxrSampleClippingToByte(a);
                             else
                                 pDst[iR] = (U8)r, pDst[1] = (U8)g, pDst[iB] = (U8)b, pDst[3] = (U8)(a);
                         }
@@ -1018,7 +1014,7 @@ Int outputMBRow(CWMImageStrCodec * pSC)
                             
                             pDst = (U8 *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY;
                             if ((g | b | r) & ~0xff)
-                                pDst[iR] = _CLIP8(r), pDst[1] = _CLIP8(g), pDst[iB] = _CLIP8(b);
+                                pDst[iR] = JxrSampleClippingToByte(r), pDst[1] = JxrSampleClippingToByte(g), pDst[iB] = JxrSampleClippingToByte(b);
                             else
                                 pDst[iR] = (U8)r, pDst[1] = (U8)g, pDst[iB] = (U8)b;
                         }
@@ -1035,7 +1031,7 @@ Int outputMBRow(CWMImageStrCodec * pSC)
                             g >>= iShift, b >>= iShift, r >>= iShift;
                             pDst = (U8 *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY;
                             if ((g | b | r) & ~0xff)
-                                pDst[iR] = _CLIP8(r), pDst[1] = _CLIP8(g), pDst[iB] = _CLIP8(b);
+                                pDst[iR] = JxrSampleClippingToByte(r), pDst[1] = JxrSampleClippingToByte(g), pDst[iB] = JxrSampleClippingToByte(b);
                             else
                                 pDst[iR] = (U8)r, pDst[1] = (U8)g, pDst[iB] = (U8)b;
                         }
@@ -1066,7 +1062,7 @@ Int outputMBRow(CWMImageStrCodec * pSC)
 						
 						pDst = (U8 *)pSC->WMIBI.pv + pOffsetX[iColumn >> 1] + iY;
 						if ((y0 | y1 | u | v) & ~0xff)//UYVY
-							pDst[0] = _CLIP8(u), pDst[1] = _CLIP8(y0), pDst[2] = _CLIP8(v), pDst[3] = _CLIP8(y1);
+							pDst[0] = JxrSampleClippingToByte(u), pDst[1] = JxrSampleClippingToByte(y0), pDst[2] = JxrSampleClippingToByte(v), pDst[3] = JxrSampleClippingToByte(y1);
 						else
 							pDst[0] = (U8)u, pDst[1] = (U8)y0, pDst[2] = (U8)v, pDst[3] = (U8)y1;
 					}
@@ -1093,7 +1089,7 @@ Int outputMBRow(CWMImageStrCodec * pSC)
 	
 						pDst = (U8 *)pSC->WMIBI.pv + pOffsetX[iColumn >> 1] + iY;
 						if ((y0 | y1 | y2 | y3 | u | v) & ~0xff)
-							pDst[i0] = _CLIP8(y0), pDst[i1] = _CLIP8(y1), pDst[i2] = _CLIP8(y2), pDst[i3] = _CLIP8(y3), pDst[4] = _CLIP8(u), pDst[5] = _CLIP8(v);
+							pDst[i0] = JxrSampleClippingToByte(y0), pDst[i1] = JxrSampleClippingToByte(y1), pDst[i2] = JxrSampleClippingToByte(y2), pDst[i3] = JxrSampleClippingToByte(y3), pDst[4] = JxrSampleClippingToByte(u), pDst[5] = JxrSampleClippingToByte(v);
 						else
 							pDst[i0] = (U8)y0, pDst[i1] = (U8)y1, pDst[i2] = (U8)y2, pDst[i3] = (U8)y3, pDst[4] = (U8)u, pDst[5] = (U8)v;
 					}
@@ -1118,7 +1114,7 @@ Int outputMBRow(CWMImageStrCodec * pSC)
 	
 						pDst = (U8 *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY;
 						if ((c | m | y | k) & ~0xff)
-							pDst[0] = _CLIP8(c), pDst[1] = _CLIP8(m), pDst[2] = _CLIP8(y), pDst[3] = _CLIP8(k);
+							pDst[0] = JxrSampleClippingToByte(c), pDst[1] = JxrSampleClippingToByte(m), pDst[2] = JxrSampleClippingToByte(y), pDst[3] = JxrSampleClippingToByte(k);
 						else
 							pDst[0] = (U8)c, pDst[1] = (U8)m, pDst[2] = (U8)y, pDst[3] = (U8)k;
 					}
@@ -1173,7 +1169,7 @@ Int outputMBRow(CWMImageStrCodec * pSC)
 						pDst = (U16 *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY;
 						
 						if ((g | b | r) & ~0xffff)
-							pDst[0] = _CLIPU16(r),  pDst[1] = _CLIPU16(g), pDst[2] = _CLIPU16(b);
+							pDst[0] = JxrSampleClippingToUInt16(r),  pDst[1] = JxrSampleClippingToUInt16(g), pDst[2] = JxrSampleClippingToUInt16(b);
 						else
 							pDst[0] = (U16)r, pDst[1] = (U16)g, pDst[2] = (U16)b;
 					}
@@ -1190,7 +1186,7 @@ Int outputMBRow(CWMImageStrCodec * pSC)
 						g = (g >> iShift) << nLen, b = (b >> iShift) << nLen, r = (r >> iShift) << nLen;
 						pDst = (U16 *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY;
 						if ((g | b | r) & ~0xffff)
-							pDst[0] = _CLIPU16(r),  pDst[1] = _CLIPU16(g), pDst[2] = _CLIPU16(b);
+							pDst[0] = JxrSampleClippingToUInt16(r),  pDst[1] = JxrSampleClippingToUInt16(g), pDst[2] = JxrSampleClippingToUInt16(b);
 						else
 							pDst[0] = (U16)r, pDst[1] = (U16)g, pDst[2] = (U16)b;
 					}
@@ -1221,10 +1217,10 @@ Int outputMBRow(CWMImageStrCodec * pSC)
 						pDst = (U16 *)pSC->WMIBI.pv + pOffsetX[iColumn >> 1] + iY;
 						if ((y0 | y1 | u | v) & ~0xffff)
 							{
-								pDst[i0] = _CLIPU16(u);
-								pDst[i1] = _CLIPU16(y0); 
-								pDst[2] = _CLIPU16(v); 
-								pDst[3] = _CLIPU16(y1);
+								pDst[i0] = JxrSampleClippingToUInt16(u);
+								pDst[i1] = JxrSampleClippingToUInt16(y0);
+								pDst[2] = JxrSampleClippingToUInt16(v);
+								pDst[3] = JxrSampleClippingToUInt16(y1);
 							}
 						else
 							{
@@ -1258,12 +1254,12 @@ Int outputMBRow(CWMImageStrCodec * pSC)
 						pDst = (U16 *)pSC->WMIBI.pv + pOffsetX[iColumn >> 1] + iY;
 						if ((y0 | y1 | y2 | y3 | u | v) & ~0xffff)
 							{
-								pDst[i0] = _CLIPU16(y0); 
-								pDst[i1] = _CLIPU16(y1); 
-								pDst[i2] = _CLIPU16(y2); 
-								pDst[i3] = _CLIPU16(y3); 
-								pDst[4] = _CLIPU16(u);
-								pDst[5] = _CLIPU16(v);
+								pDst[i0] = JxrSampleClippingToUInt16(y0);
+								pDst[i1] = JxrSampleClippingToUInt16(y1);
+								pDst[i2] = JxrSampleClippingToUInt16(y2);
+								pDst[i3] = JxrSampleClippingToUInt16(y3);
+								pDst[4] = JxrSampleClippingToUInt16(u);
+								pDst[5] = JxrSampleClippingToUInt16(v);
 							}
 						else
 							{
@@ -1298,7 +1294,7 @@ Int outputMBRow(CWMImageStrCodec * pSC)
 	
 						pDst = (U16 *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY;
 						if ((c | m | y | k) & ~0xffff)
-							pDst[0] = _CLIPU16(c), pDst[1] = _CLIPU16(m), pDst[2] = _CLIPU16(y), pDst[3] = _CLIPU16(k);
+							pDst[0] = JxrSampleClippingToUInt16(c), pDst[1] = JxrSampleClippingToUInt16(m), pDst[2] = JxrSampleClippingToUInt16(y), pDst[3] = JxrSampleClippingToUInt16(k);
 						else
 							pDst[0] = (U16)(c), pDst[1] = (U16)(m), pDst[2] = (U16)(y), pDst[3] = (U16)(k);
 						}
@@ -1330,7 +1326,7 @@ Int outputMBRow(CWMImageStrCodec * pSC)
                     r = (r >> iShift) << nLen, g = (g >> iShift) << nLen, b = (b >> iShift) << nLen;
                     
                     pDst = (I16 *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY;
-                    pDst[0] = _CLIP16(r), pDst[1] = _CLIP16(g), pDst[2] = _CLIP16(b);
+                    pDst[0] = JxrSampleClippingToInt16(r), pDst[1] = JxrSampleClippingToInt16(g), pDst[2] = JxrSampleClippingToInt16(b);
                 }
             break;
         }
@@ -1538,9 +1534,9 @@ Int outputMBRow(CWMImageStrCodec * pSC)
                 g >>= iShift, b >>= iShift, r >>= iShift;
                 pDst = (U16 *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY;
                 if (pSC->m_param.bRBSwapped)
-                    pDst[0] = (U16)_CLIP2(0, b, 31) + (((U16)_CLIP2(0, g, 31)) << 5) + (((U16)_CLIP2(0, r, 31)) << 10);
+                    pDst[0] = (U16)JxrSampleClippingClamp(b, 0, 31) + (((U16)JxrSampleClippingClamp(g, 0, 31)) << 5) + (((U16)JxrSampleClippingClamp(r, 0, 31)) << 10);
                 else
-                    pDst[0] = (U16)_CLIP2(0, r, 31) + (((U16)_CLIP2(0, g, 31)) << 5) + (((U16)_CLIP2(0, b, 31)) << 10);
+                    pDst[0] = (U16)JxrSampleClippingClamp(r, 0, 31) + (((U16)JxrSampleClippingClamp(g, 0, 31)) << 5) + (((U16)JxrSampleClippingClamp(b, 0, 31)) << 10);
             }
     }
     else if(bd == BD_565){
@@ -1561,9 +1557,9 @@ Int outputMBRow(CWMImageStrCodec * pSC)
                 g >>= iShift, b >>= iShift + 1, r >>= iShift + 1;
                 pDst = (U16 *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY;
                 if (pSC->m_param.bRBSwapped)
-                    pDst[0] = (U16)_CLIP2(0, b, 31) + (((U16)_CLIP2(0, g, 63)) << 5) + (((U16)_CLIP2(0, r, 31)) << 11);
+                    pDst[0] = (U16)JxrSampleClippingClamp(b, 0, 31) + (((U16)JxrSampleClippingClamp(g, 0, 63)) << 5) + (((U16)JxrSampleClippingClamp(r, 0, 31)) << 11);
                 else
-                    pDst[0] = (U16)_CLIP2(0, r, 31) + (((U16)_CLIP2(0, g, 63)) << 5) + (((U16)_CLIP2(0, b, 31)) << 11);
+                    pDst[0] = (U16)JxrSampleClippingClamp(r, 0, 31) + (((U16)JxrSampleClippingClamp(g, 0, 63)) << 5) + (((U16)JxrSampleClippingClamp(b, 0, 31)) << 11);
             }
     }
     else if(bd == BD_10){
@@ -1585,13 +1581,13 @@ Int outputMBRow(CWMImageStrCodec * pSC)
 
                 pDst = (U32 *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY;
                 if (pSC->m_param.bRBSwapped)
-                    pDst[0] = (U32)_CLIP2(0, b, 1023) + 
-                        (((U32)_CLIP2(0, g, 1023)) << 10) + 
-                        (((U32)_CLIP2(0, r, 1023)) << 20);
+                    pDst[0] = (U32)JxrSampleClippingClamp(b, 0, 1023) +
+                        (((U32)JxrSampleClippingClamp(g, 0, 1023)) << 10) +
+                        (((U32)JxrSampleClippingClamp(r, 0, 1023)) << 20);
                 else
-                    pDst[0] = (U32)_CLIP2(0, r, 1023) + 
-                        (((U32)_CLIP2(0, g, 1023)) << 10) + 
-                        (((U32)_CLIP2(0, b, 1023)) << 20);
+                    pDst[0] = (U32)JxrSampleClippingClamp(r, 0, 1023) +
+                        (((U32)JxrSampleClippingClamp(g, 0, 1023)) << 10) +
+                        (((U32)JxrSampleClippingClamp(b, 0, 1023)) << 20);
             }
     }
     else if(bd == BD_1){
@@ -1710,7 +1706,7 @@ Void outputNChannelThumbnail(CWMImageStrCodec * pSC, const PixelI cMul, const si
                     for(iChannel = 0; iChannel < cChannel; iChannel ++){
                         PixelI p = ((pChannel[iChannel & 15][((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 15]] + iOffset) * cMul) >> rShiftY;
                         
-                        pDst[iChannel] = _CLIP8(p);
+                        pDst[iChannel] = JxrSampleClippingToByte(p);
                     }
                 }
             }
@@ -1724,7 +1720,7 @@ Void outputNChannelThumbnail(CWMImageStrCodec * pSC, const PixelI cMul, const si
                     for(iChannel = 0; iChannel < cChannel; iChannel ++){
                         PixelI p = (((pChannel[iChannel & 15][((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 15]] + iOffset) * cMul) >> rShiftY) << nLen;
                         
-                        pDst[iChannel] = _CLIPU16(p);
+                        pDst[iChannel] = JxrSampleClippingToUInt16(p);
                     }
                 }
             }
@@ -1738,7 +1734,7 @@ Void outputNChannelThumbnail(CWMImageStrCodec * pSC, const PixelI cMul, const si
                     for(iChannel = 0; iChannel < cChannel; iChannel ++){
                         PixelI p = ((pChannel[iChannel & 15][((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 15]] * cMul) >> rShiftY) << nLen;
                         
-                        pDst[iChannel] = _CLIP16(p);
+                        pDst[iChannel] = JxrSampleClippingToInt16(p);
                     }
                 }
             }
@@ -1830,7 +1826,7 @@ Int decodeThumbnailAlpha(CWMImageStrCodec * pSC, const size_t nBits, const Pixel
                 for(iColumn = iFirstColumn, iY = pOffsetY[iRow >> nBits]; iColumn < cWidth; iColumn += tScale){
                     PixelI a = ((pSrc[((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf]] + offset) * cMul) >> rShiftY;
                     
-                    ((U8 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY)[iAlphaPos] = _CLIP8(a);
+                    ((U8 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY)[iAlphaPos] = JxrSampleClippingToByte(a);
                 }
         }
         else if(bd == BD_16){
@@ -1840,7 +1836,7 @@ Int decodeThumbnailAlpha(CWMImageStrCodec * pSC, const size_t nBits, const Pixel
                 for(iColumn = iFirstColumn, iY = pOffsetY[iRow >> nBits]; iColumn < cWidth; iColumn += tScale){
                     PixelI a = (((pSrc[((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf]] + offset) * cMul) >> rShiftY) << nLen;
 
-                    ((U16 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY)[iAlphaPos] = _CLIPU16(a);
+                    ((U16 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY)[iAlphaPos] = JxrSampleClippingToUInt16(a);
                 }
         }
         else if(bd == BD_16S){
@@ -1848,7 +1844,7 @@ Int decodeThumbnailAlpha(CWMImageStrCodec * pSC, const size_t nBits, const Pixel
                 for(iColumn = iFirstColumn, iY = pOffsetY[iRow >> nBits]; iColumn < cWidth; iColumn += tScale){
                     PixelI a = ((pSrc[((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf]] * cMul) >> rShiftY) << nLen;
 
-                    ((I16 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY)[iAlphaPos] = _CLIP16(a);
+                    ((I16 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY)[iAlphaPos] = JxrSampleClippingToInt16(a);
                 }
         }
         else if(bd == BD_16F){
@@ -1986,7 +1982,7 @@ Int decodeThumbnail(CWMImageStrCodec * pSC)
                         JxrInverseColorTransformApplyRgb(&r, &g, &b);
 
                         pDst = (U8 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY;
-                        pDst[iB] = _CLIP8(b), pDst[1] = _CLIP8(g), pDst[iR] = _CLIP8(r);
+                        pDst[iB] = JxrSampleClippingToByte(b), pDst[1] = JxrSampleClippingToByte(g), pDst[iR] = JxrSampleClippingToByte(r);
                 }
             }
             break;
@@ -2024,7 +2020,7 @@ Int decodeThumbnail(CWMImageStrCodec * pSC)
                     JxrInverseColorTransformApplyCmyk(&c, &m, &y, &k);
                     
                     pDst = (U8 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY;
-                    pDst[0] = _CLIP8(c), pDst[1] = _CLIP8(m), pDst[2] = _CLIP8(y), pDst[3] = _CLIP8(k);
+                    pDst[0] = JxrSampleClippingToByte(c), pDst[1] = JxrSampleClippingToByte(m), pDst[2] = JxrSampleClippingToByte(y), pDst[3] = JxrSampleClippingToByte(k);
                 }
             }
             break;
@@ -2050,9 +2046,9 @@ Int decodeThumbnail(CWMImageStrCodec * pSC)
                                                 
                         pDst = (U16 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY;
                         r <<= nLen, g <<= nLen, b <<= nLen;
-                        pDst[0] = _CLIPU16(r);
-                        pDst[1] = _CLIPU16(g);
-                        pDst[2] = _CLIPU16(b);
+                        pDst[0] = JxrSampleClippingToUInt16(r);
+                        pDst[1] = JxrSampleClippingToUInt16(g);
+                        pDst[2] = JxrSampleClippingToUInt16(b);
                 }
             }
             break;
@@ -2077,10 +2073,10 @@ Int decodeThumbnail(CWMImageStrCodec * pSC)
                     
                     pDst = (U16 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY;
                     c <<= nLen, m <<= nLen, y <<= nLen, k <<= nLen;
-                    pDst[0] = _CLIPU16(c);
-                    pDst[1] = _CLIPU16(m);
-                    pDst[2] = _CLIPU16(y);
-                    pDst[3] = _CLIPU16(k);
+                    pDst[0] = JxrSampleClippingToUInt16(c);
+                    pDst[1] = JxrSampleClippingToUInt16(m);
+                    pDst[2] = JxrSampleClippingToUInt16(y);
+                    pDst[3] = JxrSampleClippingToUInt16(k);
                 }
             }
             break;
@@ -2104,9 +2100,9 @@ Int decodeThumbnail(CWMImageStrCodec * pSC)
                                                 
                         pDst = (I16 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY;
                         r <<= nLen, g <<= nLen, b <<= nLen;
-                        pDst[0] = _CLIP16(r);
-                        pDst[1] = _CLIP16(g);
-                        pDst[2] = _CLIP16(b);
+                        pDst[0] = JxrSampleClippingToInt16(r);
+                        pDst[1] = JxrSampleClippingToInt16(g);
+                        pDst[2] = JxrSampleClippingToInt16(b);
                 }
             }
             break;
@@ -2130,10 +2126,10 @@ Int decodeThumbnail(CWMImageStrCodec * pSC)
 	
 						pDst = (I16 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY;
 						c <<= nLen, m <<= nLen, y <<= nLen, k <<= nLen;
-						pDst[0] = _CLIP16(c); 
-						pDst[1] = _CLIP16(m);
-						pDst[2] = _CLIP16(y);
-						pDst[3] = _CLIP16(k);
+						pDst[0] = JxrSampleClippingToInt16(c);
+						pDst[1] = JxrSampleClippingToInt16(m);
+						pDst[2] = JxrSampleClippingToInt16(y);
+						pDst[3] = JxrSampleClippingToInt16(k);
 					}
 				}
 			}
@@ -2309,7 +2305,7 @@ Int decodeThumbnail(CWMImageStrCodec * pSC)
 
                 JxrInverseColorTransformApplyRgb(&r, &g, &b);
                 pDst = (U16 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY;
-                pDst[0] = (U16)_CLIP2(0, r, 31) + (((U16)_CLIP2(0, g, 31)) << 5) + (((U16)_CLIP2(0, b, 31)) << 10);
+                pDst[0] = (U16)JxrSampleClippingClamp(r, 0, 31) + (((U16)JxrSampleClippingClamp(g, 0, 31)) << 5) + (((U16)JxrSampleClippingClamp(b, 0, 31)) << 10);
             }
         }
     }
@@ -2326,7 +2322,7 @@ Int decodeThumbnail(CWMImageStrCodec * pSC)
                 JxrInverseColorTransformApplyRgb(&r, &g, &b);
                 r /= 2, b /= 2;
                 pDst = (U16 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY;
-                pDst[0] = (U16)_CLIP2(0, r, 31) + (((U16)_CLIP2(0, g, 63)) << 5) + (((U16)_CLIP2(0, b, 31)) << 11);
+                pDst[0] = (U16)JxrSampleClippingClamp(r, 0, 31) + (((U16)JxrSampleClippingClamp(g, 0, 63)) << 5) + (((U16)JxrSampleClippingClamp(b, 0, 31)) << 11);
             }
         }
     }
@@ -2342,9 +2338,9 @@ Int decodeThumbnail(CWMImageStrCodec * pSC)
 
                 JxrInverseColorTransformApplyRgb(&r, &g, &b);
                 pDst = (U32 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY;
-                pDst[0] = (U32)_CLIP2(0, r, 1023) + 
-                    (((U32)_CLIP2(0, g, 1023)) << 10) + 
-                    (((U32)_CLIP2(0, b, 1023)) << 20);
+                pDst[0] = (U32)JxrSampleClippingClamp(r, 0, 1023) +
+                    (((U32)JxrSampleClippingClamp(g, 0, 1023)) << 10) +
+                    (((U32)JxrSampleClippingClamp(b, 0, 1023)) << 20);
             }
         }
     }
