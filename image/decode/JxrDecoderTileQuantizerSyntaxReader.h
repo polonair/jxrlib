@@ -22,6 +22,7 @@ typedef struct JxrDecoderQuantizerSetSyntax {
 Void JxrDecoderBitSourceInit(JxrDecoderBitSource* source, Void* context,
     JxrDecoderBitSourceRead read);
 Void JxrDecoderBitSourceInitLegacy(JxrDecoderBitSource* source, BitIOInfo* legacyInput);
+Void JxrDecoderBitSourceInitSimple(JxrDecoderBitSource* source, SimpleBitIO* simpleInput);
 Bool JxrDecoderTileQuantizerSyntaxReadDc(JxrDecoderBitSource* source, size_t channelCount,
     JxrDecoderQuantizerSyntax* result);
 Bool JxrDecoderTileQuantizerSyntaxReadLowpass(JxrDecoderBitSource* source,

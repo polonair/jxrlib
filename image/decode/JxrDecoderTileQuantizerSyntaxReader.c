@@ -6,6 +6,12 @@ static Bool JxrDecoderBitSourceReadLegacy(Void* context, U32 count, U32* value)
     return TRUE;
 }
 
+static Bool JxrDecoderBitSourceReadSimple(Void* context, U32 count, U32* value)
+{
+    *value = getBit32_SB((SimpleBitIO*)context, count);
+    return TRUE;
+}
+
 static Bool JxrDecoderTileQuantizerSyntaxReadQuantizer(JxrDecoderBitSource* source,
     size_t channelCount, JxrDecoderQuantizerSyntax* result)
 {
@@ -57,6 +63,8 @@ Void JxrDecoderBitSourceInit(JxrDecoderBitSource* source, Void* context,
 { source->context = context; source->read = read; }
 Void JxrDecoderBitSourceInitLegacy(JxrDecoderBitSource* source, BitIOInfo* legacyInput)
 { JxrDecoderBitSourceInit(source, legacyInput, JxrDecoderBitSourceReadLegacy); }
+Void JxrDecoderBitSourceInitSimple(JxrDecoderBitSource* source, SimpleBitIO* simpleInput)
+{ JxrDecoderBitSourceInit(source, simpleInput, JxrDecoderBitSourceReadSimple); }
 Bool JxrDecoderTileQuantizerSyntaxReadDc(JxrDecoderBitSource* source, size_t channelCount,
     JxrDecoderQuantizerSyntax* result)
 { return JxrDecoderTileQuantizerSyntaxReadQuantizer(source, channelCount, result); }

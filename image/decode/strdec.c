@@ -66,26 +66,23 @@ Int processMacroblockDec(CWMImageStrCodec *);
 
 U8 readQuantizerSB(U8 pQPIndex[MAX_CHANNELS], SimpleBitIO * pIO, size_t cChannel)
 {
-    U8 cChMode = 0;
-    
+    JxrDecoderBitSource source;
+    JxrDecoderQuantizerSyntax syntax;
+    U8 cChMode;
+    size_t channel;
+
     if(cChannel >= MAX_CHANNELS)
         return 0;
-
-    if(cChannel > 1)
-        cChMode = (U8)getBit32_SB(pIO, 2); // Channel mode
-
-    pQPIndex[0] = (U8)getBit32_SB(pIO, 8); // Y
-
-    if(cChMode == 1)  // MIXED
-        pQPIndex[1] = (U8)getBit32_SB(pIO, 8); // UV
-    else if(cChMode > 0){ // INDEPENDENT
-        size_t i;
-
-        for(i = 1; i < cChannel; i ++)
-#pragma prefast(suppress: __WARNING_UNRELATED_LOOP_TERMINATION_NO_SIZEEXPR, "PREfast false alarm: 1 <= i < MAX_CHANNELS, no buffer over/underrun!")
-            pQPIndex[i] = (U8)getBit32_SB(pIO, 8); // UV
-    }
-
+    JxrDecoderBitSourceInitSimple(&source, pIO);
+    if (!JxrDecoderTileQuantizerSyntaxReadDc(&source, cChannel, &syntax))
+        return 0;
+    cChMode = syntax.channelMode;
+    pQPIndex[0] = syntax.indices[0];
+    if (cChMode == 1)
+        pQPIndex[1] = syntax.indices[1];
+    else if (cChMode > 0)
+        for (channel = 1; channel < cChannel; ++channel)
+            pQPIndex[channel] = syntax.indices[channel];
     return cChMode;
 }
 

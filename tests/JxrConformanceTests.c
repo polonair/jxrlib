@@ -625,6 +625,8 @@ static int test_decoder_tile_quantizer_syntax_vectors(void)
     JxrDecoderQuantizerSyntax dc;
     JxrDecoderQuantizerSetSyntax lp;
     JxrDecoderQuantizerSetSyntax hp;
+    struct WMPStream* simpleStream = NULL;
+    SimpleBitIO simple;
 
     JxrBitWriterInit(&writer, data, sizeof(data));
     if (!JxrBitWriterWrite(&writer, 2, 2) || !JxrBitWriterWrite(&writer, 10, 8) ||
@@ -641,7 +643,26 @@ static int test_decoder_tile_quantizer_syntax_vectors(void)
         lp.count != 1 || lp.values[0].channelMode != 1 || lp.values[0].indices[0] != 40 ||
         lp.values[0].indices[1] != 50 ||
         !JxrDecoderTileQuantizerSyntaxReadHighpass(&source, 3, lp.count, &hp)) return 0;
-    return hp.copyPrevious && hp.count == 1 && !JxrDecoderTileQuantizerSyntaxReadDc(&source, 0, &dc);
+    if (!hp.copyPrevious || hp.count != 1 ||
+        JxrDecoderTileQuantizerSyntaxReadDc(&source, 0, &dc)) return 0;
+
+    memset(&simple, 0, sizeof(simple));
+    if (CreateWS_Memory(&simpleStream, data, JxrBitWriterBytes(&writer)) != WMP_errSuccess ||
+        attach_SB(&simple, simpleStream) != WMP_errSuccess) {
+        if (simpleStream != NULL) CloseWS_Memory(&simpleStream);
+        return 0;
+    }
+    JxrDecoderBitSourceInitSimple(&source, &simple);
+    if (!JxrDecoderTileQuantizerSyntaxReadDc(&source, 3, &dc) || dc.channelMode != 2 ||
+        dc.indices[0] != 10 || dc.indices[1] != 20 || dc.indices[2] != 30) {
+        flushToByte_SB(&simple);
+        detach_SB(&simple);
+        CloseWS_Memory(&simpleStream);
+        return 0;
+    }
+    flushToByte_SB(&simple);
+    return detach_SB(&simple) == WMP_errSuccess &&
+        CloseWS_Memory(&simpleStream) == WMP_errSuccess;
 }
 
 static int test_decoder_dc_quantizer_header_applier_vectors(void)
