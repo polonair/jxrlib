@@ -31,6 +31,7 @@
 #include "JxrMacroblockRegionState.h"
 #include "JxrDecoderTileQuantizerSyntaxReader.h"
 #include "JxrDecoderDcQuantizerHeaderApplier.h"
+#include "JxrDecoderLpQuantizerHeaderApplier.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -121,26 +122,11 @@ Int readTileHeaderLP(CWMImageStrCodec * pSC, BitIOInfo * pIO)
     if(pSC->WMISCP.sbSubband != SB_DC_ONLY && (pSC->m_param.uQPMode & 2) != 0){
         JxrDecoderBitSource source;
         JxrDecoderQuantizerSetSyntax syntax;
-        CWMITile * pTile = pSC->pTile + pSC->cTileColumn;
-        U8 quantizer;
-        size_t channel;
 
         JxrDecoderBitSourceInitLegacy(&source, pIO);
-        if(!JxrDecoderTileQuantizerSyntaxReadLowpass(&source, pSC->m_param.cNumChannels, &syntax))
+        if(!JxrDecoderTileQuantizerSyntaxReadLowpass(&source, pSC->m_param.cNumChannels, &syntax) ||
+            !JxrDecoderLpQuantizerHeaderApplierApply(pSC, &syntax))
             return ICERR_ERROR;
-        pTile->bUseDC = syntax.copyPrevious;
-        pTile->cNumQPLP = syntax.count;
-        pTile->cBitsLP = pTile->bUseDC ? 0 : dquantBits(pTile->cNumQPLP);
-        if(pSC->cTileRow > 0) freeQuantizer(pTile->pQuantizerLP);
-        if(allocateQuantizer(pTile->pQuantizerLP, pSC->m_param.cNumChannels, pTile->cNumQPLP) != ICERR_OK)
-            return ICERR_ERROR;
-        if(pTile->bUseDC) useDCQuantizer(pSC, pSC->cTileColumn);
-        else for(quantizer = 0; quantizer < pTile->cNumQPLP; ++quantizer){
-            pTile->cChModeLP[quantizer] = syntax.values[quantizer].channelMode;
-            for(channel = 0; channel < pSC->m_param.cNumChannels; ++channel)
-                pTile->pQuantizerLP[channel][quantizer].iIndex = syntax.values[quantizer].indices[channel];
-            formatQuantizer(pTile->pQuantizerLP, pTile->cChModeLP[quantizer], pSC->m_param.cNumChannels, quantizer, TRUE, pSC->m_param.bScaledArith);
-        }
     }
     return ICERR_OK;
 }
