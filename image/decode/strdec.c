@@ -37,6 +37,7 @@
 #include "JxrDecoderRoiRowRange.h"
 #include "JxrVariableLengthWordReader.h"
 #include "JxrIndexTableReader.h"
+#include "JxrDecoderStreamInitializer.h"
 #include "strTransform.h"
 #include <math.h>
 #include "perfTimer.h"
@@ -2303,15 +2304,35 @@ Int readIndexTable(CWMImageStrCodec * pSC)
     return ICERR_OK;
 }
 
+static Int JxrDecoderStreamInitializeLegacyBitIo(Void* context)
+{
+    return allocateBitIOInfo((CWMImageStrCodec*)context);
+}
+
+static Int JxrDecoderStreamInitializeLegacyInput(Void* context)
+{
+    CWMImageStrCodec* codec = (CWMImageStrCodec*)context;
+    return attachISRead(codec->pIOHeader, codec->WMISCP.pWStream, codec) == WMP_errSuccess ?
+        ICERR_OK : ICERR_ERROR;
+}
+
+static Int JxrDecoderStreamInitializeLegacyIndexTable(Void* context)
+{
+    return readIndexTable((CWMImageStrCodec*)context);
+}
+
 Int StrIODecInit(CWMImageStrCodec* pSC)
 {
-    if(allocateBitIOInfo(pSC) != ICERR_OK){
+    JxrDecoderStreamInitializer initializer;
+
+    JxrDecoderStreamInitializerInit(&initializer, pSC,
+        JxrDecoderStreamInitializeLegacyBitIo,
+        JxrDecoderStreamInitializeLegacyInput,
+        JxrDecoderStreamInitializeLegacyIndexTable);
+    if (JxrDecoderStreamInitializerRun(&initializer) != ICERR_OK)
+    {
         return ICERR_ERROR;
     }
-    
-    attachISRead(pSC->pIOHeader, pSC->WMISCP.pWStream, pSC);
-
-    readIndexTable(pSC);
 
     if(pSC->WMISCP.bVerbose){
         U32 i, j;

@@ -43,6 +43,7 @@
 #include "JxrDecoderRoiRowRange.h"
 #include "JxrVariableLengthWordReader.h"
 #include "JxrIndexTableReader.h"
+#include "JxrDecoderStreamInitializer.h"
 #include "JxrEntropyReader.h"
 #include "JxrLegacyBitReaderAdapter.h"
 #ifdef _WIN32
@@ -866,6 +867,68 @@ static int test_index_table_reader_vectors(void)
     return !JxrIndexTableReaderRead(&reader, 1, NULL, NULL, &headerSize);
 }
 
+typedef struct JxrDecoderStreamInitializerTestContext {
+    Int allocateResult;
+    Int attachResult;
+    Int indexResult;
+    U32 callOrder[3];
+    U32 callCount;
+} JxrDecoderStreamInitializerTestContext;
+
+static Int initialize_test_allocate(Void* context)
+{
+    JxrDecoderStreamInitializerTestContext* test = (JxrDecoderStreamInitializerTestContext*)context;
+    test->callOrder[test->callCount++] = 1;
+    return test->allocateResult;
+}
+
+static Int initialize_test_attach(Void* context)
+{
+    JxrDecoderStreamInitializerTestContext* test = (JxrDecoderStreamInitializerTestContext*)context;
+    test->callOrder[test->callCount++] = 2;
+    return test->attachResult;
+}
+
+static Int initialize_test_index(Void* context)
+{
+    JxrDecoderStreamInitializerTestContext* test = (JxrDecoderStreamInitializerTestContext*)context;
+    test->callOrder[test->callCount++] = 3;
+    return test->indexResult;
+}
+
+static int test_decoder_stream_initializer_vectors(void)
+{
+    JxrDecoderStreamInitializer initializer;
+    JxrDecoderStreamInitializerTestContext context;
+
+    memset(&context, 0, sizeof(context));
+    JxrDecoderStreamInitializerInit(&initializer, &context, initialize_test_allocate,
+        initialize_test_attach, initialize_test_index);
+    if (JxrDecoderStreamInitializerRun(&initializer) != ICERR_OK || context.callCount != 3 ||
+        context.callOrder[0] != 1 || context.callOrder[1] != 2 || context.callOrder[2] != 3)
+    {
+        return 0;
+    }
+
+    memset(&context, 0, sizeof(context));
+    context.attachResult = ICERR_ERROR;
+    JxrDecoderStreamInitializerInit(&initializer, &context, initialize_test_allocate,
+        initialize_test_attach, initialize_test_index);
+    if (JxrDecoderStreamInitializerRun(&initializer) != ICERR_ERROR || context.callCount != 2 ||
+        context.callOrder[0] != 1 || context.callOrder[1] != 2) return 0;
+
+    memset(&context, 0, sizeof(context));
+    context.indexResult = ICERR_ERROR;
+    JxrDecoderStreamInitializerInit(&initializer, &context, initialize_test_allocate,
+        initialize_test_attach, initialize_test_index);
+    if (JxrDecoderStreamInitializerRun(&initializer) != ICERR_ERROR || context.callCount != 3 ||
+        context.callOrder[2] != 3) return 0;
+
+    JxrDecoderStreamInitializerInit(&initializer, &context, initialize_test_allocate,
+        initialize_test_attach, NULL);
+    return JxrDecoderStreamInitializerRun(&initializer) == ICERR_ERROR;
+}
+
 static int test_bit_input_buffer_state_vectors(void)
 {
     JxrBitInputBufferState state;
@@ -1683,6 +1746,7 @@ int main(int argc, char** argv)
         { "decoder_roi_row_range_vectors", test_decoder_roi_row_range_vectors },
         { "variable_length_word_vectors", test_variable_length_word_vectors },
         { "index_table_reader_vectors", test_index_table_reader_vectors },
+        { "decoder_stream_initializer_vectors", test_decoder_stream_initializer_vectors },
         { "bit_input_buffer_state_vectors", test_bit_input_buffer_state_vectors },
         { "packet_source_vectors", test_packet_source_vectors },
         { "packet_executor_vectors", test_packet_executor_vectors },
