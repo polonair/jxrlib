@@ -35,6 +35,7 @@
 #include "JxrTranscodeCoefficientTransform.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
+#include "JxrDecoderTileQuantizerSyntaxReader.h"
 #include "JxrEntropyReader.h"
 #include "JxrLegacyBitReaderAdapter.h"
 #ifdef _WIN32
@@ -592,6 +593,37 @@ static int test_transcode_roi_geometry_vectors(void)
     request.requestedLeft = 99;
     request.requestedWidth = 2;
     return !JxrTranscodeRoiGeometryCalculate(&request, &result);
+}
+
+static Bool read_decoder_test_bits(Void* context, U32 count, U32* value)
+{ return JxrBitReaderRead((JxrBitReader*)context, count, value); }
+
+static int test_decoder_tile_quantizer_syntax_vectors(void)
+{
+    U8 data[16] = {0};
+    JxrBitWriter writer;
+    JxrBitReader reader;
+    JxrDecoderBitSource source;
+    JxrDecoderQuantizerSyntax dc;
+    JxrDecoderQuantizerSetSyntax lp;
+    JxrDecoderQuantizerSetSyntax hp;
+
+    JxrBitWriterInit(&writer, data, sizeof(data));
+    if (!JxrBitWriterWrite(&writer, 2, 2) || !JxrBitWriterWrite(&writer, 10, 8) ||
+        !JxrBitWriterWrite(&writer, 20, 8) || !JxrBitWriterWrite(&writer, 30, 8) ||
+        !JxrBitWriterWrite(&writer, 0, 1) || !JxrBitWriterWrite(&writer, 0, 4) ||
+        !JxrBitWriterWrite(&writer, 1, 2) || !JxrBitWriterWrite(&writer, 40, 8) ||
+        !JxrBitWriterWrite(&writer, 50, 8) || !JxrBitWriterWrite(&writer, 1, 1) ||
+        !JxrBitWriterFlush(&writer)) return 0;
+    JxrBitReaderInit(&reader, data, JxrBitWriterBytes(&writer));
+    JxrDecoderBitSourceInit(&source, &reader, read_decoder_test_bits);
+    if (!JxrDecoderTileQuantizerSyntaxReadDc(&source, 3, &dc) || dc.channelMode != 2 ||
+        dc.indices[0] != 10 || dc.indices[1] != 20 || dc.indices[2] != 30 ||
+        !JxrDecoderTileQuantizerSyntaxReadLowpass(&source, 3, &lp) || lp.copyPrevious ||
+        lp.count != 1 || lp.values[0].channelMode != 1 || lp.values[0].indices[0] != 40 ||
+        lp.values[0].indices[1] != 50 ||
+        !JxrDecoderTileQuantizerSyntaxReadHighpass(&source, 3, lp.count, &hp)) return 0;
+    return hp.copyPrevious && hp.count == 1 && !JxrDecoderTileQuantizerSyntaxReadDc(&source, 0, &dc);
 }
 
 static int test_bit_input_buffer_state_vectors(void)
@@ -1401,6 +1433,7 @@ int main(int argc, char** argv)
         { "transcode_coefficient_transform_420_vectors", test_transcode_coefficient_transform_420_vectors },
         { "transcode_tile_extraction_decision_vectors", test_transcode_tile_extraction_decision_vectors },
         { "transcode_roi_geometry_vectors", test_transcode_roi_geometry_vectors },
+        { "decoder_tile_quantizer_syntax_vectors", test_decoder_tile_quantizer_syntax_vectors },
         { "bit_input_buffer_state_vectors", test_bit_input_buffer_state_vectors },
         { "packet_source_vectors", test_packet_source_vectors },
         { "packet_executor_vectors", test_packet_executor_vectors },

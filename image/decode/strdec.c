@@ -29,6 +29,7 @@
 #include "JXRTrace.h"
 #include "decode.h"
 #include "JxrMacroblockRegionState.h"
+#include "JxrDecoderTileQuantizerSyntaxReader.h"
 #include "strTransform.h"
 #include <math.h>
 #include "perfTimer.h"
@@ -77,27 +78,6 @@ U8 readQuantizerSB(U8 pQPIndex[MAX_CHANNELS], SimpleBitIO * pIO, size_t cChannel
     return cChMode;
 }
 
-U8 readQuantizer(CWMIQuantizer * pQuantizer[MAX_CHANNELS], BitIOInfo * pIO, size_t cChannel, size_t iPos)
-{
-    U8 cChMode = 0;
-
-    if(cChannel > 1)
-        cChMode = (U8)getBit16(pIO, 2); // Channel mode
-
-    pQuantizer[0][iPos].iIndex = (U8)getBit16(pIO, 8); // Y
-
-    if(cChMode == 1)  // MIXED
-        pQuantizer[1][iPos].iIndex = (U8)getBit16(pIO, 8); // UV
-    else if(cChMode > 0){ // INDEPENDENT
-        size_t i;
-
-        for(i = 1; i < cChannel; i ++)
-            pQuantizer[i][iPos].iIndex = (U8)getBit16(pIO, 8); // UV
-    }
-
-    return cChMode;
-}
-
 // packet header: 00000000 00000000 00000001 ?????xxx
 // xxx:           000(spatial) 001(DC) 010(AD) 011(AC) 100(FL) 101-111(reserved)
 // ?????:         (iTileY * cNumOfSliceV + iTileX) % 32
@@ -113,93 +93,83 @@ Int readPacketHeader(BitIOInfo * pIO, U8 ptPacketType, U8 pID)
 
 Int readTileHeaderDC(CWMImageStrCodec * pSC, BitIOInfo * pIO)
 {
-    if((pSC->m_param.uQPMode & 1) != 0){ // not DC uniform
+    if((pSC->m_param.uQPMode & 1) != 0){
+        JxrDecoderBitSource source;
+        JxrDecoderQuantizerSyntax syntax;
+        size_t channel;
         size_t iTile;
         CWMITile * pTile = pSC->pTile + pSC->cTileColumn;
 
-        if(pSC->cTileRow + pSC->cTileColumn == 0) // allocate DC QP info
+        JxrDecoderBitSourceInitLegacy(&source, pIO);
+        if(!JxrDecoderTileQuantizerSyntaxReadDc(&source, pSC->m_param.cNumChannels, &syntax))
+            return ICERR_ERROR;
+        if(pSC->cTileRow + pSC->cTileColumn == 0)
             for(iTile = 0; iTile <= pSC->WMISCP.cNumOfSliceMinus1V; iTile ++)
                 if(allocateQuantizer(pSC->pTile[iTile].pQuantizerDC, pSC->m_param.cNumChannels, 1) != ICERR_OK)
                     return ICERR_ERROR;
-
-        pTile->cChModeDC = readQuantizer(pTile->pQuantizerDC, pIO, pSC->m_param.cNumChannels, 0);
+        pTile->cChModeDC = syntax.channelMode;
+        for(channel = 0; channel < pSC->m_param.cNumChannels; ++channel)
+            pTile->pQuantizerDC[channel][0].iIndex = syntax.indices[channel];
         formatQuantizer(pTile->pQuantizerDC, pTile->cChModeDC, pSC->m_param.cNumChannels, 0, TRUE, pSC->m_param.bScaledArith);
     }
-
     return ICERR_OK;
 }
-
 Int readTileHeaderLP(CWMImageStrCodec * pSC, BitIOInfo * pIO)
 {
-    if(pSC->WMISCP.sbSubband != SB_DC_ONLY && (pSC->m_param.uQPMode & 2) != 0){ // not LP uniform
+    if(pSC->WMISCP.sbSubband != SB_DC_ONLY && (pSC->m_param.uQPMode & 2) != 0){
+        JxrDecoderBitSource source;
+        JxrDecoderQuantizerSetSyntax syntax;
         CWMITile * pTile = pSC->pTile + pSC->cTileColumn;
-        U8 i;
+        U8 quantizer;
+        size_t channel;
 
-        pTile->bUseDC = (getBit16(pIO, 1) == 1 ? TRUE : FALSE);
-        pTile->cBitsLP = 0;
-        pTile->cNumQPLP = 1;
-
-        if(pSC->cTileRow > 0)
-            freeQuantizer(pTile->pQuantizerLP);
-        
-        if(pTile->bUseDC == TRUE){
-            if(allocateQuantizer(pTile->pQuantizerLP, pSC->m_param.cNumChannels, pTile->cNumQPLP) != ICERR_OK)
-                return ICERR_ERROR;
-            useDCQuantizer(pSC, pSC->cTileColumn);
-        }
-        else{
-            pTile->cNumQPLP = (U8)getBit16(pIO, 4) + 1;
-            pTile->cBitsLP = dquantBits(pTile->cNumQPLP);
-            
-            if(allocateQuantizer(pTile->pQuantizerLP, pSC->m_param.cNumChannels, pTile->cNumQPLP) != ICERR_OK)
-                return ICERR_ERROR;
-
-            for(i = 0; i < pTile->cNumQPLP; i ++){
-                pTile->cChModeLP[i] = readQuantizer(pTile->pQuantizerLP, pIO, pSC->m_param.cNumChannels, i);
-                formatQuantizer(pTile->pQuantizerLP, pTile->cChModeLP[i], pSC->m_param.cNumChannels, i, TRUE, pSC->m_param.bScaledArith);
-            }
+        JxrDecoderBitSourceInitLegacy(&source, pIO);
+        if(!JxrDecoderTileQuantizerSyntaxReadLowpass(&source, pSC->m_param.cNumChannels, &syntax))
+            return ICERR_ERROR;
+        pTile->bUseDC = syntax.copyPrevious;
+        pTile->cNumQPLP = syntax.count;
+        pTile->cBitsLP = pTile->bUseDC ? 0 : dquantBits(pTile->cNumQPLP);
+        if(pSC->cTileRow > 0) freeQuantizer(pTile->pQuantizerLP);
+        if(allocateQuantizer(pTile->pQuantizerLP, pSC->m_param.cNumChannels, pTile->cNumQPLP) != ICERR_OK)
+            return ICERR_ERROR;
+        if(pTile->bUseDC) useDCQuantizer(pSC, pSC->cTileColumn);
+        else for(quantizer = 0; quantizer < pTile->cNumQPLP; ++quantizer){
+            pTile->cChModeLP[quantizer] = syntax.values[quantizer].channelMode;
+            for(channel = 0; channel < pSC->m_param.cNumChannels; ++channel)
+                pTile->pQuantizerLP[channel][quantizer].iIndex = syntax.values[quantizer].indices[channel];
+            formatQuantizer(pTile->pQuantizerLP, pTile->cChModeLP[quantizer], pSC->m_param.cNumChannels, quantizer, TRUE, pSC->m_param.bScaledArith);
         }
     }
-
     return ICERR_OK;
 }
-
 Int readTileHeaderHP(CWMImageStrCodec * pSC, BitIOInfo * pIO)
 {
-    if(pSC->WMISCP.sbSubband != SB_DC_ONLY && pSC->WMISCP.sbSubband != SB_NO_HIGHPASS && (pSC->m_param.uQPMode & 4) != 0){ // not HP uniform
+    if(pSC->WMISCP.sbSubband != SB_DC_ONLY && pSC->WMISCP.sbSubband != SB_NO_HIGHPASS && (pSC->m_param.uQPMode & 4) != 0){
+        JxrDecoderBitSource source;
+        JxrDecoderQuantizerSetSyntax syntax;
         CWMITile * pTile = pSC->pTile + pSC->cTileColumn;
-        U8 i;
+        U8 quantizer;
+        size_t channel;
 
-        pTile->bUseLP = (getBit16(pIO, 1) == 1 ? TRUE : FALSE);
-        pTile->cBitsHP = 0;
-        pTile->cNumQPHP = 1;
-
-        if(pSC->cTileRow > 0)
-            freeQuantizer(pTile->pQuantizerHP);
-        
-        if(pTile->bUseLP == TRUE){
-            pTile->cNumQPHP = pTile->cNumQPLP;
-            if(allocateQuantizer(pTile->pQuantizerHP, pSC->m_param.cNumChannels, pTile->cNumQPHP) != ICERR_OK)
-                return ICERR_ERROR;
-            useLPQuantizer(pSC, pTile->cNumQPHP, pSC->cTileColumn);
-        }
-        else{
-            pTile->cNumQPHP = (U8)getBit16(pIO, 4) + 1;
-            pTile->cBitsHP = dquantBits(pTile->cNumQPHP);
-
-            if(allocateQuantizer(pTile->pQuantizerHP, pSC->m_param.cNumChannels, pTile->cNumQPHP) != ICERR_OK)
-                return ICERR_ERROR;
-
-            for(i = 0; i < pTile->cNumQPHP; i ++){
-                pTile->cChModeHP[i] = readQuantizer(pTile->pQuantizerHP, pIO, pSC->m_param.cNumChannels, i);
-                formatQuantizer(pTile->pQuantizerHP, pTile->cChModeHP[i], pSC->m_param.cNumChannels, i, FALSE, pSC->m_param.bScaledArith);
-            }
+        JxrDecoderBitSourceInitLegacy(&source, pIO);
+        if(!JxrDecoderTileQuantizerSyntaxReadHighpass(&source, pSC->m_param.cNumChannels, pTile->cNumQPLP, &syntax))
+            return ICERR_ERROR;
+        pTile->bUseLP = syntax.copyPrevious;
+        pTile->cNumQPHP = syntax.count;
+        pTile->cBitsHP = pTile->bUseLP ? 0 : dquantBits(pTile->cNumQPHP);
+        if(pSC->cTileRow > 0) freeQuantizer(pTile->pQuantizerHP);
+        if(allocateQuantizer(pTile->pQuantizerHP, pSC->m_param.cNumChannels, pTile->cNumQPHP) != ICERR_OK)
+            return ICERR_ERROR;
+        if(pTile->bUseLP) useLPQuantizer(pSC, pTile->cNumQPHP, pSC->cTileColumn);
+        else for(quantizer = 0; quantizer < pTile->cNumQPHP; ++quantizer){
+            pTile->cChModeHP[quantizer] = syntax.values[quantizer].channelMode;
+            for(channel = 0; channel < pSC->m_param.cNumChannels; ++channel)
+                pTile->pQuantizerHP[channel][quantizer].iIndex = syntax.values[quantizer].indices[channel];
+            formatQuantizer(pTile->pQuantizerHP, pTile->cChModeHP[quantizer], pSC->m_param.cNumChannels, quantizer, FALSE, pSC->m_param.bScaledArith);
         }
     }
-
     return ICERR_OK;
 }
-
 Int readPackets(CWMImageStrCodec * pSC)
 {
     if(pSC->cColumn == 0 && pSC->cRow == pSC->WMISCP.uiTileY[pSC->cTileRow]){ // start of a new horizontal slice
