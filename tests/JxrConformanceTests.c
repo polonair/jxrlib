@@ -31,6 +31,7 @@
 #include "JxrTranscodeTileQuantizerState.h"
 #include "JxrTranscodeQuantizerWriter.h"
 #include "JxrTranscodeTileHeaderWriter.h"
+#include "JxrTranscodeOrientationState.h"
 #include "JxrEntropyReader.h"
 #include "JxrLegacyBitReaderAdapter.h"
 #ifdef _WIN32
@@ -393,6 +394,33 @@ static int test_transcode_tile_header_writer_vectors(void)
         JxrBitWriterFlush(&dcWriter) && dcBytes[0] == 0 && dcBytes[1] == 0 &&
         dcBytes[2] == 1 && dcBytes[3] == 0x10 && dcBytes[4] == 0x91 &&
         JxrBitWriterBytes(&dcWriter) == 6;
+}
+
+static int test_transcode_orientation_state_vectors(void)
+{
+    static const Bool expectedVertical[O_MAX] = { FALSE, TRUE, FALSE, TRUE, TRUE, TRUE, FALSE, FALSE };
+    static const Bool expectedHorizontal[O_MAX] = { FALSE, FALSE, TRUE, TRUE, FALSE, TRUE, FALSE, TRUE };
+    static const Bool expectedTranspose[O_MAX] = { FALSE, FALSE, FALSE, FALSE, TRUE, TRUE, TRUE, TRUE };
+    ORIENTATION orientation;
+
+    for (orientation = O_NONE; orientation < O_MAX; ++orientation) {
+        JxrTranscodeOrientationState state;
+        JxrTranscodeOrientationStateInit(&state, orientation);
+        if (state.flipVertical != expectedVertical[orientation] ||
+            state.flipHorizontal != expectedHorizontal[orientation] ||
+            state.transpose != expectedTranspose[orientation] ||
+            JxrTranscodeOrientationStateMapRow(&state, 2, 7) !=
+                (state.flipVertical ? 4 : 2) ||
+            JxrTranscodeOrientationStateMapColumn(&state, 3, 8) !=
+                (state.flipHorizontal ? 4 : 3) ||
+            JxrTranscodeOrientationStateTileRowCoordinate(&state, 2, 3) !=
+                (state.transpose ? 3 : 2) ||
+            JxrTranscodeOrientationStateTileColumnCoordinate(&state, 2, 3) !=
+                (state.transpose ? 2 : 3) ||
+            JxrTranscodeOrientationStateFrameOffset(&state, 2, 3, 8, 7) !=
+                (state.transpose ? 23U : 19U)) return 0;
+    }
+    return 1;
 }
 
 static int test_bit_input_buffer_state_vectors(void)
@@ -1196,6 +1224,7 @@ int main(int argc, char** argv)
         { "transcode_tile_quantizer_state_vectors", test_transcode_tile_quantizer_state_vectors },
         { "transcode_quantizer_writer_vectors", test_transcode_quantizer_writer_vectors },
         { "transcode_tile_header_writer_vectors", test_transcode_tile_header_writer_vectors },
+        { "transcode_orientation_state_vectors", test_transcode_orientation_state_vectors },
         { "bit_input_buffer_state_vectors", test_bit_input_buffer_state_vectors },
         { "packet_source_vectors", test_packet_source_vectors },
         { "packet_executor_vectors", test_packet_executor_vectors },

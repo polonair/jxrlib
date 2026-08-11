@@ -32,6 +32,7 @@
 #include "JxrTranscodeTileQuantizerState.h"
 #include "JxrTranscodeQuantizerWriter.h"
 #include "JxrTranscodeTileHeaderWriter.h"
+#include "JxrTranscodeOrientationState.h"
 
 EXTERN_C Void freePredInfo(CWMImageStrCodec *);
 
@@ -59,9 +60,12 @@ EXTERN_C Int WriteImagePlaneHeader(CWMImageStrCodec *);
 EXTERN_C Int writeIndexTable(CWMImageStrCodec *);
 EXTERN_C Int copyTo(struct WMPStream *, struct WMPStream *, size_t);
 
-const static Bool bFlipV[O_MAX] = {FALSE, TRUE , FALSE, TRUE, TRUE , TRUE, FALSE, FALSE};
-const static Bool bFlipH[O_MAX] = {FALSE, FALSE, TRUE , TRUE, FALSE, TRUE, FALSE, TRUE};
-
+static Void JxrTranscodeSwapSize(size_t * left, size_t * right)
+{
+    size_t temporary = *left;
+    *left = *right;
+    *right = temporary;
+}
 Void transcodeTileHeader(CWMImageStrCodec * pSC, JxrTranscodeTileQuantizerState * pTileQPInfo)
 {
     if(pSC->m_bCtxLeft && pSC->m_bCtxTop && pSC->m_bSecondary == FALSE){
@@ -103,78 +107,78 @@ Void transcodeTileHeader(CWMImageStrCodec * pSC, JxrTranscodeTileQuantizerState 
         }
     }
 }
-Void transformDCBlock(PixelI * pOrg, PixelI * pDst, ORIENTATION oOrientation)
+Void transformDCBlock(PixelI * pOrg, PixelI * pDst, const JxrTranscodeOrientationState * orientation)
 {
     size_t i;
 
-    if(bFlipV[oOrientation])
+    if(orientation->flipVertical)
         for(i = 0; i < 16; i += 4)
             pOrg[i + 1] = -pOrg[i + 1], pOrg[i + 3] = -pOrg[i + 3];
 
-    if(bFlipH[oOrientation])
+    if(orientation->flipHorizontal)
         for(i = 0; i < 4; i ++)
             pOrg[i + 4] = -pOrg[i + 4], pOrg[i + 12] = -pOrg[i + 12];
 
-    if(oOrientation < O_RCW)
+    if(orientation->transpose == FALSE)
         memcpy(pDst, pOrg, 16 * sizeof(PixelI));
     else
         for(i = 0; i < 16; i ++)
             pDst[i] = pOrg[(i >> 2) + ((i & 3) << 2)];
 }
 
-Void transformDCBlock422(PixelI * pOrg, PixelI * pDst, ORIENTATION oOrientation)
+Void transformDCBlock422(PixelI * pOrg, PixelI * pDst, const JxrTranscodeOrientationState * orientation)
 {
-    assert(oOrientation < O_RCW);
+    assert(orientation->transpose == FALSE);
 
-    if(bFlipV[oOrientation])
+    if(orientation->flipVertical)
         pOrg[1] = -pOrg[1], pOrg[3] = -pOrg[3], pOrg[4] = -pOrg[4], pOrg[5] = -pOrg[5], pOrg[7] = -pOrg[7];
 
-    if(bFlipH[oOrientation])
+    if(orientation->flipHorizontal)
         pOrg[2] = -pOrg[2], pOrg[3] = -pOrg[3], pOrg[6] = -pOrg[6], pOrg[7] = -pOrg[7];
 
-    if(bFlipV[oOrientation])
+    if(orientation->flipVertical)
         pDst[0] = pOrg[0], pDst[1] = pOrg[5], pDst[2] = pOrg[6], pDst[3] = pOrg[7], pDst[4] = pOrg[4], pDst[5] = pOrg[1], pDst[6] = pOrg[2], pDst[7] = pOrg[3];
     else
         memcpy(pDst, pOrg, 8 * sizeof(PixelI));
 }
 
-Void transformDCBlock420(PixelI * pOrg, PixelI * pDst, ORIENTATION oOrientation)
+Void transformDCBlock420(PixelI * pOrg, PixelI * pDst, const JxrTranscodeOrientationState * orientation)
 {
-    if(bFlipV[oOrientation])
+    if(orientation->flipVertical)
         pOrg[1] = -pOrg[1], pOrg[3] = -pOrg[3];
 
-    if(bFlipH[oOrientation])
+    if(orientation->flipHorizontal)
         pOrg[2] = -pOrg[2], pOrg[3] = -pOrg[3];
 
     pDst[0] = pOrg[0], pDst[3] = pOrg[3];
-    if(oOrientation < O_RCW)
+    if(orientation->transpose == FALSE)
         pDst[1] = pOrg[1], pDst[2] = pOrg[2];
     else
         pDst[1] = pOrg[2], pDst[2] = pOrg[1];
 }
 
-Void transformACBlocks(PixelI * pOrg, PixelI * pDst, ORIENTATION oOrientation)
+Void transformACBlocks(PixelI * pOrg, PixelI * pDst, const JxrTranscodeOrientationState * orientation)
 {
     PixelI * pO, * pD;
     const Int * pT = dctIndex[0];
     size_t i, j, k;
 
     for(j = 0, pO = pOrg; j < 16; j ++, pO += 16){
-        if(bFlipV[oOrientation])
+        if(orientation->flipVertical)
             for(i = 0; i < 16; i += 4)
                 pO[pT[i + 1]] = -pO[pT[i + 1]], pO[pT[i + 3]] = -pO[pT[i + 3]];
         
-        if(bFlipH[oOrientation])
+        if(orientation->flipHorizontal)
             for(i = 0; i < 4; i ++)
                 pO[pT[i + 4]] = -pO[pT[i + 4]], pO[pT[i + 12]] = -pO[pT[i + 12]];
     }
 
     for(j = 0; j < 4; j ++)
         for(i = 0; i < 4; i ++){
-            size_t ii = (bFlipV[oOrientation] ? 3 - i : i);
-            size_t jj = (bFlipH[oOrientation] ? 3 - j : j);
+            size_t ii = (orientation->flipVertical ? 3 - i : i);
+            size_t jj = (orientation->flipHorizontal ? 3 - j : j);
 
-            if(oOrientation < O_RCW)
+            if(orientation->transpose == FALSE)
                 memcpy(pDst + (jj * 4 + ii) * 16, pOrg + (j * 4 + i) * 16, 16 * sizeof(PixelI));
             else{
                 pO = pOrg + (j * 4 + i) * 16;
@@ -185,55 +189,55 @@ Void transformACBlocks(PixelI * pOrg, PixelI * pDst, ORIENTATION oOrientation)
         }
 }
 
-Void transformACBlocks422(PixelI * pOrg, PixelI * pDst, ORIENTATION oOrientation)
+Void transformACBlocks422(PixelI * pOrg, PixelI * pDst, const JxrTranscodeOrientationState * orientation)
 {
     PixelI * pO;
     const Int * pT = dctIndex[0];
     size_t i, j;
 
-    assert(oOrientation < O_RCW);
+    assert(orientation->transpose == FALSE);
 
     for(j = 0, pO = pOrg; j < 8; j ++, pO += 16){
-        if(bFlipV[oOrientation])
+        if(orientation->flipVertical)
             for(i = 0; i < 16; i += 4)
                 pO[pT[i + 1]] = -pO[pT[i + 1]], pO[pT[i + 3]] = -pO[pT[i + 3]];
         
-        if(bFlipH[oOrientation])
+        if(orientation->flipHorizontal)
             for(i = 0; i < 4; i ++)
                 pO[pT[i + 4]] = -pO[pT[i + 4]], pO[pT[i + 12]] = -pO[pT[i + 12]];
     }
 
     for(j = 0; j < 2; j ++)
         for(i = 0; i < 4; i ++){
-            size_t ii = (bFlipV[oOrientation] ? 3 - i : i);
-            size_t jj = (bFlipH[oOrientation] ? 1 - j : j);
+            size_t ii = (orientation->flipVertical ? 3 - i : i);
+            size_t jj = (orientation->flipHorizontal ? 1 - j : j);
 
             memcpy(pDst + (jj * 4 + ii) * 16, pOrg + (j * 4 + i) * 16, 16 * sizeof(PixelI));
         }
 }
 
-Void transformACBlocks420(PixelI * pOrg, PixelI * pDst, ORIENTATION oOrientation)
+Void transformACBlocks420(PixelI * pOrg, PixelI * pDst, const JxrTranscodeOrientationState * orientation)
 {
     PixelI * pO, * pD;
     const Int * pT = dctIndex[0];
     size_t i, j, k;
 
     for(j = 0, pO = pOrg; j < 4; j ++, pO += 16){
-        if(bFlipV[oOrientation])
+        if(orientation->flipVertical)
             for(i = 0; i < 16; i += 4)
                 pO[pT[i + 1]] = -pO[pT[i + 1]], pO[pT[i + 3]] = -pO[pT[i + 3]];
         
-        if(bFlipH[oOrientation])
+        if(orientation->flipHorizontal)
             for(i = 0; i < 4; i ++)
                 pO[pT[i + 4]] = -pO[pT[i + 4]], pO[pT[i + 12]] = -pO[pT[i + 12]];
     }
 
     for(j = 0; j < 2; j ++)
         for(i = 0; i < 2; i ++){
-            size_t ii = (bFlipV[oOrientation] ? 1 - i : i);
-            size_t jj = (bFlipH[oOrientation] ? 1 - j : j);
+            size_t ii = (orientation->flipVertical ? 1 - i : i);
+            size_t jj = (orientation->flipHorizontal ? 1 - j : j);
 
-            if(oOrientation < O_RCW)
+            if(orientation->transpose == FALSE)
                 memcpy(pDst + (jj * 2 + ii) * 16, pOrg + (j * 2 + i) * 16, 16 * sizeof(PixelI));
             else{
                 pO = pOrg + (j * 2 + i) * 16;
@@ -247,8 +251,10 @@ Void transformACBlocks420(PixelI * pOrg, PixelI * pDst, ORIENTATION oOrientation
 Int getROI(CWMImageInfo * pII, CCoreParameters * pCore, CWMIStrCodecParam * pSCP, CWMTranscodingParam * pParam)
 {
     const ORIENTATION oO = pParam->oOrientation;
+    JxrTranscodeOrientationState orientation;
     size_t iLeft, iTop, cWidth, cHeight, i, j;
     size_t mbLeft, mbRight, mbTop, mbBottom;
+    JxrTranscodeOrientationStateInit(&orientation, oO);
     size_t * iTile = (size_t *)malloc(MAX_TILES * sizeof(size_t));
 
     if(iTile == NULL)
@@ -290,14 +296,13 @@ Int getROI(CWMImageInfo * pII, CCoreParameters * pCore, CWMIStrCodecParam * pSCP
     pParam->cWidth = cWidth, pParam->cHeight = cHeight;
 
     // extra pixels in transformed space
-#define SWAP(a, b) i = a, a = b, b = i
-    if(oO == O_FLIPH || oO == O_FLIPVH || oO == O_RCW_FLIPV || oO == O_RCW_FLIPVH)
-        SWAP(pCore->cExtraPixelsLeft, pCore->cExtraPixelsRight);
-    if(oO == O_FLIPV || oO == O_FLIPVH || oO == O_RCW || oO == O_RCW_FLIPV)
-        SWAP(pCore->cExtraPixelsTop, pCore->cExtraPixelsBottom);
-    if(oO >= O_RCW){
-        SWAP(pCore->cExtraPixelsLeft, pCore->cExtraPixelsTop);
-        SWAP(pCore->cExtraPixelsRight, pCore->cExtraPixelsBottom);
+    if(orientation.flipHorizontal)
+        JxrTranscodeSwapSize(&pCore->cExtraPixelsLeft, &pCore->cExtraPixelsRight);
+    if(orientation.flipVertical)
+        JxrTranscodeSwapSize(&pCore->cExtraPixelsTop, &pCore->cExtraPixelsBottom);
+    if(orientation.transpose){
+        JxrTranscodeSwapSize(&pCore->cExtraPixelsLeft, &pCore->cExtraPixelsTop);
+        JxrTranscodeSwapSize(&pCore->cExtraPixelsRight, &pCore->cExtraPixelsBottom);
     }
 
     // adjust tiling
@@ -313,7 +318,7 @@ Int getROI(CWMImageInfo * pII, CCoreParameters * pCore, CWMIStrCodecParam * pSCP
     else
         for(i = 1, pSCP->uiTileX[0] = 0, pSCP->cNumOfSliceMinus1V = (U32)j; i <= j; i ++)
             pSCP->uiTileX[i] = (U32)iTile[i - 1];
-    if(oO == O_FLIPH || oO == O_FLIPVH || oO == O_RCW_FLIPV || oO == O_RCW_FLIPVH){ // reverse order
+    if(orientation.flipHorizontal){ // reverse order
         for(i = 0; i <= (size_t)pSCP->cNumOfSliceMinus1V; i ++)
             iTile[i] = mbRight - mbLeft - (size_t)pSCP->uiTileX[i];
         for(i = 1, pSCP->uiTileX[0] = 0; i <= (size_t)pSCP->cNumOfSliceMinus1V; i ++)
@@ -331,13 +336,13 @@ Int getROI(CWMImageInfo * pII, CCoreParameters * pCore, CWMIStrCodecParam * pSCP
     else
         for(i = 1, pSCP->uiTileY[0] = 0, pSCP->cNumOfSliceMinus1H = (U32)j; i <= j; i ++)
             pSCP->uiTileY[i] = (U32)iTile[i - 1];
-    if(oO == O_FLIPV || oO == O_FLIPVH || oO == O_RCW || oO == O_RCW_FLIPV){ // reverse order
+    if(orientation.flipVertical){ // reverse order
         for(i = 0; i <= (size_t)pSCP->cNumOfSliceMinus1H; i ++)
             iTile[i] = mbBottom - mbTop - (size_t)pSCP->uiTileY[i];
         for(i = 1, pSCP->uiTileY[0] = 0; i <= (size_t)pSCP->cNumOfSliceMinus1H; i ++)
             pSCP->uiTileY[i] = (U32)(iTile[(size_t)pSCP->cNumOfSliceMinus1H - i + 1]);
     }
-    if(oO >= O_RCW){ // switch X & Y
+    if(orientation.transpose){ // switch X & Y
         for(i = 0; i <= (size_t)pSCP->cNumOfSliceMinus1V; i ++)
             iTile[i] = (size_t)pSCP->uiTileX[i];
         for(i = 0; i <= (size_t)pSCP->cNumOfSliceMinus1H; i ++)
@@ -392,6 +397,7 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
     CCodingContext * pContext;
     JxrTranscodeTileQuantizerState * pTileQPInfo = NULL;
     ORIENTATION oO = pParam->oOrientation;
+    JxrTranscodeOrientationState orientation;
     size_t iAlphaPos = 0;
     size_t cUnit;
     size_t i, j, mbLeft, mbRight, mbTop, mbBottom, mbWidth, mbHeight;
@@ -408,8 +414,11 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
     if(ReadWMIHeader(&pSCDec->WMII, &pSCDec->WMISCP, &pSCDec->m_param) != ICERR_OK)
         return ICERR_ERROR;
 
-    if(pSCDec->WMISCP.cfColorFormat == YUV_422 && oO >= O_RCW)
+    JxrTranscodeOrientationStateInit(&orientation, oO);
+    if(pSCDec->WMISCP.cfColorFormat == YUV_422 && orientation.transpose){
         pParam->oOrientation = oO = O_NONE; // Can not rotate 422 in compressed domain!
+        JxrTranscodeOrientationStateInit(&orientation, oO);
+    }
 
     pSCDec->cmbWidth = (pSCDec->WMII.cWidth + pSCDec->m_param.cExtraPixelsLeft + pSCDec->m_param.cExtraPixelsRight + 15) / 16;
     pSCDec->cmbHeight = (pSCDec->WMII.cHeight + pSCDec->m_param.cExtraPixelsTop + pSCDec->m_param.cExtraPixelsBottom + 15) / 16;
@@ -525,9 +534,9 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
 
     mbWidth = pSCEnc->cmbWidth = mbRight - mbLeft;
     mbHeight = pSCEnc->cmbHeight = mbBottom - mbTop;
-    if(oO >= O_RCW){
-        SWAP(pSCEnc->WMII.cWidth, pSCEnc->WMII.cHeight);
-        SWAP(pSCEnc->cmbWidth, pSCEnc->cmbHeight);
+    if(orientation.transpose){
+        JxrTranscodeSwapSize(&pSCEnc->WMII.cWidth, &pSCEnc->WMII.cHeight);
+        JxrTranscodeSwapSize(&pSCEnc->cmbWidth, &pSCEnc->cmbHeight);
     }
 
     if(oO != O_NONE){
@@ -547,16 +556,21 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
         }
     }
 
-    if(oO < O_RCW && pSCEnc->WMII.oOrientation < O_RCW)
+    {
+        JxrTranscodeOrientationState sourceOrientation;
+        JxrTranscodeOrientationStateInit(&sourceOrientation, pSCEnc->WMII.oOrientation);
+    if(orientation.transpose == FALSE && sourceOrientation.transpose == FALSE)
+
         pSCEnc->WMII.oOrientation ^= oO;
-    else if(oO >= O_RCW && pSCEnc->WMII.oOrientation >= O_RCW){
+    else if(orientation.transpose && sourceOrientation.transpose){
         pSCEnc->WMII.oOrientation ^= oO;
         pSCEnc->WMII.oOrientation = (pSCEnc->WMII.oOrientation & 1) * 2 + (pSCEnc->WMII.oOrientation >> 1);
     }
-    else if(oO >= O_RCW && pSCEnc->WMII.oOrientation < O_RCW)
+    else if(orientation.transpose && sourceOrientation.transpose == FALSE)
         pSCEnc->WMII.oOrientation = oO ^ ((pSCEnc->WMII.oOrientation & 1) * 2 + (pSCEnc->WMII.oOrientation >> 1));
     else
         pSCEnc->WMII.oOrientation ^= ((oO & 1) * 2 + (oO >> 1));
+    }
     
 //    pSCEnc->WMISCP.nExpBias += 128;
 
@@ -694,21 +708,19 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
 
             if(pSCDec->cRow >= mbTop && pSCDec->cColumn >= mbLeft && pSCDec->cColumn < mbRight){
                 cRow = (Int)(pSCDec->cRow - mbTop);
-                if(bFlipV[oO])
-                    cRow = (Int)mbHeight - cRow - 1;
+                cRow = JxrTranscodeOrientationStateMapRow(&orientation, cRow, mbHeight);
                 cColumn = (Int)(pSCDec->cColumn - mbLeft);
-                if(bFlipH[oO])
-                    cColumn = (Int)mbWidth - cColumn - 1;
+                cColumn = JxrTranscodeOrientationStateMapColumn(&orientation, cColumn, mbWidth);
 
                 pSCEnc->m_bCtxLeft = pSCEnc->m_bCtxTop = FALSE;
                 for(i = 0; i <= pSCEnc->WMISCP.cNumOfSliceMinus1H; i ++)
-                    if(pSCEnc->WMISCP.uiTileY[i] == (U32)(oO < O_RCW ? cRow : cColumn)){
+                    if(pSCEnc->WMISCP.uiTileY[i] == (U32)JxrTranscodeOrientationStateTileRowCoordinate(&orientation, cRow, cColumn)){
                         pSCEnc->cTileRow = i;
                         pSCEnc->m_bCtxTop = TRUE;
                         break;
                     }
                 for(i = 0; i <= pSCEnc->WMISCP.cNumOfSliceMinus1V; i ++)
-                    if(pSCEnc->WMISCP.uiTileX[i] == (U32)(oO < O_RCW ? cColumn : cRow)){
+                    if(pSCEnc->WMISCP.uiTileX[i] == (U32)JxrTranscodeOrientationStateTileColumnCoordinate(&orientation, cRow, cColumn)){
                         pSCEnc->cTileColumn = i;
                         pSCEnc->m_bCtxLeft = TRUE;
                         break;
@@ -755,7 +767,7 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
                     }
                 }
                 else{
-                    size_t cOff = (oO < O_RCW ? (size_t)cRow * mbWidth + (size_t)cColumn : (size_t)cRow + mbHeight * (size_t)cColumn);
+                    size_t cOff = JxrTranscodeOrientationStateFrameOffset(&orientation, cRow, cColumn, mbWidth, mbHeight);
 
                     pMBInfo[cOff] = pSCDec->MBInfo;
 
@@ -783,18 +795,18 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
                 size_t cOff = (pSCEnc->cRow - 1) * pSCEnc->cmbWidth + pSCEnc->cColumn - 1;
                 
                 for(i = 0; i < ((pSCEnc->m_param.cfColorFormat == YUV_420 || pSCEnc->m_param.cfColorFormat == YUV_422) ? 1 : pSCEnc->m_param.cNumChannels); i ++){
-                    transformDCBlock(pMBInfo[cOff].iBlockDC[i], pSCEnc->MBInfo.iBlockDC[i], oO);
-                    transformACBlocks(pFrameBuf + cOff * cUnit + i * 256, pMBBuf + 256 * i, oO);
+                    transformDCBlock(pMBInfo[cOff].iBlockDC[i], pSCEnc->MBInfo.iBlockDC[i], &orientation);
+                    transformACBlocks(pFrameBuf + cOff * cUnit + i * 256, pMBBuf + 256 * i, &orientation);
                 }
                 if(pSCEnc->WMISCP.cfColorFormat == YUV_420)
                     for(i = 0; i < 2; i ++){
-                        transformDCBlock420(pMBInfo[cOff].iBlockDC[i + 1], pSCEnc->MBInfo.iBlockDC[i + 1], oO);
-                        transformACBlocks420(pFrameBuf + cOff * cUnit + 256 + i * 64, pMBBuf + 256 + i * 64, oO);
+                        transformDCBlock420(pMBInfo[cOff].iBlockDC[i + 1], pSCEnc->MBInfo.iBlockDC[i + 1], &orientation);
+                        transformACBlocks420(pFrameBuf + cOff * cUnit + 256 + i * 64, pMBBuf + 256 + i * 64, &orientation);
                     }
                 else if(pSCEnc->WMISCP.cfColorFormat == YUV_422)
                     for(i = 0; i < 2; i ++){
-                        transformDCBlock422(pMBInfo[cOff].iBlockDC[i + 1], pSCEnc->MBInfo.iBlockDC[i + 1], oO);
-                        transformACBlocks422(pFrameBuf + cOff * cUnit + 256 + i * 128, pMBBuf + 256 + i * 128, oO);
+                        transformDCBlock422(pMBInfo[cOff].iBlockDC[i + 1], pSCEnc->MBInfo.iBlockDC[i + 1], &orientation);
+                        transformACBlocks422(pFrameBuf + cOff * cUnit + 256 + i * 128, pMBBuf + 256 + i * 128, &orientation);
                     }
 
                     pSCEnc->MBInfo.iQIndexLP = pMBInfo[cOff].iQIndexLP;
@@ -815,8 +827,8 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
                     getTilePos(pSCEnc->m_pNextSC, cColumn, cRow);
                     pSCEnc->m_pNextSC->MBInfo = pSCDec->m_pNextSC->MBInfo;
 
-                    transformDCBlock(pMBInfoAlpha[cOff].iBlockDC[0], pSCEnc->m_pNextSC->MBInfo.iBlockDC[0], oO);
-                    transformACBlocks(pFrameBufAlpha + cOff * 256, MBBufAlpha, oO);
+                    transformDCBlock(pMBInfoAlpha[cOff].iBlockDC[0], pSCEnc->m_pNextSC->MBInfo.iBlockDC[0], &orientation);
+                    transformACBlocks(pFrameBufAlpha + cOff * 256, MBBufAlpha, &orientation);
 
                     pSCEnc->m_pNextSC->MBInfo.iQIndexLP = pMBInfoAlpha[cOff].iQIndexLP;
                     pSCEnc->m_pNextSC->MBInfo.iQIndexHP = pMBInfoAlpha[cOff].iQIndexHP;
