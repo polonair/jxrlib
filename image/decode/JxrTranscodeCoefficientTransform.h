@@ -17,5 +17,11 @@ Bool JxrTranscodeCoefficientTransformDc444(JxrTranscodeCoefficientBuffer* source
 Bool JxrTranscodeCoefficientTransformAc444(JxrTranscodeCoefficientBuffer* source,
     JxrTranscodeCoefficientBuffer* destination,
     const JxrTranscodeOrientationState* orientation);
+Bool JxrTranscodeCoefficientTransformDc422(JxrTranscodeCoefficientBuffer* source,
+    JxrTranscodeCoefficientBuffer* destination,
+    const JxrTranscodeOrientationState* orientation);
+Bool JxrTranscodeCoefficientTransformAc422(JxrTranscodeCoefficientBuffer* source,
+    JxrTranscodeCoefficientBuffer* destination,
+    const JxrTranscodeOrientationState* orientation);
 
 #endif

@@ -108,3 +108,77 @@ Bool JxrTranscodeCoefficientTransformAc444(JxrTranscodeCoefficientBuffer* source
         }
     return TRUE;
 }
+
+Bool JxrTranscodeCoefficientTransformDc422(JxrTranscodeCoefficientBuffer* source,
+    JxrTranscodeCoefficientBuffer* destination,
+    const JxrTranscodeOrientationState* orientation)
+{
+    PixelI* sourceValues;
+    PixelI* destinationValues;
+
+    if (!JxrTranscodeCoefficientBufferHasRange(source, 8) ||
+        !JxrTranscodeCoefficientBufferHasRange(destination, 8) || orientation == NULL ||
+        orientation->transpose) return FALSE;
+    sourceValues = source->values + source->offset;
+    destinationValues = destination->values + destination->offset;
+    if (orientation->flipVertical) {
+        sourceValues[1] = -sourceValues[1]; sourceValues[3] = -sourceValues[3];
+        sourceValues[4] = -sourceValues[4]; sourceValues[5] = -sourceValues[5];
+        sourceValues[7] = -sourceValues[7];
+    }
+    if (orientation->flipHorizontal) {
+        sourceValues[2] = -sourceValues[2]; sourceValues[3] = -sourceValues[3];
+        sourceValues[6] = -sourceValues[6]; sourceValues[7] = -sourceValues[7];
+    }
+    if (orientation->flipVertical) {
+        destinationValues[0] = sourceValues[0]; destinationValues[1] = sourceValues[5];
+        destinationValues[2] = sourceValues[6]; destinationValues[3] = sourceValues[7];
+        destinationValues[4] = sourceValues[4]; destinationValues[5] = sourceValues[1];
+        destinationValues[6] = sourceValues[2]; destinationValues[7] = sourceValues[3];
+    }
+    else memcpy(destinationValues, sourceValues, 8 * sizeof(PixelI));
+    return TRUE;
+}
+
+Bool JxrTranscodeCoefficientTransformAc422(JxrTranscodeCoefficientBuffer* source,
+    JxrTranscodeCoefficientBuffer* destination,
+    const JxrTranscodeOrientationState* orientation)
+{
+    PixelI* sourceValues;
+    PixelI* destinationValues;
+    PixelI* sourceBlock;
+    const Int* transformIndex = dctIndex[0];
+    size_t blockRow;
+    size_t blockColumn;
+    size_t coefficient;
+
+    if (!JxrTranscodeCoefficientBufferHasRange(source, 128) ||
+        !JxrTranscodeCoefficientBufferHasRange(destination, 128) || orientation == NULL ||
+        orientation->transpose) return FALSE;
+    sourceValues = source->values + source->offset;
+    destinationValues = destination->values + destination->offset;
+    for (blockRow = 0, sourceBlock = sourceValues; blockRow < 8; ++blockRow,
+        sourceBlock += JXR_TRANSCODE_AC_COEFFICIENT_COUNT) {
+        if (orientation->flipVertical)
+            for (coefficient = 0; coefficient < JXR_TRANSCODE_AC_COEFFICIENT_COUNT;
+                coefficient += 4) {
+                sourceBlock[transformIndex[coefficient + 1]] = -sourceBlock[transformIndex[coefficient + 1]];
+                sourceBlock[transformIndex[coefficient + 3]] = -sourceBlock[transformIndex[coefficient + 3]];
+            }
+        if (orientation->flipHorizontal)
+            for (coefficient = 0; coefficient < 4; ++coefficient) {
+                sourceBlock[transformIndex[coefficient + 4]] = -sourceBlock[transformIndex[coefficient + 4]];
+                sourceBlock[transformIndex[coefficient + 12]] = -sourceBlock[transformIndex[coefficient + 12]];
+            }
+    }
+    for (blockRow = 0; blockRow < 2; ++blockRow)
+        for (blockColumn = 0; blockColumn < 4; ++blockColumn) {
+            size_t destinationRow = orientation->flipVertical ? 3 - blockColumn : blockColumn;
+            size_t destinationColumn = orientation->flipHorizontal ? 1 - blockRow : blockRow;
+            memcpy(destinationValues + (destinationColumn * 4 + destinationRow) *
+                JXR_TRANSCODE_AC_COEFFICIENT_COUNT,
+                sourceValues + (blockRow * 4 + blockColumn) * JXR_TRANSCODE_AC_COEFFICIENT_COUNT,
+                JXR_TRANSCODE_AC_COEFFICIENT_COUNT * sizeof(PixelI));
+        }
+    return TRUE;
+}
