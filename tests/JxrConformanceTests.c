@@ -39,6 +39,7 @@
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
+#include "JxrMonochromeExpansion.h"
 #include "JxrEntropyReader.h"
 #include "JxrLegacyBitReaderAdapter.h"
 #ifdef _WIN32
@@ -689,6 +690,31 @@ static int test_float_sample_conversion_vectors(void)
         JxrFloatSampleConversionSingleBits(JxrFloatSampleConversionToSingle(128, 1, 7)) == 0x3f800000 &&
         JxrFloatSampleConversionSingleBits(JxrFloatSampleConversionToSingle(-64, 1, 7)) == 0xbf000000 &&
         JxrFloatSampleConversionSingleBits(JxrFloatSampleConversionToSingle(1, 1, 7)) == 0x3c000000;
+}
+
+static int test_monochrome_expansion_vectors(void)
+{
+    U8 bytes[20] = { 10, 80, 90, 40, 20, 81, 91, 41, 0xee, 0xef,
+                     30, 82, 92, 42, 40, 83, 93, 43, 0xfc, 0xfd };
+    U16 words16[10] = { 100, 800, 900, 400, 0xeeee,
+                         200, 801, 901, 401, 0xffff };
+    U32 words32[10] = { 1000, 8000, 9000, 4000, 0xeeeeeeee,
+                         2000, 8001, 9001, 4001, 0xffffffff };
+
+    JxrMonochromeExpansionReplicateByte(bytes, 10, 2, 2, 4);
+    JxrMonochromeExpansionReplicateUInt16(words16, 10, 1, 2, 4);
+    JxrMonochromeExpansionReplicateUInt32(words32, 20, 1, 2, 4);
+    return bytes[0] == 10 && bytes[1] == 10 && bytes[2] == 10 && bytes[3] == 40 &&
+        bytes[4] == 20 && bytes[5] == 20 && bytes[6] == 20 && bytes[7] == 41 &&
+        bytes[8] == 0xee && bytes[9] == 0xef && bytes[10] == 30 && bytes[11] == 30 &&
+        bytes[12] == 30 && bytes[13] == 42 && bytes[14] == 40 && bytes[15] == 40 &&
+        bytes[16] == 40 && bytes[17] == 43 && bytes[18] == 0xfc && bytes[19] == 0xfd &&
+        words16[0] == 100 && words16[1] == 100 && words16[2] == 100 && words16[3] == 400 &&
+        words16[4] == 0xeeee && words16[5] == 200 && words16[6] == 200 &&
+        words16[7] == 200 && words16[8] == 401 && words16[9] == 0xffff &&
+        words32[0] == 1000 && words32[1] == 1000 && words32[2] == 1000 && words32[3] == 4000 &&
+        words32[4] == 0xeeeeeeee && words32[5] == 2000 && words32[6] == 2000 &&
+        words32[7] == 2000 && words32[8] == 4001 && words32[9] == 0xffffffff;
 }
 
 static int test_bit_input_buffer_state_vectors(void)
@@ -1502,6 +1528,7 @@ int main(int argc, char** argv)
         { "inverse_color_transform_vectors", test_inverse_color_transform_vectors },
         { "sample_clipping_vectors", test_sample_clipping_vectors },
         { "float_sample_conversion_vectors", test_float_sample_conversion_vectors },
+        { "monochrome_expansion_vectors", test_monochrome_expansion_vectors },
         { "bit_input_buffer_state_vectors", test_bit_input_buffer_state_vectors },
         { "packet_source_vectors", test_packet_source_vectors },
         { "packet_executor_vectors", test_packet_executor_vectors },

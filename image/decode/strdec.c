@@ -33,6 +33,7 @@
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
+#include "JxrMonochromeExpansion.h"
 #include "strTransform.h"
 #include <math.h>
 #include "perfTimer.h"
@@ -605,7 +606,6 @@ static void fixup_Y_ONLY_to_Others(
     const CWMImageInfo* pII = &pSC->WMII;
     const CWMIStrCodecParam* pSCP = &pSC->WMISCP;
     size_t cWidth = 0, cHeight = 0;
-    size_t idxY = 0, idxX = 0;
 
     if (CF_RGB != pII->cfColorFormat || Y_ONLY != pSCP->cfColorFormat)
         return;
@@ -613,34 +613,22 @@ static void fixup_Y_ONLY_to_Others(
     cWidth = 0 != pII->cROIWidth ? pII->cROIWidth : pII->cWidth;
     cHeight = 0 != pII->cROIHeight ? pII->cROIHeight : pII->cHeight;
 
-#define fixup(type, nCh) \
-for (idxY = 0; idxY < cHeight; ++idxY) \
-{ \
-    type * pT = (type *)((U8*)pBI->pv + pBI->cbStride * idxY); \
-    for (idxX = 0; idxX < cWidth; ++idxX) \
-    { \
-        pT[2] = pT[1] = pT[0]; \
-        pT += nCh; \
-    } \
-} \
-break
-
     switch (pII->bdBitDepth)
     {
         case BD_8:
-            fixup(U8, (pII->cBitsPerUnit >> 3));
+            JxrMonochromeExpansionReplicateByte((U8*)pBI->pv, pBI->cbStride, cWidth, cHeight, pII->cBitsPerUnit >> 3);
             break;
 
         case BD_16:
         case BD_16S:
         case BD_16F:
-            fixup(U16, (pII->cBitsPerUnit >> 3) / sizeof(U16));
+            JxrMonochromeExpansionReplicateUInt16((U16*)pBI->pv, pBI->cbStride, cWidth, cHeight, (pII->cBitsPerUnit >> 3) / sizeof(U16));
             break;
 
         case BD_32:
         case BD_32S:
         case BD_32F:
-            fixup(U32, (pII->cBitsPerUnit >> 3) / sizeof(float));
+            JxrMonochromeExpansionReplicateUInt32((U32*)pBI->pv, pBI->cbStride, cWidth, cHeight, (pII->cBitsPerUnit >> 3) / sizeof(float));
             break;
 
         case BD_5:

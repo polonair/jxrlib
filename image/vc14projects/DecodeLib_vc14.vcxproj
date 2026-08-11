@@ -184,6 +184,7 @@
     <ClCompile Include="..\decode\JxrInverseColorTransform.c" />
     <ClCompile Include="..\decode\JxrSampleClipping.c" />
     <ClCompile Include="..\decode\JxrFloatSampleConversion.c" />
+    <ClCompile Include="..\decode\JxrMonochromeExpansion.c" />
     <ClCompile Include="..\decode\JxrEntropyReader.c" />
     <ClCompile Include="..\decode\JxrLegacyBitReaderAdapter.c" />
     <ClCompile Include="..\decode\JxrLegacyBitIoBridge.c" />
