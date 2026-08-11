@@ -38,6 +38,7 @@
 #include "JxrDecoderTileQuantizerSyntaxReader.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
+#include "JxrFloatSampleConversion.h"
 #include "JxrEntropyReader.h"
 #include "JxrLegacyBitReaderAdapter.h"
 #ifdef _WIN32
@@ -670,6 +671,24 @@ static int test_sample_clipping_vectors(void)
         JxrSampleClippingToInt16(-32769) == -32768 &&
         JxrSampleClippingToInt16(-1) == -1 &&
         JxrSampleClippingToInt16(32768) == 32767;
+}
+
+static int test_float_sample_conversion_vectors(void)
+{
+    JxrRgbeSample sample;
+    sample = JxrFloatSampleConversionToRgbe(0, 0, 0);
+    if (sample.red != 0 || sample.green != 0 || sample.blue != 0 || sample.exponent != 0) return 0;
+    sample = JxrFloatSampleConversionToRgbe(1, 1, 1);
+    if (sample.red != 1 || sample.green != 1 || sample.blue != 1 || sample.exponent != 1) return 0;
+    sample = JxrFloatSampleConversionToRgbe(384, 128, 1);
+    if (sample.red != 128 || sample.green != 32 || sample.blue != 0 || sample.exponent != 3) return 0;
+    return JxrFloatSampleConversionToHalf(0) == 0 &&
+        JxrFloatSampleConversionToHalf(5) == 5 &&
+        JxrFloatSampleConversionToHalf(-5) == 0x8005 &&
+        JxrFloatSampleConversionSingleBits(JxrFloatSampleConversionToSingle(0, 0, 7)) == 0x00000000 &&
+        JxrFloatSampleConversionSingleBits(JxrFloatSampleConversionToSingle(128, 1, 7)) == 0x3f800000 &&
+        JxrFloatSampleConversionSingleBits(JxrFloatSampleConversionToSingle(-64, 1, 7)) == 0xbf000000 &&
+        JxrFloatSampleConversionSingleBits(JxrFloatSampleConversionToSingle(1, 1, 7)) == 0x3c000000;
 }
 
 static int test_bit_input_buffer_state_vectors(void)
@@ -1482,6 +1501,7 @@ int main(int argc, char** argv)
         { "decoder_tile_quantizer_syntax_vectors", test_decoder_tile_quantizer_syntax_vectors },
         { "inverse_color_transform_vectors", test_inverse_color_transform_vectors },
         { "sample_clipping_vectors", test_sample_clipping_vectors },
+        { "float_sample_conversion_vectors", test_float_sample_conversion_vectors },
         { "bit_input_buffer_state_vectors", test_bit_input_buffer_state_vectors },
         { "packet_source_vectors", test_packet_source_vectors },
         { "packet_executor_vectors", test_packet_executor_vectors },

@@ -32,6 +32,7 @@
 #include "JxrDecoderTileQuantizerSyntaxReader.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
+#include "JxrFloatSampleConversion.h"
 #include "strTransform.h"
 #include <math.h>
 #include "perfTimer.h"
@@ -42,12 +43,6 @@
 #define TRACE_HEAP      0
 #include "memtrace.h"
 #endif
-
-#ifdef X86OPT_INLINE
-#define _FORCEINLINE __forceinline
-#else // X86OPT_INLINE
-#define _FORCEINLINE
-#endif // X86OPT_INLINE
 
 #if defined(WMP_OPT_SSE2) || defined(WMP_OPT_CC_DEC) || defined(WMP_OPT_TRFM_DEC)
 void StrDecOpt(CWMImageStrCodec* pSC);
@@ -379,105 +374,6 @@ Int processMacroblockDec(CWMImageStrCodec * pSC)
 
 #define min(a,b) (((a) < (b)) ? (a) : (b))
 
-//inverseConvert: Inverse conversion from float RGB to RGBE
-static _FORCEINLINE void inverseConvert (PixelI iF, U8 *pRGB, U8 *pE)
-{
-    if (iF <= 0) {
-        *pRGB = *pE = 0;
-    }
-    else if ((iF >> 7) > 1) {
-        /** normal form **/
-        *pE = (U8) (iF >> 7); //+ 1;
-        *pRGB = (iF & 0x7f) | 0x80;
-    }
-    else {  
-        /** denormal form **/
-        *pE = 1;
-        *pRGB = (U8) iF;
-    }
-}
-
-#ifdef __ANSI__
-#define max(a,b) ((a) > (b) ? (a) : (b))
-#endif // __ANSI__
-
-static _FORCEINLINE void inverseConvertRGBE (PixelI iFr, PixelI iFg, PixelI iFb, U8 *pR, U8 *pG, U8 *pB, U8 *pE)
-{
-    U8 iShift;
-
-    U8 pR_E, pG_E, pB_E;
-
-    inverseConvert (iFr, pR, &pR_E);
-    inverseConvert (iFg, pG, &pG_E);
-    inverseConvert (iFb, pB, &pB_E);
-
-    *pE = max(max(pR_E, pG_E), pB_E); 
-
-    if(*pE > pR_E){
-            iShift = (*pE - pR_E);
-            *pR = (U8)((((int)*pR) * 2 + 1) >> (iShift + 1));
-    }
-    if(*pE > pG_E){
-            iShift = (*pE - pG_E);
-            *pG = (U8)((((int)*pG) * 2 + 1) >> (iShift + 1));
-    }
-    if(*pE > pB_E){
-            iShift = (*pE - pB_E);
-            *pB = (U8)((((int)*pB) * 2 + 1) >> (iShift + 1));
-    }
-}
-
-
-//pixel to float 32!
-static _FORCEINLINE float pixel2float(PixelI _h, const char _c, const unsigned char _lm)
-{
-    union uif
-    {
-        I32   i;
-        float f;
-    } x;
-
-    I32 s, iTempH, m, e, lmshift = (1 << _lm);
-
-    // assert (_c <= 127);
-
-    iTempH = (I32) _h ;
-    s = (iTempH >> 31);
-    iTempH = (iTempH ^ s) - s; // abs(iTempH)
-
-    e = (U32) iTempH >> _lm;// & ((1 << (31 - _lm)) - 1);
-    m = (iTempH & (lmshift - 1)) | lmshift; // actual mantissa, with normalizer
-    if (e == 0) { // denormal land
-        m ^= lmshift; // normalizer removed
-        e = 1; // actual exponent
-    }
-
-    e += (127 - _c);
-    while (m < lmshift && e > 1 && m > 0) { // denormal originally, see if normal is possible
-        e--;
-        m <<= 1;
-    }
-    if (m < lmshift) // truly denormal
-        e = 0;
-    else
-        m ^= lmshift;
-    m <<= (23 - _lm);
-
-    x.i = (s & 0x80000000) | (e << 23) | m;
-
-    return x.f;
-}
-
-//convert Half-16 to internal format, only need to handle sign bit
-static _FORCEINLINE U16 backwardHalf (PixelI hHalf)
-{
-    PixelI s;
-    s = hHalf >> 31;
-    hHalf = ((hHalf & 0x7fff) ^ s) - s; // don't worry about overflow
-    return (U16) hHalf;
-}
-
-
 Void interpolateUV(CWMImageStrCodec * pSC)
 {
     const COLORFORMAT cfExt = pSC->WMII.cfColorFormat;
@@ -646,7 +542,7 @@ Void outputNChannel(CWMImageStrCodec * pSC, size_t iFirstRow, size_t iFirstColum
                     for(iChannel = 0; iChannel < cChannel; iChannel ++){
                         PixelI p = ((pChannel[iChannel & 15][((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf]] + iBias) >> iShift);
                         
-                        pDst[iChannel] = backwardHalf(p);
+                        pDst[iChannel] = JxrFloatSampleConversionToHalf(p);
                     }
                 }
             }
@@ -690,7 +586,7 @@ Void outputNChannel(CWMImageStrCodec * pSC, size_t iFirstRow, size_t iFirstColum
                     for(iChannel = 0; iChannel < cChannel; iChannel ++){
                         PixelI p = ((pChannel[iChannel & 15][((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf]] + iBias) >> iShift);                       
                         
-                        pDst[iChannel] = pixel2float (p, nExpBias, nLen);
+                        pDst[iChannel] = JxrFloatSampleConversionToSingle(p, nExpBias, nLen);
                     }
                 }
             }
@@ -810,7 +706,7 @@ Int outputMBRowAlpha(CWMImageStrCodec * pSC)
             for(iRow = iFirstRow; iRow < cHeight; iRow ++)
                 for(iColumn = iFirstColumn, iY = pOffsetY[iRow]; iColumn < cWidth; iColumn ++){
                     PixelI a = ((pA[((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 15]] + iBias) >> iShift);
-                    ((U16 *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY)[iAlphaPos] = backwardHalf(a);
+                    ((U16 *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY)[iAlphaPos] = JxrFloatSampleConversionToHalf(a);
                 }
         }
         else if(bd == BD_32S){
@@ -828,7 +724,7 @@ Int outputMBRowAlpha(CWMImageStrCodec * pSC)
             for(iRow = iFirstRow; iRow < cHeight; iRow ++)
                 for(iColumn = iFirstColumn, iY = pOffsetY[iRow]; iColumn < cWidth; iColumn ++){
                     PixelI a = ((pA[((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 15]] + iBias) >> iShift);
-                    ((float *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY)[iAlphaPos] = pixel2float (a, nExpBias, nLen);
+                    ((float *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY)[iAlphaPos] = JxrFloatSampleConversionToSingle(a, nExpBias, nLen);
                 }
         }
         else // not supported
@@ -1136,7 +1032,13 @@ Int outputMBRow(CWMImageStrCodec * pSC)
 	
 							pDst = (U8 *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY;
 	
-							inverseConvertRGBE (r >> iShift, g >> iShift, b >> iShift, pDst, pDst + 1, pDst + 2, pDst + 3);
+							{
+                                JxrRgbeSample rgbe = JxrFloatSampleConversionToRgbe(r >> iShift, g >> iShift, b >> iShift);
+                                pDst[0] = rgbe.red;
+                                pDst[1] = rgbe.green;
+                                pDst[2] = rgbe.blue;
+                                pDst[3] = rgbe.exponent;
+                            }
 						}
 				}
 			}
@@ -1383,9 +1285,9 @@ Int outputMBRow(CWMImageStrCodec * pSC)
                     JxrInverseColorTransformApplyRgb(&r, &g, &b);
                                         
                     pDst = (U16 *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY;
-                    pDst[0] = backwardHalf(r >> iShift);
-                    pDst[1] = backwardHalf(g >> iShift);
-                    pDst[2] = backwardHalf(b >> iShift);
+                    pDst[0] = JxrFloatSampleConversionToHalf(r >> iShift);
+                    pDst[1] = JxrFloatSampleConversionToHalf(g >> iShift);
+                    pDst[2] = JxrFloatSampleConversionToHalf(b >> iShift);
                 }
             }
             break;
@@ -1498,9 +1400,9 @@ Int outputMBRow(CWMImageStrCodec * pSC)
                     JxrInverseColorTransformApplyRgb(&r, &g, &b);
                                         
                     pDst = (float *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY;
-                    pDst[0] = pixel2float (r >> iShift, nExpBias, nLen);
-                    pDst[1] = pixel2float (g >> iShift, nExpBias, nLen);
-                    pDst[2] = pixel2float (b >> iShift, nExpBias, nLen);
+                    pDst[0] = JxrFloatSampleConversionToSingle(r >> iShift, nExpBias, nLen);
+                    pDst[1] = JxrFloatSampleConversionToSingle(g >> iShift, nExpBias, nLen);
+                    pDst[2] = JxrFloatSampleConversionToSingle(b >> iShift, nExpBias, nLen);
                 }
             }
             break;
@@ -1748,7 +1650,7 @@ Void outputNChannelThumbnail(CWMImageStrCodec * pSC, const PixelI cMul, const si
                     for(iChannel = 0; iChannel < cChannel; iChannel ++){
                         PixelI p = (pChannel[iChannel & 15][((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 15]] * cMul) >> rShiftY;
                         
-                        pDst[iChannel] = backwardHalf(p);
+                        pDst[iChannel] = JxrFloatSampleConversionToHalf(p);
                     }
                 }
             }
@@ -1787,7 +1689,7 @@ Void outputNChannelThumbnail(CWMImageStrCodec * pSC, const PixelI cMul, const si
                     for(iChannel = 0; iChannel < cChannel; iChannel ++){
                         PixelI p = (pChannel[iChannel & 15][((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 15]] * cMul) >> rShiftY;
                         
-                        pDst[iChannel] = pixel2float (p, nExpBias, nLen);
+                        pDst[iChannel] = JxrFloatSampleConversionToSingle(p, nExpBias, nLen);
                     }
                 }
             }
@@ -1852,7 +1754,7 @@ Int decodeThumbnailAlpha(CWMImageStrCodec * pSC, const size_t nBits, const Pixel
                 for(iColumn = iFirstColumn, iY = pOffsetY[iRow >> nBits]; iColumn < cWidth; iColumn += tScale){
                     PixelI a = (pSrc[((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf]] * cMul) >> rShiftY;
 
-                    ((U16 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY)[iAlphaPos] = backwardHalf(a);
+                    ((U16 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY)[iAlphaPos] = JxrFloatSampleConversionToHalf(a);
                 }
         }
         else if(bd == BD_32S){
@@ -1868,7 +1770,7 @@ Int decodeThumbnailAlpha(CWMImageStrCodec * pSC, const size_t nBits, const Pixel
                 for(iColumn = iFirstColumn, iY = pOffsetY[iRow >> nBits]; iColumn < cWidth; iColumn += tScale){
                     PixelI a = (pSrc[((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf]] * cMul) >> rShiftY;
 
-                    ((float *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY)[iAlphaPos] = pixel2float (a, nExpBias, nLen);
+                    ((float *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY)[iAlphaPos] = JxrFloatSampleConversionToSingle(a, nExpBias, nLen);
                 }
         }
         else // not supported
@@ -2002,7 +1904,13 @@ Int decodeThumbnail(CWMImageStrCodec * pSC)
                     JxrInverseColorTransformApplyRgb(&r, &g, &b);
                     
                     pDst = (U8 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY;
-                    inverseConvertRGBE (r, g, b, pDst, pDst + 1, pDst + 2, pDst + 3);
+                    {
+                        JxrRgbeSample rgbe = JxrFloatSampleConversionToRgbe(r, g, b);
+                        pDst[0] = rgbe.red;
+                        pDst[1] = rgbe.green;
+                        pDst[2] = rgbe.blue;
+                        pDst[3] = rgbe.exponent;
+                    }
                 }
             }
             break;
@@ -2153,9 +2061,9 @@ Int decodeThumbnail(CWMImageStrCodec * pSC)
                         JxrInverseColorTransformApplyRgb(&r, &g, &b);
                         
                         pDst = (U16 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY;
-                        pDst[0] = backwardHalf (r);
-                        pDst[1] = backwardHalf (g);
-                        pDst[2] = backwardHalf (b);
+                        pDst[0] = JxrFloatSampleConversionToHalf(r);
+                        pDst[1] = JxrFloatSampleConversionToHalf(g);
+                        pDst[2] = JxrFloatSampleConversionToHalf(b);
                     }
                 }
                 break;
@@ -2250,9 +2158,9 @@ Int decodeThumbnail(CWMImageStrCodec * pSC)
                         JxrInverseColorTransformApplyRgb(&r, &g, &b);
                         
                         pDst = (float *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY;
-                        pDst[0] = pixel2float (r, nExpBias, nLen);
-                        pDst[1] = pixel2float (g, nExpBias, nLen);
-                        pDst[2] = pixel2float (b, nExpBias, nLen);
+                        pDst[0] = JxrFloatSampleConversionToSingle(r, nExpBias, nLen);
+                        pDst[1] = JxrFloatSampleConversionToSingle(g, nExpBias, nLen);
+                        pDst[2] = JxrFloatSampleConversionToSingle(b, nExpBias, nLen);
                     }
                 }
                 break;
