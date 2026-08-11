@@ -40,6 +40,7 @@
 #include "JxrDecoderStreamInitializer.h"
 #include "JxrDecoderPacketAttachment.h"
 #include "JxrDecoderPacketHeaderReader.h"
+#include "JxrPacketHeaderSyntaxReader.h"
 #include "strTransform.h"
 #include <math.h>
 #include "perfTimer.h"
@@ -87,11 +88,17 @@ U8 readQuantizerSB(U8 pQPIndex[MAX_CHANNELS], SimpleBitIO * pIO, size_t cChannel
 // ?????:         (iTileY * cNumOfSliceV + iTileX) % 32
 Int readPacketHeader(BitIOInfo * pIO, U8 ptPacketType, U8 pID)
 {
-    UNREFERENCED_PARAMETER( ptPacketType );
-    UNREFERENCED_PARAMETER( pID );
-    if(getBit16(pIO, 8) != 0 || getBit16(pIO, 8) != 0 || getBit16(pIO, 8) != 1)
+    JxrDecoderBitSource source;
+    JxrPacketHeaderSyntax header;
+
+    UNREFERENCED_PARAMETER(ptPacketType);
+    UNREFERENCED_PARAMETER(pID);
+    JxrDecoderBitSourceInitLegacy(&source, pIO);
+    if (!JxrPacketHeaderSyntaxReaderRead(&source, &header) ||
+        !JxrPacketHeaderSyntaxIsValid(&header))
+    {
         return ICERR_ERROR;
-    getBit16(pIO, 8);
+    }
     return ICERR_OK;
 }
 

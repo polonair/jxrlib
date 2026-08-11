@@ -47,6 +47,7 @@
 #include "JxrDecoderBitstreamSet.h"
 #include "JxrDecoderPacketAttachment.h"
 #include "JxrDecoderPacketHeaderReader.h"
+#include "JxrPacketHeaderSyntaxReader.h"
 #include "JxrEntropyReader.h"
 #include "JxrLegacyBitReaderAdapter.h"
 #ifdef _WIN32
@@ -1147,6 +1148,33 @@ static int test_decoder_packet_header_reader_vectors(void)
     return !JxrDecoderPacketHeaderReaderReadRow(&config, &operations);
 }
 
+static int test_packet_header_syntax_reader_vectors(void)
+{
+    U8 data[4] = { 0x00, 0x00, 0x01, 0xad };
+    JxrBitReader reader;
+    JxrDecoderBitSource source;
+    JxrPacketHeaderSyntax header;
+
+    JxrBitReaderInit(&reader, data, sizeof(data));
+    JxrDecoderBitSourceInit(&source, &reader, read_decoder_test_bits);
+    if (!JxrPacketHeaderSyntaxReaderRead(&source, &header) ||
+        !JxrPacketHeaderSyntaxIsValid(&header) ||
+        JxrPacketHeaderSyntaxGetTileId(&header) != 21 ||
+        JxrPacketHeaderSyntaxGetPacketType(&header) != 5) return 0;
+
+    data[1] = 2;
+    JxrBitReaderInit(&reader, data, sizeof(data));
+    JxrDecoderBitSourceInit(&source, &reader, read_decoder_test_bits);
+    if (!JxrPacketHeaderSyntaxReaderRead(&source, &header) ||
+        JxrPacketHeaderSyntaxIsValid(&header)) return 0;
+
+    JxrBitReaderInit(&reader, data, 3);
+    JxrDecoderBitSourceInit(&source, &reader, read_decoder_test_bits);
+    return !JxrPacketHeaderSyntaxReaderRead(&source, &header) &&
+        !JxrPacketHeaderSyntaxReaderRead(NULL, &header) &&
+        !JxrPacketHeaderSyntaxReaderRead(&source, NULL);
+}
+
 static int test_bit_input_buffer_state_vectors(void)
 {
     JxrBitInputBufferState state;
@@ -1968,6 +1996,7 @@ int main(int argc, char** argv)
         { "decoder_bitstream_set_vectors", test_decoder_bitstream_set_vectors },
         { "decoder_packet_attachment_vectors", test_decoder_packet_attachment_vectors },
         { "decoder_packet_header_reader_vectors", test_decoder_packet_header_reader_vectors },
+        { "packet_header_syntax_reader_vectors", test_packet_header_syntax_reader_vectors },
         { "bit_input_buffer_state_vectors", test_bit_input_buffer_state_vectors },
         { "packet_source_vectors", test_packet_source_vectors },
         { "packet_executor_vectors", test_packet_executor_vectors },

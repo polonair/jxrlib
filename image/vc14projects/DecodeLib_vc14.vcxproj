@@ -199,6 +199,7 @@
     <ClCompile Include="..\decode\JxrDecoderStreamInitializer.c" />
     <ClCompile Include="..\decode\JxrDecoderPacketAttachment.c" />
     <ClCompile Include="..\decode\JxrDecoderPacketHeaderReader.c" />
+    <ClCompile Include="..\decode\JxrPacketHeaderSyntaxReader.c" />
     <ClCompile Include="..\decode\JxrEntropyReader.c" />
     <ClCompile Include="..\decode\JxrLegacyBitReaderAdapter.c" />
     <ClCompile Include="..\decode\JxrLegacyBitIoBridge.c" />
