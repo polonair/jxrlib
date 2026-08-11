@@ -36,6 +36,7 @@
 #include "JxrMonochromeExpansion.h"
 #include "JxrDecoderRoiRowRange.h"
 #include "JxrVariableLengthWordReader.h"
+#include "JxrIndexTableReader.h"
 #include "strTransform.h"
 #include <math.h>
 #include "perfTimer.h"
@@ -2271,41 +2272,34 @@ Int decodeThumbnail(CWMImageStrCodec * pSC)
     return ICERR_OK;
 }
 
-// Variable-length index words are implemented by JxrVariableLengthWordReader.
+// Index-table syntax is implemented by JxrIndexTableReader.
+
+static Bool JxrIndexTableReaderStoreLegacyEntry(Void* context, U32 index, U64 value)
+{
+    ((size_t*)context)[index] = (size_t)value;
+    return TRUE;
+}
 
 //================================================================
 Int readIndexTable(CWMImageStrCodec * pSC)
 {
     BitIOInfo* pIO = pSC->pIOHeader;
-    JxrDecoderBitSource source;
-    U64 variableLengthWord;
-    readIS_L1(pSC, pIO);
-    JxrVariableLengthWordReaderInitLegacy(&source, pIO);
+    JxrIndexTableReader reader;
+    JxrIndexTableLegacyContext legacyContext;
+    U64 headerSize;
+    U32 entryCount = (U32)pSC->cNumBitIO * (pSC->WMISCP.cNumOfSliceMinus1H + 1);
 
-    if(pSC->cNumBitIO > 0){
-        size_t *pTable = pSC->pIndexTable;
-        U32 iEntry = (U32)pSC->cNumBitIO * (pSC->WMISCP.cNumOfSliceMinus1H + 1), i;
-
-        // read index table header [0x0001] - 2 bytes
-        if (getBit32(pIO, 16) != 1)
-            return ICERR_ERROR;
-
-        //iBits = getBit16(pIO, 5) + 1; // how many bits per entry
-        for(i = 0; i < iEntry; i ++){
-            readIS_L1(pSC, pIO);
-            if(!JxrVariableLengthWordReaderRead(&source, &variableLengthWord, NULL))
-                return ICERR_ERROR;
-            pTable[i] = (size_t)variableLengthWord;
-        }
+    legacyContext.codec = pSC;
+    legacyContext.input = pIO;
+    JxrIndexTableReaderInitLegacy(&reader, &legacyContext);
+    if (!JxrIndexTableReaderRead(&reader, entryCount,
+        entryCount == 0 ? NULL : JxrIndexTableReaderStoreLegacyEntry,
+        pSC->pIndexTable, &headerSize))
+    {
+        return ICERR_ERROR;
     }
 
-    if(!JxrVariableLengthWordReaderRead(&source, &variableLengthWord, NULL))
-        return ICERR_ERROR;
-    pSC->cHeaderSize = (size_t)variableLengthWord;
-    flushToByte(pIO);    
-    
-    pSC->cHeaderSize += getPosRead(pSC->pIOHeader); // get header length
-
+    pSC->cHeaderSize = (size_t)headerSize;
     return ICERR_OK;
 }
 

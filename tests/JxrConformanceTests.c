@@ -42,6 +42,7 @@
 #include "JxrMonochromeExpansion.h"
 #include "JxrDecoderRoiRowRange.h"
 #include "JxrVariableLengthWordReader.h"
+#include "JxrIndexTableReader.h"
 #include "JxrEntropyReader.h"
 #include "JxrLegacyBitReaderAdapter.h"
 #ifdef _WIN32
@@ -806,6 +807,63 @@ static int test_variable_length_word_vectors(void)
         !JxrVariableLengthWordReaderRead(&source, &value, &escape)) return 0;
     return value == 0x1111222233334444 && escape == 0 &&
         !JxrVariableLengthWordReaderRead(&source, &value, &escape);
+}
+
+typedef struct JxrIndexTableReaderTestContext {
+    JxrBitReader reader;
+    U32 refillCount;
+    Bool aligned;
+    U64 position;
+} JxrIndexTableReaderTestContext;
+
+static Bool read_index_table_test_bits(Void* context, U32 count, U32* value)
+{ return JxrBitReaderRead(&((JxrIndexTableReaderTestContext*)context)->reader, count, value); }
+static Bool refill_index_table_test(Void* context)
+{ ++((JxrIndexTableReaderTestContext*)context)->refillCount; return TRUE; }
+static Bool align_index_table_test(Void* context)
+{ ((JxrIndexTableReaderTestContext*)context)->aligned = TRUE; return TRUE; }
+static U64 get_index_table_test_position(Void* context)
+{ return ((JxrIndexTableReaderTestContext*)context)->position; }
+static Bool store_index_table_test_entry(Void* context, U32 index, U64 value)
+{ ((U64*)context)[index] = value; return TRUE; }
+
+static int test_index_table_reader_vectors(void)
+{
+    U8 data[16] = { 0 };
+    U8 noEntryData[2] = { 0x00, 0x20 };
+    JxrBitWriter writer;
+    JxrIndexTableReaderTestContext context;
+    JxrIndexTableReader reader;
+    U64 entries[2];
+    U64 headerSize;
+
+    JxrBitWriterInit(&writer, data, sizeof(data));
+    if (!JxrBitWriterWrite(&writer, 1, 16) || !JxrBitWriterWrite(&writer, 0x12, 8) ||
+        !JxrBitWriterWrite(&writer, 0x34, 8) || !JxrBitWriterWrite(&writer, 0xfb, 8) ||
+        !JxrBitWriterWrite(&writer, 0xabcd, 16) || !JxrBitWriterWrite(&writer, 0xef01, 16) ||
+        !JxrBitWriterWrite(&writer, 0, 8) || !JxrBitWriterWrite(&writer, 0x20, 8) ||
+        !JxrBitWriterFlush(&writer)) return 0;
+    memset(&context, 0, sizeof(context));
+    context.position = 7;
+    JxrBitReaderInit(&context.reader, data, JxrBitWriterBytes(&writer));
+    JxrIndexTableReaderInit(&reader, &context, read_index_table_test_bits,
+        refill_index_table_test, align_index_table_test, get_index_table_test_position);
+    if (!JxrIndexTableReaderRead(&reader, 2, store_index_table_test_entry, entries, &headerSize) || entries[0] != 0x1234 ||
+        entries[1] != 0xabcdef01 || headerSize != 0x27 || context.refillCount != 3 ||
+        !context.aligned) return 0;
+
+    JxrBitReaderInit(&context.reader, noEntryData, sizeof(noEntryData));
+    context.refillCount = 0; context.aligned = FALSE; context.position = 0;
+    JxrIndexTableReaderInit(&reader, &context, read_index_table_test_bits,
+        refill_index_table_test, align_index_table_test, get_index_table_test_position);
+    if (!JxrIndexTableReaderRead(&reader, 0, NULL, NULL, &headerSize) || headerSize != 0x20 ||
+        context.refillCount != 1 || !context.aligned) return 0;
+
+    data[1] = 2;
+    JxrBitReaderInit(&context.reader, data, JxrBitWriterBytes(&writer));
+    context.refillCount = 0; context.aligned = FALSE; context.position = 0;
+    if (JxrIndexTableReaderRead(&reader, 2, store_index_table_test_entry, entries, &headerSize)) return 0;
+    return !JxrIndexTableReaderRead(&reader, 1, NULL, NULL, &headerSize);
 }
 
 static int test_bit_input_buffer_state_vectors(void)
@@ -1624,6 +1682,7 @@ int main(int argc, char** argv)
         { "monochrome_expansion_thumbnail_vectors", test_monochrome_expansion_thumbnail_vectors },
         { "decoder_roi_row_range_vectors", test_decoder_roi_row_range_vectors },
         { "variable_length_word_vectors", test_variable_length_word_vectors },
+        { "index_table_reader_vectors", test_index_table_reader_vectors },
         { "bit_input_buffer_state_vectors", test_bit_input_buffer_state_vectors },
         { "packet_source_vectors", test_packet_source_vectors },
         { "packet_executor_vectors", test_packet_executor_vectors },
