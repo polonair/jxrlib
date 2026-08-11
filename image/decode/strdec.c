@@ -30,6 +30,7 @@
 #include "decode.h"
 #include "JxrMacroblockRegionState.h"
 #include "JxrDecoderTileQuantizerSyntaxReader.h"
+#include "JxrDecoderDcQuantizerHeaderApplier.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -107,21 +108,11 @@ Int readTileHeaderDC(CWMImageStrCodec * pSC, BitIOInfo * pIO)
     if((pSC->m_param.uQPMode & 1) != 0){
         JxrDecoderBitSource source;
         JxrDecoderQuantizerSyntax syntax;
-        size_t channel;
-        size_t iTile;
-        CWMITile * pTile = pSC->pTile + pSC->cTileColumn;
 
         JxrDecoderBitSourceInitLegacy(&source, pIO);
-        if(!JxrDecoderTileQuantizerSyntaxReadDc(&source, pSC->m_param.cNumChannels, &syntax))
+        if(!JxrDecoderTileQuantizerSyntaxReadDc(&source, pSC->m_param.cNumChannels, &syntax) ||
+            !JxrDecoderDcQuantizerHeaderApplierApply(pSC, &syntax))
             return ICERR_ERROR;
-        if(pSC->cTileRow + pSC->cTileColumn == 0)
-            for(iTile = 0; iTile <= pSC->WMISCP.cNumOfSliceMinus1V; iTile ++)
-                if(allocateQuantizer(pSC->pTile[iTile].pQuantizerDC, pSC->m_param.cNumChannels, 1) != ICERR_OK)
-                    return ICERR_ERROR;
-        pTile->cChModeDC = syntax.channelMode;
-        for(channel = 0; channel < pSC->m_param.cNumChannels; ++channel)
-            pTile->pQuantizerDC[channel][0].iIndex = syntax.indices[channel];
-        formatQuantizer(pTile->pQuantizerDC, pTile->cChModeDC, pSC->m_param.cNumChannels, 0, TRUE, pSC->m_param.bScaledArith);
     }
     return ICERR_OK;
 }

@@ -36,6 +36,7 @@
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
 #include "JxrDecoderTileQuantizerSyntaxReader.h"
+#include "JxrDecoderDcQuantizerHeaderApplier.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -636,6 +637,43 @@ static int test_decoder_tile_quantizer_syntax_vectors(void)
         lp.values[0].indices[1] != 50 ||
         !JxrDecoderTileQuantizerSyntaxReadHighpass(&source, 3, lp.count, &hp)) return 0;
     return hp.copyPrevious && hp.count == 1 && !JxrDecoderTileQuantizerSyntaxReadDc(&source, 0, &dc);
+}
+
+static int test_decoder_dc_quantizer_header_applier_vectors(void)
+{
+    CWMImageStrCodec codec;
+    CWMITile tiles[2];
+    JxrDecoderQuantizerSyntax syntax;
+    Bool applied;
+
+    memset(&codec, 0, sizeof(codec));
+    memset(tiles, 0, sizeof(tiles));
+    memset(&syntax, 0, sizeof(syntax));
+    codec.pTile = tiles;
+    codec.cTileRow = 0;
+    codec.cTileColumn = 0;
+    codec.WMISCP.cNumOfSliceMinus1V = 1;
+    codec.m_param.cNumChannels = 3;
+    syntax.channelMode = 2;
+    syntax.indices[0] = 10;
+    syntax.indices[1] = 20;
+    syntax.indices[2] = 30;
+
+    applied = JxrDecoderDcQuantizerHeaderApplierApply(&codec, &syntax);
+    if (!applied || tiles[0].cChModeDC != 2 || tiles[0].pQuantizerDC[0] == NULL ||
+        tiles[1].pQuantizerDC[0] == NULL || tiles[0].pQuantizerDC[0][0].iIndex != 10 ||
+        tiles[0].pQuantizerDC[1][0].iIndex != 20 ||
+        tiles[0].pQuantizerDC[2][0].iIndex != 30 ||
+        tiles[0].pQuantizerDC[0][0].iQP == 0) {
+        freeQuantizer(tiles[0].pQuantizerDC);
+        freeQuantizer(tiles[1].pQuantizerDC);
+        return 0;
+    }
+    freeQuantizer(tiles[0].pQuantizerDC);
+    freeQuantizer(tiles[1].pQuantizerDC);
+    codec.m_param.cNumChannels = 0;
+    return !JxrDecoderDcQuantizerHeaderApplierApply(&codec, &syntax) &&
+        !JxrDecoderDcQuantizerHeaderApplierApply(NULL, &syntax);
 }
 
 static int test_inverse_color_transform_vectors(void)
@@ -1983,6 +2021,7 @@ int main(int argc, char** argv)
         { "transcode_tile_extraction_decision_vectors", test_transcode_tile_extraction_decision_vectors },
         { "transcode_roi_geometry_vectors", test_transcode_roi_geometry_vectors },
         { "decoder_tile_quantizer_syntax_vectors", test_decoder_tile_quantizer_syntax_vectors },
+        { "decoder_dc_quantizer_header_applier_vectors", test_decoder_dc_quantizer_header_applier_vectors },
         { "inverse_color_transform_vectors", test_inverse_color_transform_vectors },
         { "sample_clipping_vectors", test_sample_clipping_vectors },
         { "float_sample_conversion_vectors", test_float_sample_conversion_vectors },
