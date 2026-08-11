@@ -32,6 +32,7 @@
 #include "JxrDecoderTileQuantizerSyntaxReader.h"
 #include "JxrDecoderDcQuantizerHeaderApplier.h"
 #include "JxrDecoderLpQuantizerHeaderApplier.h"
+#include "JxrDecoderHpQuantizerHeaderApplier.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -136,25 +137,11 @@ Int readTileHeaderHP(CWMImageStrCodec * pSC, BitIOInfo * pIO)
         JxrDecoderBitSource source;
         JxrDecoderQuantizerSetSyntax syntax;
         CWMITile * pTile = pSC->pTile + pSC->cTileColumn;
-        U8 quantizer;
-        size_t channel;
 
         JxrDecoderBitSourceInitLegacy(&source, pIO);
-        if(!JxrDecoderTileQuantizerSyntaxReadHighpass(&source, pSC->m_param.cNumChannels, pTile->cNumQPLP, &syntax))
+        if(!JxrDecoderTileQuantizerSyntaxReadHighpass(&source, pSC->m_param.cNumChannels, pTile->cNumQPLP, &syntax) ||
+            !JxrDecoderHpQuantizerHeaderApplierApply(pSC, &syntax))
             return ICERR_ERROR;
-        pTile->bUseLP = syntax.copyPrevious;
-        pTile->cNumQPHP = syntax.count;
-        pTile->cBitsHP = pTile->bUseLP ? 0 : dquantBits(pTile->cNumQPHP);
-        if(pSC->cTileRow > 0) freeQuantizer(pTile->pQuantizerHP);
-        if(allocateQuantizer(pTile->pQuantizerHP, pSC->m_param.cNumChannels, pTile->cNumQPHP) != ICERR_OK)
-            return ICERR_ERROR;
-        if(pTile->bUseLP) useLPQuantizer(pSC, pTile->cNumQPHP, pSC->cTileColumn);
-        else for(quantizer = 0; quantizer < pTile->cNumQPHP; ++quantizer){
-            pTile->cChModeHP[quantizer] = syntax.values[quantizer].channelMode;
-            for(channel = 0; channel < pSC->m_param.cNumChannels; ++channel)
-                pTile->pQuantizerHP[channel][quantizer].iIndex = syntax.values[quantizer].indices[channel];
-            formatQuantizer(pTile->pQuantizerHP, pTile->cChModeHP[quantizer], pSC->m_param.cNumChannels, quantizer, FALSE, pSC->m_param.bScaledArith);
-        }
     }
     return ICERR_OK;
 }

@@ -191,6 +191,7 @@
     <ClCompile Include="..\decode\JxrDecoderTileQuantizerSyntaxReader.c" />
     <ClCompile Include="..\decode\JxrDecoderDcQuantizerHeaderApplier.c" />
     <ClCompile Include="..\decode\JxrDecoderLpQuantizerHeaderApplier.c" />
+    <ClCompile Include="..\decode\JxrDecoderHpQuantizerHeaderApplier.c" />
     <ClCompile Include="..\decode\JxrInverseColorTransform.c" />
     <ClCompile Include="..\decode\JxrSampleClipping.c" />
     <ClCompile Include="..\decode\JxrFloatSampleConversion.c" />

@@ -38,6 +38,7 @@
 #include "JxrDecoderTileQuantizerSyntaxReader.h"
 #include "JxrDecoderDcQuantizerHeaderApplier.h"
 #include "JxrDecoderLpQuantizerHeaderApplier.h"
+#include "JxrDecoderHpQuantizerHeaderApplier.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -732,6 +733,69 @@ static int test_decoder_lp_quantizer_header_applier_vectors(void)
     lpSyntax.count = 0;
     return !JxrDecoderLpQuantizerHeaderApplierApply(&codec, &lpSyntax) &&
         !JxrDecoderLpQuantizerHeaderApplierApply(NULL, &lpSyntax);
+}
+
+static int test_decoder_hp_quantizer_header_applier_vectors(void)
+{
+    CWMImageStrCodec codec;
+    CWMITile tile;
+    JxrDecoderQuantizerSetSyntax lpSyntax;
+    JxrDecoderQuantizerSetSyntax hpSyntax;
+
+    memset(&codec, 0, sizeof(codec));
+    memset(&tile, 0, sizeof(tile));
+    memset(&lpSyntax, 0, sizeof(lpSyntax));
+    memset(&hpSyntax, 0, sizeof(hpSyntax));
+    codec.pTile = &tile;
+    codec.m_param.cNumChannels = 3;
+    lpSyntax.count = 2;
+    lpSyntax.values[0].channelMode = 2;
+    lpSyntax.values[0].indices[0] = 13;
+    lpSyntax.values[0].indices[1] = 23;
+    lpSyntax.values[0].indices[2] = 33;
+    lpSyntax.values[1].channelMode = 2;
+    lpSyntax.values[1].indices[0] = 43;
+    lpSyntax.values[1].indices[1] = 53;
+    lpSyntax.values[1].indices[2] = 63;
+    if (!JxrDecoderLpQuantizerHeaderApplierApply(&codec, &lpSyntax)) return 0;
+
+    hpSyntax.count = 2;
+    hpSyntax.values[0].channelMode = 2;
+    hpSyntax.values[0].indices[0] = 14;
+    hpSyntax.values[0].indices[1] = 24;
+    hpSyntax.values[0].indices[2] = 34;
+    hpSyntax.values[1].channelMode = 1;
+    hpSyntax.values[1].indices[0] = 44;
+    hpSyntax.values[1].indices[1] = 54;
+    if (!JxrDecoderHpQuantizerHeaderApplierApply(&codec, &hpSyntax) || tile.bUseLP ||
+        tile.cNumQPHP != 2 || tile.cBitsHP != 1 || tile.cChModeHP[0] != 2 ||
+        tile.cChModeHP[1] != 1 || tile.pQuantizerHP[0][0].iIndex != 14 ||
+        tile.pQuantizerHP[2][0].iIndex != 34 || tile.pQuantizerHP[1][1].iIndex != 54 ||
+        tile.pQuantizerHP[0][0].iQP == 0) {
+        freeQuantizer(tile.pQuantizerHP);
+        freeQuantizer(tile.pQuantizerLP);
+        return 0;
+    }
+    freeQuantizer(tile.pQuantizerHP);
+    memset(tile.pQuantizerHP, 0, sizeof(tile.pQuantizerHP));
+
+    memset(&hpSyntax, 0, sizeof(hpSyntax));
+    hpSyntax.copyPrevious = TRUE;
+    hpSyntax.count = 2;
+    if (!JxrDecoderHpQuantizerHeaderApplierApply(&codec, &hpSyntax) || !tile.bUseLP ||
+        tile.cNumQPHP != 2 || tile.cBitsHP != 0 ||
+        tile.pQuantizerHP[0][0].iIndex != 13 || tile.pQuantizerHP[1][0].iIndex != 23 ||
+        tile.pQuantizerHP[2][0].iIndex != 33 || tile.pQuantizerHP[0][1].iIndex != 43 ||
+        tile.pQuantizerHP[1][1].iIndex != 53 || tile.pQuantizerHP[2][1].iIndex != 63) {
+        freeQuantizer(tile.pQuantizerHP);
+        freeQuantizer(tile.pQuantizerLP);
+        return 0;
+    }
+    freeQuantizer(tile.pQuantizerHP);
+    freeQuantizer(tile.pQuantizerLP);
+    hpSyntax.count = 0;
+    return !JxrDecoderHpQuantizerHeaderApplierApply(&codec, &hpSyntax) &&
+        !JxrDecoderHpQuantizerHeaderApplierApply(NULL, &hpSyntax);
 }
 
 static int test_inverse_color_transform_vectors(void)
@@ -2081,6 +2145,7 @@ int main(int argc, char** argv)
         { "decoder_tile_quantizer_syntax_vectors", test_decoder_tile_quantizer_syntax_vectors },
         { "decoder_dc_quantizer_header_applier_vectors", test_decoder_dc_quantizer_header_applier_vectors },
         { "decoder_lp_quantizer_header_applier_vectors", test_decoder_lp_quantizer_header_applier_vectors },
+        { "decoder_hp_quantizer_header_applier_vectors", test_decoder_hp_quantizer_header_applier_vectors },
         { "inverse_color_transform_vectors", test_inverse_color_transform_vectors },
         { "sample_clipping_vectors", test_sample_clipping_vectors },
         { "float_sample_conversion_vectors", test_float_sample_conversion_vectors },
