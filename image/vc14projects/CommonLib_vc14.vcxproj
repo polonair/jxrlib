@@ -172,6 +172,7 @@
     <ClCompile Include="..\sys\JxrEntropyState.c" />
     <ClCompile Include="..\sys\JxrAdaptiveScan.c" />
     <ClCompile Include="..\sys\JxrCoefficientBuffer.c" />
+    <ClCompile Include="..\sys\JxrDecoderBitstreamSet.c" />
     <ClCompile Include="..\sys\perfTimerANSI.c">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>

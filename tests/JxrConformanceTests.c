@@ -44,6 +44,7 @@
 #include "JxrVariableLengthWordReader.h"
 #include "JxrIndexTableReader.h"
 #include "JxrDecoderStreamInitializer.h"
+#include "JxrDecoderBitstreamSet.h"
 #include "JxrEntropyReader.h"
 #include "JxrLegacyBitReaderAdapter.h"
 #ifdef _WIN32
@@ -929,6 +930,50 @@ static int test_decoder_stream_initializer_vectors(void)
     return JxrDecoderStreamInitializerRun(&initializer) == ICERR_ERROR;
 }
 
+static int test_decoder_bitstream_set_vectors(void)
+{
+    JxrDecoderBitstreamSet bitstreams;
+    JxrDecoderTileBitstreams tile;
+    BitIOInfo header;
+    BitIOInfo inputStorage[8];
+    BitIOInfo* inputs[8];
+    U32 index;
+
+    memset(&header, 0, sizeof(header));
+    memset(inputStorage, 0, sizeof(inputStorage));
+    for (index = 0; index < 8; ++index) inputs[index] = &inputStorage[index];
+
+    if (!JxrDecoderBitstreamSetInit(&bitstreams, FALSE, SPATIAL, 0, 0, SB_ALL) ||
+        bitstreams.bitstreamCount != 0 || bitstreams.subbandCount != 4 || !bitstreams.usesHeaderStream ||
+        !JxrDecoderBitstreamSetBindTile(&bitstreams, &header, NULL, 0, &tile) ||
+        tile.dc != &header || tile.lp != &header || tile.hp != &header || tile.flexbits != &header)
+    {
+        return 0;
+    }
+    if (JxrDecoderBitstreamSetInit(&bitstreams, FALSE, FREQUENCY, 0, 0, SB_ALL) ||
+        JxrDecoderBitstreamSetInit(&bitstreams, FALSE, SPATIAL, 1, 0, SB_ALL)) return 0;
+
+    if (!JxrDecoderBitstreamSetInit(&bitstreams, TRUE, SPATIAL, 2, 3, SB_ALL) ||
+        bitstreams.tileColumnCount != 3 || bitstreams.bitstreamsPerTile != 1 ||
+        bitstreams.bitstreamCount != 3 || bitstreams.usesHeaderStream ||
+        !JxrDecoderBitstreamSetBindTile(&bitstreams, &header, inputs, 2, &tile) ||
+        tile.dc != inputs[2] || tile.lp != inputs[2] || tile.hp != inputs[2] ||
+        tile.flexbits != inputs[2] || JxrDecoderBitstreamSetBindTile(&bitstreams, &header, inputs, 3, &tile))
+    {
+        return 0;
+    }
+
+    if (!JxrDecoderBitstreamSetInit(&bitstreams, TRUE, FREQUENCY, 1, 0, SB_NO_FLEXBITS) ||
+        bitstreams.tileColumnCount != 2 || bitstreams.subbandCount != 3 || bitstreams.bitstreamsPerTile != 3 ||
+        bitstreams.bitstreamCount != 6 || !JxrDecoderBitstreamSetBindTile(&bitstreams,
+        &header, inputs, 1, &tile) || tile.dc != inputs[3] || tile.lp != inputs[4] ||
+        tile.hp != inputs[5] || tile.flexbits != inputs[5])
+    {
+        return 0;
+    }
+    return !JxrDecoderBitstreamSetInit(&bitstreams, TRUE, SPATIAL, MAX_TILES, 0, SB_ALL);
+}
+
 static int test_bit_input_buffer_state_vectors(void)
 {
     JxrBitInputBufferState state;
@@ -1747,6 +1792,7 @@ int main(int argc, char** argv)
         { "variable_length_word_vectors", test_variable_length_word_vectors },
         { "index_table_reader_vectors", test_index_table_reader_vectors },
         { "decoder_stream_initializer_vectors", test_decoder_stream_initializer_vectors },
+        { "decoder_bitstream_set_vectors", test_decoder_bitstream_set_vectors },
         { "bit_input_buffer_state_vectors", test_bit_input_buffer_state_vectors },
         { "packet_source_vectors", test_packet_source_vectors },
         { "packet_executor_vectors", test_packet_executor_vectors },

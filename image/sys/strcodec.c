@@ -26,6 +26,7 @@
 //
 //*@@@---@@@@******************************************************************
 #include "strcodec.h"
+#include "JxrDecoderBitstreamSet.h"
 #include "perfTimer.h"
 
 #ifdef MEM_TRACE
@@ -712,24 +713,17 @@ U32 load4BE(void* pv)
 //================================================================
 Int allocateBitIOInfo(CWMImageStrCodec* pSC)
 {
+    JxrDecoderBitstreamSet bitstreams;
     U32 cNumBitIO;
-    SUBBAND sbSubband = pSC->WMISCP.sbSubband;
 
-    pSC->cSB = (sbSubband == SB_DC_ONLY ? 1 : (sbSubband == SB_NO_HIGHPASS ? 2 : (sbSubband == SB_NO_FLEXBITS ? 3 : 4)));
-
-    // # of additional BitIOs other than pSC->pIOHeader
-    if (!pSC->m_param.bIndexTable) { // pure streaming mode, no index table, no additional BitIO!
-        assert (pSC->WMISCP.bfBitstreamFormat == SPATIAL && pSC->WMISCP.cNumOfSliceMinus1H + pSC->WMISCP.cNumOfSliceMinus1V == 0);
-        cNumBitIO = 0;
-    }
-    else if(pSC->WMISCP.bfBitstreamFormat == SPATIAL)
-        cNumBitIO = pSC->WMISCP.cNumOfSliceMinus1V + 1;
-    else
-        cNumBitIO = (pSC->WMISCP.cNumOfSliceMinus1V + 1) * pSC->cSB;
-
-    if(cNumBitIO > MAX_TILES * 4)
+    if (!JxrDecoderBitstreamSetInit(&bitstreams, pSC->m_param.bIndexTable,
+        pSC->WMISCP.bfBitstreamFormat, pSC->WMISCP.cNumOfSliceMinus1V,
+        pSC->WMISCP.cNumOfSliceMinus1H, pSC->WMISCP.sbSubband))
+    {
         return ICERR_ERROR;
-
+    }
+    pSC->cSB = (U8)bitstreams.subbandCount;
+    cNumBitIO = bitstreams.bitstreamCount;
     // allocate additional BitIos
     if(cNumBitIO > 0){
         U32 i = 0;
@@ -762,35 +756,32 @@ Int allocateBitIOInfo(CWMImageStrCodec* pSC)
 
 Int setBitIOPointers(CWMImageStrCodec* pSC)
 {
-    if(pSC->cNumBitIO > 0){
-        U32 i;
+    JxrDecoderBitstreamSet bitstreams;
+    U32 tileColumn;
 
-        for(i = 0; i <= pSC->WMISCP.cNumOfSliceMinus1V; i ++){
-            CCodingContext * pContext = &pSC->m_pCodingContext[i];
-            if(pSC->WMISCP.bfBitstreamFormat == SPATIAL){
-                pContext->m_pIODC = pContext->m_pIOLP = pContext->m_pIOAC = pContext->m_pIOFL = pSC->m_ppBitIO[i];
-            }
-            else{
-                U32 j = pSC->cSB;
+    if (!JxrDecoderBitstreamSetInit(&bitstreams, pSC->m_param.bIndexTable,
+        pSC->WMISCP.bfBitstreamFormat, pSC->WMISCP.cNumOfSliceMinus1V,
+        pSC->WMISCP.cNumOfSliceMinus1H, pSC->WMISCP.sbSubband) ||
+        bitstreams.bitstreamCount != pSC->cNumBitIO)
+    {
+        return ICERR_ERROR;
+    }
+    for (tileColumn = 0; tileColumn < bitstreams.tileColumnCount; ++tileColumn) {
+        CCodingContext* context = &pSC->m_pCodingContext[tileColumn];
+        JxrDecoderTileBitstreams tileBitstreams;
 
-                pContext->m_pIODC = pSC->m_ppBitIO[i * j];
-                if(j > 1)
-                    pContext->m_pIOLP = pSC->m_ppBitIO[i * j + 1];
-                if(j > 2)
-                    pContext->m_pIOAC = pSC->m_ppBitIO[i * j + 2];
-                if(j > 3)
-                    pContext->m_pIOFL = pSC->m_ppBitIO[i * j + 3];
-            }
+        if (!JxrDecoderBitstreamSetBindTile(&bitstreams, pSC->pIOHeader,
+            pSC->m_ppBitIO, tileColumn, &tileBitstreams))
+        {
+            return ICERR_ERROR;
         }
+        context->m_pIODC = tileBitstreams.dc;
+        context->m_pIOLP = tileBitstreams.lp;
+        context->m_pIOAC = tileBitstreams.hp;
+        context->m_pIOFL = tileBitstreams.flexbits;
     }
-    else{ // streamimg mode
-        CCodingContext * pContext = &pSC->m_pCodingContext[0];
-        pContext->m_pIODC = pContext->m_pIOLP = pContext->m_pIOAC = pContext->m_pIOFL = pSC->pIOHeader;
-    }
-
     return ICERR_OK;
 }
-
 Int allocateTileInfo(CWMImageStrCodec * pSC)
 {
     size_t i;
