@@ -30,6 +30,7 @@
 #include "decode.h"
 #include "JxrMacroblockRegionState.h"
 #include "JxrDecoderTileQuantizerSyntaxReader.h"
+#include "JxrInverseColorTransform.h"
 #include "strTransform.h"
 #include <math.h>
 #include "perfTimer.h"
@@ -373,16 +374,7 @@ Int processMacroblockDec(CWMImageStrCodec * pSC)
     return result;
 }
 
-//================================================================
-// Inverse Color Conversion 
-//#define _ICC1(r, g, b) (g^=b^=g^=b, r^=g^=r^=g, b += ((g) >> 1), r += ((g) >> 1), g -= (b+3*r+2) >> 2) 
-//#define _ICC(r, g, b) (g^=b^=g^=b, r^=g^=r^=g, b += ((g) >> 1), r += ((g) >> 1), g -= (b+3*r+2) >> 2) 
-//================================================================
-//#define _ICC1(r, g, b) r -= (g >> 1), g += r, r -= ((b + 1) >> 1), b += r
-//#define _ICC(r, g, b) r -= (g >> 1), g += r, r -= (b >> 1), b += r
-
-#define _ICC(r, g, b)  (g -= ((r + 0) >> 1), r -= ((b + 1) >> 1) - g, b += r)
-#define _ICC_CMYK(c, m, y, k) (k -= ((m + 1) >> 1), m -= (c >> 1) - k, c -= ((y + 1) >> 1) - m, y += c)
+// Inverse color conversion is implemented by JxrInverseColorTransform.
 
 #define _CLIP2(l, v, h) ((v) < (l) ? (l) : ((h) < (v) ? (h) : (v)))
 #define _CLIP8(v) ((U8)_CLIP2(0, v, 255))
@@ -986,7 +978,7 @@ Int outputMBRow(CWMImageStrCodec * pSC)
                             g = pY[iIdx] + iBias, r = -pU[iIdx], b = pV[iIdx];
                             a = pA[iIdx] + iBias;
 
-                            _ICC(r, g, b);
+                            JxrInverseColorTransformApplyRgb(&r, &g, &b);
                             
                             pDst = (U8 *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY;
                             if ((g | b | r | a) & ~0xff)
@@ -1003,7 +995,7 @@ Int outputMBRow(CWMImageStrCodec * pSC)
                             g = pY[iIdx] + iBias, r = -pU[iIdx], b = pV[iIdx];
                             a = pA[iIdx] + iBias;
 
-                            _ICC(r, g, b);
+                            JxrInverseColorTransformApplyRgb(&r, &g, &b);
 
                             g >>= iShift, b >>= iShift, r >>= iShift, a >>= iShift;
                             pDst = (U8 *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY;
@@ -1022,7 +1014,7 @@ Int outputMBRow(CWMImageStrCodec * pSC)
                             
                             g = pY[iIdx] + iBias, r = -pU[iIdx], b = pV[iIdx];
 
-                            _ICC(r, g, b);
+                            JxrInverseColorTransformApplyRgb(&r, &g, &b);
                             
                             pDst = (U8 *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY;
                             if ((g | b | r) & ~0xff)
@@ -1038,7 +1030,7 @@ Int outputMBRow(CWMImageStrCodec * pSC)
                             
                             g = pY[iIdx] + iBias, r = -pU[iIdx], b = pV[iIdx];
 
-                            _ICC(r, g, b);
+                            JxrInverseColorTransformApplyRgb(&r, &g, &b);
 
                             g >>= iShift, b >>= iShift, r >>= iShift;
                             pDst = (U8 *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY;
@@ -1120,7 +1112,7 @@ Int outputMBRow(CWMImageStrCodec * pSC)
 	
 						m = -pY[iIdx] + iBias1, c = pU[iIdx], y = -pV[iIdx], k = pK[iIdx] + iBias2;
 						
-						_ICC_CMYK(c, m, y, k); // color conversion
+						JxrInverseColorTransformApplyCmyk(&c, &m, &y, &k); // color conversion
 	
 						c >>= iShift, m >>= iShift, y >>= iShift, k >>= iShift;
 	
@@ -1144,7 +1136,7 @@ Int outputMBRow(CWMImageStrCodec * pSC)
 							
 							g = pY[iIdx] + iBias2, r = -pU[iIdx], b = pV[iIdx];
 	
-							_ICC(r, g, b);
+							JxrInverseColorTransformApplyRgb(&r, &g, &b);
 	
 							pDst = (U8 *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY;
 	
@@ -1174,7 +1166,7 @@ Int outputMBRow(CWMImageStrCodec * pSC)
 						
 						g = pY[iIdx] + iBias, r = -pU[iIdx], b = pV[iIdx];
 
-						_ICC(r, g, b);
+						JxrInverseColorTransformApplyRgb(&r, &g, &b);
 
 						g <<= nLen, b <<= nLen, r <<= nLen;
 						
@@ -1193,7 +1185,7 @@ Int outputMBRow(CWMImageStrCodec * pSC)
 						
 						g = pY[iIdx] + iBias, r = -pU[iIdx], b = pV[iIdx];
 
-						_ICC(r, g, b);
+						JxrInverseColorTransformApplyRgb(&r, &g, &b);
 
 						g = (g >> iShift) << nLen, b = (b >> iShift) << nLen, r = (r >> iShift) << nLen;
 						pDst = (U16 *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY;
@@ -1300,7 +1292,7 @@ Int outputMBRow(CWMImageStrCodec * pSC)
 	
 						m = -pY[iIdx] + iBias1, c = pU[iIdx], y = -pV[iIdx], k = pK[iIdx] + iBias2;
 						
-						_ICC_CMYK(c, m, y, k); // color conversion
+						JxrInverseColorTransformApplyCmyk(&c, &m, &y, &k); // color conversion
 	
 						c = (c >> iShift) << nLen, m = (m >> iShift) << nLen, y = (y >> iShift) << nLen, k = (k >> iShift) << nLen;
 	
@@ -1333,7 +1325,7 @@ Int outputMBRow(CWMImageStrCodec * pSC)
 
                     g = pY[iIdx] + iBias, r = -pU[iIdx], b = pV[iIdx];
                     
-                    _ICC(r, g, b);
+                    JxrInverseColorTransformApplyRgb(&r, &g, &b);
                     
                     r = (r >> iShift) << nLen, g = (g >> iShift) << nLen, b = (b >> iShift) << nLen;
                     
@@ -1360,7 +1352,7 @@ Int outputMBRow(CWMImageStrCodec * pSC)
 	
 						m = -pY[iIdx], c = pU[iIdx], y = -pV[iIdx], k = pK[iIdx] + iBias;
 						
-						_ICC_CMYK(c, m, y, k); // color conversion
+						JxrInverseColorTransformApplyCmyk(&c, &m, &y, &k); // color conversion
 	
 						c = (c >> iShift) << nLen, m = (m >> iShift) << nLen, y = (y >> iShift) << nLen, k = (k >> iShift) << nLen;
 	
@@ -1392,7 +1384,7 @@ Int outputMBRow(CWMImageStrCodec * pSC)
                     
                     g = pY[iIdx] + iBias, r = -pU[iIdx], b = pV[iIdx];
                     
-                    _ICC(r, g, b);
+                    JxrInverseColorTransformApplyRgb(&r, &g, &b);
                                         
                     pDst = (U16 *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY;
                     pDst[0] = backwardHalf(r >> iShift);
@@ -1430,7 +1422,7 @@ Int outputMBRow(CWMImageStrCodec * pSC)
 						
 						g = pY[iIdx] + iBias, r = -pU[iIdx], b = pV[iIdx];
 	
-						_ICC(r, g, b);
+						JxrInverseColorTransformApplyRgb(&r, &g, &b);
 						
 						pDst = (U32 *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY;
 						pDst[0] = ((r >> iShift) << nLen);
@@ -1469,7 +1461,7 @@ Int outputMBRow(CWMImageStrCodec * pSC)
                     
                     g = pY[iIdx] + iBias, r = -pU[iIdx], b = pV[iIdx];
                     
-                    _ICC(r, g, b);
+                    JxrInverseColorTransformApplyRgb(&r, &g, &b);
                                         
                     pDst = (int *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY;
                     pDst[0] = ((r >> iShift) << nLen);
@@ -1507,7 +1499,7 @@ Int outputMBRow(CWMImageStrCodec * pSC)
                     
                     g = pY[iIdx] + iBias, r = -pU[iIdx], b = pV[iIdx];
                     
-                    _ICC(r, g, b);
+                    JxrInverseColorTransformApplyRgb(&r, &g, &b);
                                         
                     pDst = (float *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY;
                     pDst[0] = pixel2float (r >> iShift, nExpBias, nLen);
@@ -1541,7 +1533,7 @@ Int outputMBRow(CWMImageStrCodec * pSC)
                 
                 g = pY[iIdx] + iBias, r = -pU[iIdx], b = pV[iIdx];
 
-                _ICC(r, g, b);
+                JxrInverseColorTransformApplyRgb(&r, &g, &b);
                 
                 g >>= iShift, b >>= iShift, r >>= iShift;
                 pDst = (U16 *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY;
@@ -1564,7 +1556,7 @@ Int outputMBRow(CWMImageStrCodec * pSC)
                 
                 g = pY[iIdx] + iBias, r = -pU[iIdx], b = pV[iIdx];
 
-                _ICC(r, g, b);
+                JxrInverseColorTransformApplyRgb(&r, &g, &b);
                 
                 g >>= iShift, b >>= iShift + 1, r >>= iShift + 1;
                 pDst = (U16 *)pSC->WMIBI.pv + pOffsetX[iColumn] + iY;
@@ -1587,7 +1579,7 @@ Int outputMBRow(CWMImageStrCodec * pSC)
                 
                 g = pY[iIdx] + iBias, r = -pU[iIdx], b = pV[iIdx];
 
-                _ICC(r, g, b);
+                JxrInverseColorTransformApplyRgb(&r, &g, &b);
                 
                 g >>= iShift, b >>= iShift, r >>= iShift;
 
@@ -1991,7 +1983,7 @@ Int decodeThumbnail(CWMImageStrCodec * pSC)
                         size_t iPos = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf];
                         PixelI g = ((pSrcY[iPos] + offset) * cMul) >> rShiftY, r = -(pSrcU[iPos] * cMul) >> rShiftUV, b = (pSrcV[iPos] * cMul) >> rShiftUV;
 
-                        _ICC(r, g, b);
+                        JxrInverseColorTransformApplyRgb(&r, &g, &b);
 
                         pDst = (U8 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY;
                         pDst[iB] = _CLIP8(b), pDst[1] = _CLIP8(g), pDst[iR] = _CLIP8(r);
@@ -2011,7 +2003,7 @@ Int decodeThumbnail(CWMImageStrCodec * pSC)
                     size_t iPos = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf];
                     PixelI g = ((pSrcY[iPos] * cMul) >> rShiftY), r = - ((pSrcU[iPos] * cMul) >> rShiftUV), b = ((pSrcV[iPos] * cMul) >> rShiftUV);
                     
-                    _ICC(r, g, b);
+                    JxrInverseColorTransformApplyRgb(&r, &g, &b);
                     
                     pDst = (U8 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY;
                     inverseConvertRGBE (r, g, b, pDst, pDst + 1, pDst + 2, pDst + 3);
@@ -2029,7 +2021,7 @@ Int decodeThumbnail(CWMImageStrCodec * pSC)
                     size_t iPos = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf];
                     PixelI m = ((-pSrcY[iPos] + iBias1) * cMul) >> rShiftY, c = (pSrcU[iPos] * cMul) >> rShiftUV, y = -(pSrcV[iPos] * cMul) >> rShiftUV, k = ((pSrcK[iPos] + iBias2) * cMul) >> rShiftUV;
                     
-                    _ICC_CMYK(c, m, y, k);
+                    JxrInverseColorTransformApplyCmyk(&c, &m, &y, &k);
                     
                     pDst = (U8 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY;
                     pDst[0] = _CLIP8(c), pDst[1] = _CLIP8(m), pDst[2] = _CLIP8(y), pDst[3] = _CLIP8(k);
@@ -2054,7 +2046,7 @@ Int decodeThumbnail(CWMImageStrCodec * pSC)
                         size_t iPos = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf];
                         PixelI g = ((pSrcY[iPos] + offset) * cMul) >> rShiftY, r = -(pSrcU[iPos] * cMul) >> rShiftUV, b = (pSrcV[iPos] * cMul) >> rShiftUV;
 
-                        _ICC(r, g, b);
+                        JxrInverseColorTransformApplyRgb(&r, &g, &b);
                                                 
                         pDst = (U16 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY;
                         r <<= nLen, g <<= nLen, b <<= nLen;
@@ -2081,7 +2073,7 @@ Int decodeThumbnail(CWMImageStrCodec * pSC)
                     size_t iPos = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf];
                     PixelI m = ((-pSrcY[iPos] + iBias1) * cMul) >> rShiftY, c = (pSrcU[iPos] * cMul) >> rShiftUV, y = -(pSrcV[iPos] * cMul) >> rShiftUV, k = ((pSrcK[iPos] + iBias2) * cMul) >> rShiftUV;
                     
-                    _ICC_CMYK(c, m, y, k);
+                    JxrInverseColorTransformApplyCmyk(&c, &m, &y, &k);
                     
                     pDst = (U16 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY;
                     c <<= nLen, m <<= nLen, y <<= nLen, k <<= nLen;
@@ -2108,7 +2100,7 @@ Int decodeThumbnail(CWMImageStrCodec * pSC)
                         size_t iPos = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf];
                         PixelI g = (pSrcY[iPos] * cMul) >> rShiftY, r = -(pSrcU[iPos] * cMul) >> rShiftUV, b = (pSrcV[iPos] * cMul) >> rShiftUV;
 
-                        _ICC(r, g, b);
+                        JxrInverseColorTransformApplyRgb(&r, &g, &b);
                                                 
                         pDst = (I16 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY;
                         r <<= nLen, g <<= nLen, b <<= nLen;
@@ -2134,7 +2126,7 @@ Int decodeThumbnail(CWMImageStrCodec * pSC)
 						size_t iPos = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf];
 						PixelI m = -(pSrcY[iPos] * cMul) >> rShiftY, c = (pSrcU[iPos] * cMul) >> rShiftUV, y = -(pSrcV[iPos] * cMul) >> rShiftUV, k = (pSrcK[iPos] * cMul) >> rShiftUV;
 						
-						_ICC_CMYK(c, m, y, k);
+						JxrInverseColorTransformApplyCmyk(&c, &m, &y, &k);
 	
 						pDst = (I16 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY;
 						c <<= nLen, m <<= nLen, y <<= nLen, k <<= nLen;
@@ -2162,7 +2154,7 @@ Int decodeThumbnail(CWMImageStrCodec * pSC)
                         size_t iPos = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf];
                         PixelI g = (pSrcY[iPos] * cMul) >> rShiftY, r = -(pSrcU[iPos] * cMul) >> rShiftUV, b = (pSrcV[iPos] * cMul) >> rShiftUV;
 
-                        _ICC(r, g, b);
+                        JxrInverseColorTransformApplyRgb(&r, &g, &b);
                         
                         pDst = (U16 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY;
                         pDst[0] = backwardHalf (r);
@@ -2195,7 +2187,7 @@ Int decodeThumbnail(CWMImageStrCodec * pSC)
                         size_t iPos = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf];
                         PixelI g = ((pSrcY[iPos] + offset) * cMul) >> rShiftY, r = -(pSrcU[iPos] * cMul) >> rShiftUV, b = (pSrcV[iPos] * cMul) >> rShiftUV;
 
-                        _ICC(r, g, b);
+                        JxrInverseColorTransformApplyRgb(&r, &g, &b);
                         
                         pDst = (U32 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY;
 
@@ -2227,7 +2219,7 @@ Int decodeThumbnail(CWMImageStrCodec * pSC)
                         size_t iPos = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf];
                         PixelI g = (pSrcY[iPos] * cMul) >> rShiftY, r = -(pSrcU[iPos] * cMul) >> rShiftUV, b = (pSrcV[iPos] * cMul) >> rShiftUV;
 
-                        _ICC(r, g, b);
+                        JxrInverseColorTransformApplyRgb(&r, &g, &b);
                         
                         pDst = (I32 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY;
                         pDst[0] = (I32)(r << nLen);
@@ -2259,7 +2251,7 @@ Int decodeThumbnail(CWMImageStrCodec * pSC)
                         size_t iPos = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf];
                         PixelI g = (pSrcY[iPos] * cMul) >> rShiftY, r = -(pSrcU[iPos] * cMul) >> rShiftUV, b = (pSrcV[iPos] * cMul) >> rShiftUV;
 
-                        _ICC(r, g, b);
+                        JxrInverseColorTransformApplyRgb(&r, &g, &b);
                         
                         pDst = (float *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY;
                         pDst[0] = pixel2float (r, nExpBias, nLen);
@@ -2315,7 +2307,7 @@ Int decodeThumbnail(CWMImageStrCodec * pSC)
                 size_t iPos = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf];
                 PixelI g = ((pSrcY[iPos] + offset) * cMul) >> rShiftY, r = -(pSrcU[iPos] * cMul) >> rShiftUV, b = (pSrcV[iPos] * cMul) >> rShiftUV;
 
-                _ICC(r, g, b);
+                JxrInverseColorTransformApplyRgb(&r, &g, &b);
                 pDst = (U16 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY;
                 pDst[0] = (U16)_CLIP2(0, r, 31) + (((U16)_CLIP2(0, g, 31)) << 5) + (((U16)_CLIP2(0, b, 31)) << 10);
             }
@@ -2331,7 +2323,7 @@ Int decodeThumbnail(CWMImageStrCodec * pSC)
                 size_t iPos = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf];
                 PixelI g = ((pSrcY[iPos] + offset) * cMul) >> rShiftY, r = -(pSrcU[iPos] * cMul) >> rShiftUV, b = (pSrcV[iPos] * cMul) >> rShiftUV;
 
-                _ICC(r, g, b);
+                JxrInverseColorTransformApplyRgb(&r, &g, &b);
                 r /= 2, b /= 2;
                 pDst = (U16 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY;
                 pDst[0] = (U16)_CLIP2(0, r, 31) + (((U16)_CLIP2(0, g, 63)) << 5) + (((U16)_CLIP2(0, b, 31)) << 11);
@@ -2348,7 +2340,7 @@ Int decodeThumbnail(CWMImageStrCodec * pSC)
                 size_t iPos = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf];
                 PixelI g = ((pSrcY[iPos] + offset) * cMul) >> rShiftY, r = -(pSrcU[iPos] * cMul) >> rShiftUV, b = (pSrcV[iPos] * cMul) >> rShiftUV;
 
-                _ICC(r, g, b);
+                JxrInverseColorTransformApplyRgb(&r, &g, &b);
                 pDst = (U32 *)pSC->WMIBI.pv + pOffsetX[iColumn >> nBits] + iY;
                 pDst[0] = (U32)_CLIP2(0, r, 1023) + 
                     (((U32)_CLIP2(0, g, 1023)) << 10) + 

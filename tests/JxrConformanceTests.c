@@ -36,6 +36,7 @@
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
 #include "JxrDecoderTileQuantizerSyntaxReader.h"
+#include "JxrInverseColorTransform.h"
 #include "JxrEntropyReader.h"
 #include "JxrLegacyBitReaderAdapter.h"
 #ifdef _WIN32
@@ -624,6 +625,32 @@ static int test_decoder_tile_quantizer_syntax_vectors(void)
         lp.values[0].indices[1] != 50 ||
         !JxrDecoderTileQuantizerSyntaxReadHighpass(&source, 3, lp.count, &hp)) return 0;
     return hp.copyPrevious && hp.count == 1 && !JxrDecoderTileQuantizerSyntaxReadDc(&source, 0, &dc);
+}
+
+static int test_inverse_color_transform_vectors(void)
+{
+    PixelI red, green, blue;
+    PixelI cyan, magenta, yellow, black;
+
+    red = 0; green = 0; blue = 0;
+    JxrInverseColorTransformApplyRgb(&red, &green, &blue);
+    if (red != 0 || green != 0 || blue != 0) return 0;
+    red = 10; green = 20; blue = 30;
+    JxrInverseColorTransformApplyRgb(&red, &green, &blue);
+    if (red != 10 || green != 15 || blue != 40) return 0;
+    red = -5; green = 7; blue = -8;
+    JxrInverseColorTransformApplyRgb(&red, &green, &blue);
+    if (red != 9 || green != 10 || blue != 1) return 0;
+    red = 1; green = -2; blue = 2;
+    JxrInverseColorTransformApplyRgb(&red, &green, &blue);
+    if (red != -2 || green != -2 || blue != 0) return 0;
+
+    cyan = 10; magenta = 20; yellow = 30; black = 40;
+    JxrInverseColorTransformApplyCmyk(&cyan, &magenta, &yellow, &black);
+    if (cyan != 40 || magenta != 45 || yellow != 70 || black != 30) return 0;
+    cyan = -5; magenta = 7; yellow = -8; black = 2;
+    JxrInverseColorTransformApplyCmyk(&cyan, &magenta, &yellow, &black);
+    return cyan == 7 && magenta == 8 && yellow == -1 && black == -2;
 }
 
 static int test_bit_input_buffer_state_vectors(void)
@@ -1434,6 +1461,7 @@ int main(int argc, char** argv)
         { "transcode_tile_extraction_decision_vectors", test_transcode_tile_extraction_decision_vectors },
         { "transcode_roi_geometry_vectors", test_transcode_roi_geometry_vectors },
         { "decoder_tile_quantizer_syntax_vectors", test_decoder_tile_quantizer_syntax_vectors },
+        { "inverse_color_transform_vectors", test_inverse_color_transform_vectors },
         { "bit_input_buffer_state_vectors", test_bit_input_buffer_state_vectors },
         { "packet_source_vectors", test_packet_source_vectors },
         { "packet_executor_vectors", test_packet_executor_vectors },
