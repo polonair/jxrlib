@@ -175,6 +175,7 @@
     <ClCompile Include="..\decode\JXRTranscode.c" />
     <ClCompile Include="..\decode\JxrTranscodeTileQuantizerState.c" />
     <ClCompile Include="..\decode\JxrTranscodeQuantizerWriter.c" />
+    <ClCompile Include="..\decode\JxrTranscodeTileHeaderWriter.c" />
     <ClCompile Include="..\decode\JxrEntropyReader.c" />
     <ClCompile Include="..\decode\JxrLegacyBitReaderAdapter.c" />
     <ClCompile Include="..\decode\JxrLegacyBitIoBridge.c" />

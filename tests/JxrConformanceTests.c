@@ -30,6 +30,7 @@
 #include "JxrMacroblockRegionState.h"
 #include "JxrTranscodeTileQuantizerState.h"
 #include "JxrTranscodeQuantizerWriter.h"
+#include "JxrTranscodeTileHeaderWriter.h"
 #include "JxrEntropyReader.h"
 #include "JxrLegacyBitReaderAdapter.h"
 #ifdef _WIN32
@@ -330,6 +331,68 @@ static int test_transcode_quantizer_writer_vectors(void)
     return JxrTranscodeQuantizerWriterWriteAlphaQuantizers(&sink, indices, 2, 3, FALSE) &&
         JxrBitWriterFlush(&writer) && JxrBitWriterBytes(&writer) == 3 &&
         data[0] == 0x0d && data[1] == 0x55 && data[2] == 0xd8;
+}
+
+static int test_transcode_tile_header_writer_vectors(void)
+{
+    U8 dcBytes[32] = {0}, lpBytes[32] = {0}, hpBytes[32] = {0}, flexBytes[32] = {0};
+    JxrBitWriter dcWriter, lpWriter, hpWriter, flexWriter;
+    JxrTranscodeBitSink dcSink, lpSink, hpSink, flexSink;
+    JxrTranscodeTileQuantizerState quantizers;
+    JxrTranscodeTileHeaderState state;
+    JxrTranscodeTileHeaderResult result;
+
+    JxrTranscodeTileQuantizerStateInit(&quantizers);
+    quantizers.dcMode = 0;
+    quantizers.dcIndex[0] = 0x11;
+    quantizers.lowpassQuantizerCount = 1;
+    quantizers.lowpassMode[0] = 0;
+    quantizers.lowpassIndex[0][0] = 0x22;
+    quantizers.highpassQuantizerCount = 1;
+    quantizers.highpassMode[0] = 0;
+    quantizers.highpassIndex[0][0] = 0x33;
+    JxrBitWriterInit(&dcWriter, dcBytes, sizeof(dcBytes));
+    JxrBitWriterInit(&lpWriter, lpBytes, sizeof(lpBytes));
+    JxrBitWriterInit(&hpWriter, hpBytes, sizeof(hpBytes));
+    JxrBitWriterInit(&flexWriter, flexBytes, sizeof(flexBytes));
+    JxrTranscodeBitSinkInit(&dcSink, &dcWriter, write_transcode_test_bits);
+    JxrTranscodeBitSinkInit(&lpSink, &lpWriter, write_transcode_test_bits);
+    JxrTranscodeBitSinkInit(&hpSink, &hpWriter, write_transcode_test_bits);
+    JxrTranscodeBitSinkInit(&flexSink, &flexWriter, write_transcode_test_bits);
+    memset(&state, 0, sizeof(state));
+    state.isSpatial = FALSE;
+    state.subband = SB_ALL;
+    state.quantizerMode = 7;
+    state.trimFlexbits = TRUE;
+    state.trimFlexbitsValue = 9;
+    state.tileId = 2;
+    state.channelCount = 1;
+    state.quantizers = &quantizers;
+    state.dcOutput = &dcSink;
+    state.lowpassOutput = &lpSink;
+    state.highpassOutput = &hpSink;
+    state.flexbitsOutput = &flexSink;
+    if (!JxrTranscodeTileHeaderWriterWrite(&state, &result) ||
+        !JxrBitWriterFlush(&dcWriter) || !JxrBitWriterFlush(&lpWriter) ||
+        !JxrBitWriterFlush(&hpWriter) || !JxrBitWriterFlush(&flexWriter) ||
+        dcBytes[0] != 0 || dcBytes[1] != 0 || dcBytes[2] != 1 || dcBytes[3] != 0x11 ||
+        lpBytes[0] != 0 || lpBytes[1] != 0 || lpBytes[2] != 1 || lpBytes[3] != 0x12 ||
+        hpBytes[0] != 0 || hpBytes[1] != 0 || hpBytes[2] != 1 || hpBytes[3] != 0x13 ||
+        flexBytes[0] != 0 || flexBytes[1] != 0 || flexBytes[2] != 1 || flexBytes[3] != 0x14 ||
+        result.lowpassQuantizerBits != 0 || result.highpassQuantizerBits != 0) return 0;
+
+    memset(dcBytes, 0, sizeof(dcBytes));
+    JxrBitWriterInit(&dcWriter, dcBytes, sizeof(dcBytes));
+    JxrTranscodeBitSinkInit(&dcSink, &dcWriter, write_transcode_test_bits);
+    state.isSpatial = TRUE;
+    state.subband = SB_DC_ONLY;
+    state.quantizerMode = 1;
+    state.trimFlexbits = TRUE;
+    state.dcOutput = &dcSink;
+    return JxrTranscodeTileHeaderWriterWrite(&state, &result) &&
+        JxrBitWriterFlush(&dcWriter) && dcBytes[0] == 0 && dcBytes[1] == 0 &&
+        dcBytes[2] == 1 && dcBytes[3] == 0x10 && dcBytes[4] == 0x91 &&
+        JxrBitWriterBytes(&dcWriter) == 6;
 }
 
 static int test_bit_input_buffer_state_vectors(void)
@@ -1132,6 +1195,7 @@ int main(int argc, char** argv)
         { "macroblock_region_state_vectors", test_macroblock_region_state_vectors },
         { "transcode_tile_quantizer_state_vectors", test_transcode_tile_quantizer_state_vectors },
         { "transcode_quantizer_writer_vectors", test_transcode_quantizer_writer_vectors },
+        { "transcode_tile_header_writer_vectors", test_transcode_tile_header_writer_vectors },
         { "bit_input_buffer_state_vectors", test_bit_input_buffer_state_vectors },
         { "packet_source_vectors", test_packet_source_vectors },
         { "packet_executor_vectors", test_packet_executor_vectors },

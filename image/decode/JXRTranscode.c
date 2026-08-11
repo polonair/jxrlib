@@ -31,6 +31,7 @@
 #include "decode.h"
 #include "JxrTranscodeTileQuantizerState.h"
 #include "JxrTranscodeQuantizerWriter.h"
+#include "JxrTranscodeTileHeaderWriter.h"
 
 EXTERN_C Void freePredInfo(CWMImageStrCodec *);
 
@@ -51,7 +52,6 @@ EXTERN_C Void StrIOEncTerm(CWMImageStrCodec *);
 EXTERN_C Void FreeCodingContextEnc(CWMImageStrCodec *);
 EXTERN_C Int  encodeMB(CWMImageStrCodec *, Int, Int);
 EXTERN_C Int  writeIndexTableNull(CWMImageStrCodec *);
-EXTERN_C Void writePacketHeader(BitIOInfo *, U8, U8);
 
 EXTERN_C Int WriteWMIHeader(CWMImageStrCodec *);
 EXTERN_C Int ReadImagePlaneHeader(CWMImageInfo *, CWMIStrCodecParam *, CCoreParameters *, SimpleBitIO *);
@@ -64,73 +64,45 @@ const static Bool bFlipH[O_MAX] = {FALSE, FALSE, TRUE , TRUE, FALSE, TRUE, FALSE
 
 Void transcodeTileHeader(CWMImageStrCodec * pSC, JxrTranscodeTileQuantizerState * pTileQPInfo)
 {
-    if(pSC->m_bCtxLeft && pSC->m_bCtxTop && pSC->m_bSecondary == FALSE){ // write packet headers
+    if(pSC->m_bCtxLeft && pSC->m_bCtxTop && pSC->m_bSecondary == FALSE){
         CCodingContext * pContext = &pSC->m_pCodingContext[pSC->cTileColumn];
-        JxrTranscodeBitSink dcOutput, lowpassOutput, highpassOutput;
         CWMITile * pTile = pSC->pTile + pSC->cTileColumn;
-        U8 pID = (U8)((pSC->cTileRow * (pSC->WMISCP.cNumOfSliceMinus1V + 1) + pSC->cTileColumn) & 0x1F);
         CWMImageStrCodec * pSCAlpha = (pSC->m_param.bAlphaChannel ? pSC->m_pNextSC : NULL);
-        const size_t iAlphaPos = pSC->m_param.cNumChannels;
+        JxrTranscodeBitSink dcOutput, lowpassOutput, highpassOutput, flexbitsOutput;
+        JxrTranscodeTileHeaderState state = {0};
+        JxrTranscodeTileHeaderResult result;
 
         JxrTranscodeBitSinkInitLegacy(&dcOutput, pContext->m_pIODC);
         JxrTranscodeBitSinkInitLegacy(&lowpassOutput, pContext->m_pIOLP);
         JxrTranscodeBitSinkInitLegacy(&highpassOutput, pContext->m_pIOAC);
-        writePacketHeader(pContext->m_pIODC, pSC->WMISCP.bfBitstreamFormat == SPATIAL ? 0 : 1, pID);
-        if (pSC->m_param.bTrimFlexbitsFlag && pSC->WMISCP.bfBitstreamFormat == SPATIAL)
-            putBit16(pContext->m_pIODC, pContext->m_iTrimFlexBits, 4);
-        
-        if((pSC->m_param.uQPMode & 1) != 0) // not DC uniform
-            JxrTranscodeQuantizerWriterWriteQuantizer(&dcOutput, pTileQPInfo->dcIndex, pTileQPInfo->dcMode, pSC->WMISCP.cChannel);
-        if(pSCAlpha != NULL && (pSCAlpha->m_param.uQPMode & 1) != 0) // not DC uniform
-            JxrTranscodeBitSinkWriteBits(&dcOutput, pTileQPInfo->dcIndex[iAlphaPos], 8);
+        JxrTranscodeBitSinkInitLegacy(&flexbitsOutput, pContext->m_pIOFL);
+        state.isSpatial = pSC->WMISCP.bfBitstreamFormat == SPATIAL;
+        state.subband = pSC->WMISCP.sbSubband;
+        state.quantizerMode = pSC->m_param.uQPMode;
+        state.hasAlpha = pSCAlpha != NULL;
+        state.trimFlexbits = pSC->m_param.bTrimFlexbitsFlag;
+        state.trimFlexbitsValue = (U8)pContext->m_iTrimFlexBits;
+        state.tileId = (U8)((pSC->cTileRow * (pSC->WMISCP.cNumOfSliceMinus1V + 1) +
+            pSC->cTileColumn) & 0x1F);
+        state.channelCount = pSC->WMISCP.cChannel;
+        state.alphaChannelIndex = pSC->m_param.cNumChannels;
+        state.quantizers = pTileQPInfo;
+        state.dcOutput = &dcOutput;
+        state.lowpassOutput = &lowpassOutput;
+        state.highpassOutput = &highpassOutput;
+        state.flexbitsOutput = &flexbitsOutput;
+        if(JxrTranscodeTileHeaderWriterWrite(&state, &result) == FALSE)
+            return;
 
-        if(pSC->WMISCP.bfBitstreamFormat == SPATIAL) {
-            if(pSC->WMISCP.sbSubband != SB_DC_ONLY){
-                if((pSC->m_param.uQPMode & 2) != 0) // not LP uniform
-                    JxrTranscodeQuantizerWriterWriteQuantizers(&dcOutput, pTileQPInfo->lowpassIndex, pTileQPInfo->lowpassMode, pTileQPInfo->lowpassQuantizerCount, pSC->WMISCP.cChannel, pTileQPInfo->useDcForLowpass);
-                if(pSCAlpha != NULL && (pSCAlpha->m_param.uQPMode & 2) != 0) // not LP uniform
-                    JxrTranscodeQuantizerWriterWriteAlphaQuantizers(&dcOutput, pTileQPInfo->lowpassIndex, pTileQPInfo->lowpassQuantizerCountAlpha, iAlphaPos, pTileQPInfo->useDcForLowpassAlpha);
-                if(pSC->WMISCP.sbSubband != SB_NO_HIGHPASS){
-                    if((pSC->m_param.uQPMode & 4) != 0) // not HP uniform
-                        JxrTranscodeQuantizerWriterWriteQuantizers(&dcOutput, pTileQPInfo->highpassIndex, pTileQPInfo->highpassMode, pTileQPInfo->highpassQuantizerCount, pSC->WMISCP.cChannel, pTileQPInfo->useLowpassForHighpass);
-                    if(pSCAlpha != NULL && (pSCAlpha->m_param.uQPMode & 4) != 0) // not HP uniform
-                        JxrTranscodeQuantizerWriterWriteAlphaQuantizers(&dcOutput, pTileQPInfo->highpassIndex, pTileQPInfo->highpassQuantizerCountAlpha, iAlphaPos, pTileQPInfo->useLowpassForHighpassAlpha);
-                }
-            }
-        }
-        else{
-            if(pSC->WMISCP.sbSubband != SB_DC_ONLY){
-                writePacketHeader(pContext->m_pIOLP, 2, pID);
-                if((pSC->m_param.uQPMode & 2) != 0) // not LP uniform
-                    JxrTranscodeQuantizerWriterWriteQuantizers(&lowpassOutput, pTileQPInfo->lowpassIndex, pTileQPInfo->lowpassMode, pTileQPInfo->lowpassQuantizerCount, pSC->WMISCP.cChannel, pTileQPInfo->useDcForLowpass);
-                if(pSCAlpha != NULL && (pSCAlpha->m_param.uQPMode & 2) != 0) // not LP uniform
-                    JxrTranscodeQuantizerWriterWriteAlphaQuantizers(&lowpassOutput, pTileQPInfo->lowpassIndex, pTileQPInfo->lowpassQuantizerCountAlpha, iAlphaPos, pTileQPInfo->useDcForLowpassAlpha);
-
-                if(pSC->WMISCP.sbSubband != SB_NO_HIGHPASS){
-                    writePacketHeader(pContext->m_pIOAC, 3, pID);
-                    if((pSC->m_param.uQPMode & 4) != 0) // not HP uniform
-                        JxrTranscodeQuantizerWriterWriteQuantizers(&highpassOutput, pTileQPInfo->highpassIndex, pTileQPInfo->highpassMode, pTileQPInfo->highpassQuantizerCount, pSC->WMISCP.cChannel, pTileQPInfo->useLowpassForHighpass);
-                    if(pSCAlpha != NULL && (pSCAlpha->m_param.uQPMode & 4) != 0) // not HP uniform
-                        JxrTranscodeQuantizerWriterWriteAlphaQuantizers(&highpassOutput, pTileQPInfo->highpassIndex, pTileQPInfo->highpassQuantizerCountAlpha, iAlphaPos, pTileQPInfo->useLowpassForHighpassAlpha);
-
-                    if(pSC->WMISCP.sbSubband != SB_NO_FLEXBITS){
-                        writePacketHeader(pContext->m_pIOFL, 4, pID);
-                        if (pSC->m_param.bTrimFlexbitsFlag)
-                            putBit16(pContext->m_pIOFL, pContext->m_iTrimFlexBits, 4);
-                    }
-                }
-            }
-        }
-        pTile->cBitsLP = (pTileQPInfo->useDcForLowpass ? 0 : dquantBits(pTileQPInfo->lowpassQuantizerCount));
-        pTile->cBitsHP = (pTileQPInfo->useLowpassForHighpass ? 0 : dquantBits(pTileQPInfo->highpassQuantizerCount));
+        pTile->cBitsLP = result.lowpassQuantizerBits;
+        pTile->cBitsHP = result.highpassQuantizerBits;
         if(pSCAlpha != NULL){
             pTile = pSCAlpha->pTile + pSC->cTileColumn;
-            pTile->cBitsLP = (pTileQPInfo->useDcForLowpassAlpha ? 0 : dquantBits(pTileQPInfo->lowpassQuantizerCountAlpha));
-            pTile->cBitsHP = (pTileQPInfo->useLowpassForHighpassAlpha ? 0 : dquantBits(pTileQPInfo->highpassQuantizerCountAlpha));
+            pTile->cBitsLP = result.lowpassAlphaQuantizerBits;
+            pTile->cBitsHP = result.highpassAlphaQuantizerBits;
         }
     }
 }
-
 Void transformDCBlock(PixelI * pOrg, PixelI * pDst, ORIENTATION oOrientation)
 {
     size_t i;
