@@ -34,6 +34,7 @@
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
 #include "JxrMonochromeExpansion.h"
+#include "JxrDecoderRoiRowRange.h"
 #include "strTransform.h"
 #include <math.h>
 #include "perfTimer.h"
@@ -373,7 +374,6 @@ Int processMacroblockDec(CWMImageStrCodec * pSC)
 
 // Inverse color conversion is implemented by JxrInverseColorTransform.
 
-#define min(a,b) (((a) < (b)) ? (a) : (b))
 
 Void interpolateUV(CWMImageStrCodec * pSC)
 {
@@ -648,7 +648,7 @@ Int outputMBRowAlpha(CWMImageStrCodec * pSC)
     if(pSC->m_bSecondary == FALSE && pSC->m_pNextSC != NULL){ // with alpha channel
         const BITDEPTH_BITS bd = pSC->WMII.bdBitDepth;
         const PixelI iShift = (pSC->m_param.bScaledArith ? SHIFTZERO + QPFRACBITS : 0);
-        const size_t cHeight = min((pSC->m_Dparam->cROIBottomY + 1) - (pSC->cRow - 1) * 16, 16);
+        const size_t cHeight = JxrDecoderRoiRowRangeGetOutputHeight(pSC->m_Dparam->cROIBottomY + 1, pSC->cRow);
         const size_t cWidth = (pSC->m_Dparam->cROIRightX + 1);
         const size_t iFirstRow = ((pSC->cRow - 1) * 16 > pSC->m_Dparam->cROITopY ? 0 : (pSC->m_Dparam->cROITopY & 0xf)), iFirstColumn = pSC->m_Dparam->cROILeftX;
         const size_t iAlphaPos = pSC->WMII.cLeadingPadding + (pSC->WMII.cfColorFormat == CMYK ? 4 : 3);//only RGB and CMYK may have interleaved alpha
@@ -727,7 +727,7 @@ Int outputMBRow(CWMImageStrCodec * pSC)
     const COLORFORMAT cfExt = (pSC->m_param.cfColorFormat == Y_ONLY ? Y_ONLY : pSC->WMII.cfColorFormat);
     const BITDEPTH_BITS bd = pSC->WMII.bdBitDepth;
     const PixelI iShift = (pSC->m_param.bScaledArith ? SHIFTZERO + QPFRACBITS : 0);
-    const size_t cHeight = min((pSC->m_Dparam->cROIBottomY + 1) - (pSC->cRow - 1) * 16, 16);
+    const size_t cHeight = JxrDecoderRoiRowRangeGetOutputHeight(pSC->m_Dparam->cROIBottomY + 1, pSC->cRow);
     const size_t cWidth = (pSC->m_Dparam->cROIRightX + 1);
     const size_t iFirstRow = ((pSC->cRow - 1) * 16 > pSC->m_Dparam->cROITopY ? 0 : (pSC->m_Dparam->cROITopY & 0xf)), iFirstColumn = pSC->m_Dparam->cROILeftX;
     const PixelI *pY = pSC->a0MBbuffer[0];
@@ -1555,7 +1555,7 @@ Void outputNChannelThumbnail(CWMImageStrCodec * pSC, const PixelI cMul, const si
 {
     const size_t tScale = pSC->m_Dparam->cThumbnailScale;
     const size_t cWidth = (pSC->m_Dparam->cROIRightX + 1);
-    const size_t cHeight = min((pSC->m_Dparam->cROIBottomY + 1) - (pSC->cRow - 1) * 16, 16);
+    const size_t cHeight = JxrDecoderRoiRowRangeGetOutputHeight(pSC->m_Dparam->cROIBottomY + 1, pSC->cRow);
     const size_t cChannel = pSC->WMISCP.cChannel;
     const U8 nLen = pSC->WMISCP.nLenMantissaOrShift;
     const I8 nExpBias = pSC->WMISCP.nExpBias;
@@ -1683,7 +1683,7 @@ Int decodeThumbnailAlpha(CWMImageStrCodec * pSC, const size_t nBits, const Pixel
 {
     if(pSC->m_bSecondary == FALSE && pSC->m_pNextSC != NULL){ // with alpha channel
         const size_t tScale = (size_t)(1U << nBits);
-        const size_t cHeight = min((pSC->m_Dparam->cROIBottomY + 1) - (pSC->cRow - 1) * 16, 16);
+        const size_t cHeight = JxrDecoderRoiRowRangeGetOutputHeight(pSC->m_Dparam->cROIBottomY + 1, pSC->cRow);
         const size_t cWidth = (pSC->m_Dparam->cROIRightX + 1);
         const size_t iFirstRow = ((((pSC->cRow - 1) * 16 > pSC->m_Dparam->cROITopY ? 0 : (pSC->m_Dparam->cROITopY & 0xf)) + tScale - 1) / tScale * tScale);
         const size_t iFirstColumn = (pSC->m_Dparam->cROILeftX + tScale - 1) / tScale * tScale;
@@ -1760,7 +1760,7 @@ Int decodeThumbnailAlpha(CWMImageStrCodec * pSC, const size_t nBits, const Pixel
 Int decodeThumbnail(CWMImageStrCodec * pSC)
 {
     const size_t tScale = pSC->m_Dparam->cThumbnailScale;
-    const size_t cHeight = min((pSC->m_Dparam->bDecodeFullFrame ? pSC->WMII.cHeight : pSC->m_Dparam->cROIBottomY + 1) - (pSC->cRow - 1) * 16, 16);
+    const size_t cHeight = JxrDecoderRoiRowRangeGetOutputHeight(pSC->m_Dparam->bDecodeFullFrame ? pSC->WMII.cHeight : pSC->m_Dparam->cROIBottomY + 1, pSC->cRow);
     const size_t cWidth = (pSC->m_Dparam->bDecodeFullFrame ? pSC->WMII.cWidth : pSC->m_Dparam->cROIRightX + 1);
     const size_t iFirstRow = ((((pSC->cRow - 1) * 16 > pSC->m_Dparam->cROITopY ? 0 : (pSC->m_Dparam->cROITopY & 0xf)) + tScale - 1) / tScale * tScale);
     const size_t iFirstColumn = (pSC->m_Dparam->cROILeftX + tScale - 1) / tScale * tScale;

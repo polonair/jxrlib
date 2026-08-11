@@ -40,6 +40,7 @@
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
 #include "JxrMonochromeExpansion.h"
+#include "JxrDecoderRoiRowRange.h"
 #include "JxrEntropyReader.h"
 #include "JxrLegacyBitReaderAdapter.h"
 #ifdef _WIN32
@@ -765,6 +766,16 @@ static int test_monochrome_expansion_thumbnail_vectors(void)
         words16[26] == 200 && words16[27] == 200 && words16[28] == 200 && words16[29] == 401 &&
         words32[20] == 1000 && words32[21] == 1000 && words32[22] == 1000 && words32[23] == 4000 &&
         words32[26] == 7000 && words32[27] == 7000 && words32[28] == 7000 && words32[29] == 4001;
+}
+
+static int test_decoder_roi_row_range_vectors(void)
+{
+    return JxrDecoderRoiRowRangeGetOutputHeight(1, 1) == 1 &&
+        JxrDecoderRoiRowRangeGetOutputHeight(16, 1) == 16 &&
+        JxrDecoderRoiRowRangeGetOutputHeight(17, 1) == 16 &&
+        JxrDecoderRoiRowRangeGetOutputHeight(17, 2) == 1 &&
+        JxrDecoderRoiRowRangeGetOutputHeight(31, 2) == 15 &&
+        JxrDecoderRoiRowRangeGetOutputHeight(32, 2) == 16;
 }
 
 static int test_bit_input_buffer_state_vectors(void)
@@ -1581,6 +1592,7 @@ int main(int argc, char** argv)
         { "monochrome_expansion_vectors", test_monochrome_expansion_vectors },
         { "monochrome_expansion_offset_vectors", test_monochrome_expansion_offset_vectors },
         { "monochrome_expansion_thumbnail_vectors", test_monochrome_expansion_thumbnail_vectors },
+        { "decoder_roi_row_range_vectors", test_decoder_roi_row_range_vectors },
         { "bit_input_buffer_state_vectors", test_bit_input_buffer_state_vectors },
         { "packet_source_vectors", test_packet_source_vectors },
         { "packet_executor_vectors", test_packet_executor_vectors },
