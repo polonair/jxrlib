@@ -32,6 +32,7 @@
 #include "JxrDecoderTileQuantizerSyntaxReader.h"
 #include "JxrImagePlaneQuantizerHeaderReader.h"
 #include "JxrImagePlaneDescriptorReader.h"
+#include "JxrMainHeaderReader.h"
 #include "JxrDecoderDcQuantizerHeaderApplier.h"
 #include "JxrDecoderLpQuantizerHeaderApplier.h"
 #include "JxrDecoderHpQuantizerHeaderApplier.h"
@@ -2720,9 +2721,7 @@ Int ReadWMIHeader(
     CWMIStrCodecParam *pSCP,
     CCoreParameters *pSC)
 {
-    U32 i;
     ERR err = WMP_errSuccess;
-    Bool bTilingPresent, bInscribed, bTileStretch, bAbbreviatedHeader;
     struct WMPStream* pWS = pSCP->pWStream;
 
     SimpleBitIO SB = {0};
@@ -2743,97 +2742,36 @@ Int ReadWMIHeader(
     //================================
     Call(attach_SB(pSB, pWS));
 
-// 8
-    /** codec version and subversion **/
-    i = getBit32_SB(pSB, 4);
-    FailIf((i != CODEC_VERSION), WMP_errIncorrectCodecVersion);
-    pSC->cVersion = i;
-    i = getBit32_SB(pSB, 4); // subversion
-    FailIf((i != CODEC_SUBVERSION &&
-        i != CODEC_SUBVERSION_NEWSCALING_SOFT_TILES && i != CODEC_SUBVERSION_NEWSCALING_HARD_TILES),
-        WMP_errIncorrectCodecSubVersion);
-    pSC->cSubVersion = i;
-
-    pSC->bUseHardTileBoundaries = FALSE;
-    if (pSC->cSubVersion == CODEC_SUBVERSION_NEWSCALING_HARD_TILES) 
-        pSC->bUseHardTileBoundaries = TRUE;
-
-    pSCP->bUseHardTileBoundaries = pSC->bUseHardTileBoundaries;
-
-// 9 primary parameters
-    bTilingPresent = (Bool) getBit32_SB(pSB, 1); // tiling present
-    pSCP->bfBitstreamFormat = getBit32_SB(pSB, 1); // bitstream layout
-    pII->oOrientation = (ORIENTATION)getBit32_SB(pSB, 3); // presentation orientation
-    pSC->bIndexTable = getBit32_SB(pSB, 1);
-    i = getBit32_SB(pSB, 2); // overlap
-    FailIf((i == 3), WMP_errInvalidParameter);
-    pSCP->olOverlap = i;
-
-// 11 some other parameters
-    bAbbreviatedHeader = (Bool) getBit32_SB(pSB, 1); // short words for size and tiles
-    pSCP->bdBitDepth = (BITDEPTH) getBit32_SB(pSB, 1); // long word
-pSCP->bdBitDepth = BD_LONG; // remove when optimization is done
-    bInscribed = (Bool) getBit32_SB(pSB, 1); // windowing
-    pSC->bTrimFlexbitsFlag = (Bool) getBit32_SB(pSB, 1); // trim flexbits flag
-    bTileStretch = (Bool) getBit32_SB(pSB, 1); // tile stretching flag
-    pSC->bRBSwapped = (Bool) getBit32_SB(pSB, 1); // red-blue swap flag
-    getBit32_SB(pSB, 1);  // padding / reserved bit
-    pSC->bAlphaChannel = (Bool) getBit32_SB(pSB, 1); // alpha channel present
-
-// 10 - informational
-    pII->cfColorFormat = getBit32_SB(pSB, 4); // source color format
-    pII->bdBitDepth = getBit32_SB(pSB, 4); // source bit depth
-
-    if(BD_1alt == pII->bdBitDepth)
     {
-        pII->bdBitDepth = BD_1;
-        pSCP->bBlackWhite = 1;
-    }
-
-// 12 - Variable length fields
-// size
-    pII->cWidth = getBit32_SB(pSB, bAbbreviatedHeader ? 16 : 32) + 1;
-    pII->cHeight = getBit32_SB(pSB, bAbbreviatedHeader ? 16 : 32) + 1;
-    pSC->cExtraPixelsTop = pSC->cExtraPixelsLeft = pSC->cExtraPixelsBottom = pSC->cExtraPixelsRight = 0;
-    if (bInscribed == FALSE && (pII->cWidth & 0xf) != 0)
-        pSC->cExtraPixelsRight = 0x10 - (pII->cWidth & 0xF);
-    if (bInscribed == FALSE && (pII->cHeight & 0xf) != 0)
-        pSC->cExtraPixelsBottom = 0x10 - (pII->cHeight & 0xF);
-
-// tiling
-    pSCP->cNumOfSliceMinus1V = pSCP->cNumOfSliceMinus1H = 0;
-    if (bTilingPresent) {
-        pSCP->cNumOfSliceMinus1V = getBit32_SB(pSB, LOG_MAX_TILES); // # of vertical slices along X axis
-        pSCP->cNumOfSliceMinus1H = getBit32_SB(pSB, LOG_MAX_TILES); // # of horizontal slices along Y axis
-    }
-    FailIf((pSC->bIndexTable == FALSE) && (pSCP->bfBitstreamFormat == FREQUENCY || pSCP->cNumOfSliceMinus1V + pSCP->cNumOfSliceMinus1H > 0),
-        WMP_errUnsupportedFormat);
-
-// tile sizes
-    pSCP->uiTileX[0] = pSCP->uiTileY[0] = 0;
-    for(i = 0; i < pSCP->cNumOfSliceMinus1V; i ++){ // width in MB of vertical slices, not needed for last slice!
-        pSCP->uiTileX[i + 1] = (U32) getBit32_SB(pSB, bAbbreviatedHeader ? 8 : 16) + pSCP->uiTileX[i];
-    }
-    for(i = 0; i < pSCP->cNumOfSliceMinus1H; i ++){ // width in MB of vertical slices, not needed for last slice!
-        pSCP->uiTileY[i + 1] = (U32) getBit32_SB(pSB, bAbbreviatedHeader ? 8 : 16) + pSCP->uiTileY[i];
-    }
-    if (bTileStretch) {  // no handling of tile stretching enabled as of now
-        for (i = 0; i < (pSCP->cNumOfSliceMinus1V + 1) * (pSCP->cNumOfSliceMinus1H + 1); i++)
-            getBit32_SB(pSB, 8);
-    }
-
-// window due to compressed domain processing
-    if (bInscribed) {
-        pSC->cExtraPixelsTop = (U8)getBit32_SB(pSB, 6);
-        pSC->cExtraPixelsLeft = (U8)getBit32_SB(pSB, 6);
-        pSC->cExtraPixelsBottom = (U8)getBit32_SB(pSB, 6);
-        pSC->cExtraPixelsRight = (U8)getBit32_SB(pSB, 6);
-    }
-    
-    if(((pII->cWidth + pSC->cExtraPixelsLeft + pSC->cExtraPixelsRight) & 0xf) + ((pII->cHeight + pSC->cExtraPixelsTop + pSC->cExtraPixelsBottom) & 0xf) != 0){
-        FailIf((pII->cWidth & 0xf) + (pII->cHeight & 0xf) + pSC->cExtraPixelsLeft + pSC->cExtraPixelsTop != 0, WMP_errInvalidParameter);
-        FailIf(pII->cWidth <= pSC->cExtraPixelsRight || pII->cHeight <= pSC->cExtraPixelsBottom, WMP_errInvalidParameter);
-        pII->cWidth -= pSC->cExtraPixelsRight, pII->cHeight -= pSC->cExtraPixelsBottom;
+        JxrMainHeaderDescriptor header;
+        if (!JxrMainHeaderReaderRead(pSB, &header))
+            return ICERR_ERROR;
+        pSC->cVersion = header.codecVersion;
+        pSC->cSubVersion = header.codecSubVersion;
+        pSC->bUseHardTileBoundaries = header.useHardTileBoundaries;
+        pSCP->bUseHardTileBoundaries = header.useHardTileBoundaries;
+        pSCP->bfBitstreamFormat = header.bitstreamFormat;
+        pII->oOrientation = header.orientation;
+        pSC->bIndexTable = header.hasIndexTable;
+        pSCP->olOverlap = header.overlap;
+        pSCP->bdBitDepth = BD_LONG;
+        pSC->bTrimFlexbitsFlag = header.trimFlexbits;
+        pSC->bRBSwapped = header.redBlueSwapped;
+        pSC->bAlphaChannel = header.hasAlphaChannel;
+        pII->cfColorFormat = header.sourceColorFormat;
+        pII->bdBitDepth = header.sourceBitDepth;
+        if (header.blackWhite)
+            pSCP->bBlackWhite = 1;
+        pII->cWidth = header.width;
+        pII->cHeight = header.height;
+        pSC->cExtraPixelsTop = header.extraPixelsTop;
+        pSC->cExtraPixelsLeft = header.extraPixelsLeft;
+        pSC->cExtraPixelsBottom = header.extraPixelsBottom;
+        pSC->cExtraPixelsRight = header.extraPixelsRight;
+        pSCP->cNumOfSliceMinus1V = header.verticalSliceCountMinusOne;
+        pSCP->cNumOfSliceMinus1H = header.horizontalSliceCountMinusOne;
+        memcpy(pSCP->uiTileX, header.tileX, sizeof(header.tileX));
+        memcpy(pSCP->uiTileY, header.tileY, sizeof(header.tileY));
     }
 
     flushToByte_SB(pSB);  // redundant

@@ -44,6 +44,7 @@
 #include "JxrDecoderPacketRowReader.h"
 #include "JxrImagePlaneQuantizerHeaderReader.h"
 #include "JxrImagePlaneDescriptorReader.h"
+#include "JxrMainHeaderReader.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -683,6 +684,57 @@ static int read_image_plane_descriptor_vector(const U8* data, size_t count,
     flushToByte_SB(&input);
     return read && detach_SB(&input) == WMP_errSuccess &&
         CloseWS_Memory(&stream) == WMP_errSuccess;
+}
+
+static int read_main_header_vector(const U8* data, size_t count,
+    JxrMainHeaderDescriptor* descriptor)
+{
+    SimpleBitIO input;
+    struct WMPStream* stream = NULL;
+    Bool read;
+    memset(&input, 0, sizeof(input));
+    if (CreateWS_Memory(&stream, (Void*)data, count) != WMP_errSuccess ||
+        attach_SB(&input, stream) != WMP_errSuccess) {
+        if (stream != NULL) CloseWS_Memory(&stream);
+        return 0;
+    }
+    read = JxrMainHeaderReaderRead(&input, descriptor);
+    flushToByte_SB(&input);
+    return read && detach_SB(&input) == WMP_errSuccess &&
+        CloseWS_Memory(&stream) == WMP_errSuccess;
+}
+
+static int test_main_header_reader_vectors(void)
+{
+    U8 data[32] = {0}; JxrBitWriter writer; JxrMainHeaderDescriptor header;
+    JxrBitWriterInit(&writer, data, sizeof(data));
+    if (!JxrBitWriterWrite(&writer, CODEC_VERSION, 4) ||
+        !JxrBitWriterWrite(&writer, CODEC_SUBVERSION_NEWSCALING_HARD_TILES, 4) ||
+        !JxrBitWriterWrite(&writer, 1, 1) || !JxrBitWriterWrite(&writer, FREQUENCY, 1) ||
+        !JxrBitWriterWrite(&writer, O_RCW, 3) || !JxrBitWriterWrite(&writer, 1, 1) ||
+        !JxrBitWriterWrite(&writer, OL_TWO, 2) || !JxrBitWriterWrite(&writer, 1, 1) ||
+        !JxrBitWriterWrite(&writer, BD_LONG, 1) || !JxrBitWriterWrite(&writer, 1, 1) ||
+        !JxrBitWriterWrite(&writer, 1, 1) || !JxrBitWriterWrite(&writer, 1, 1) ||
+        !JxrBitWriterWrite(&writer, 1, 1) || !JxrBitWriterWrite(&writer, 0, 1) ||
+        !JxrBitWriterWrite(&writer, 1, 1) || !JxrBitWriterWrite(&writer, CF_RGB, 4) ||
+        !JxrBitWriterWrite(&writer, BD_32F, 4) || !JxrBitWriterWrite(&writer, 31, 16) ||
+        !JxrBitWriterWrite(&writer, 15, 16) || !JxrBitWriterWrite(&writer, 1, LOG_MAX_TILES) ||
+        !JxrBitWriterWrite(&writer, 1, LOG_MAX_TILES) || !JxrBitWriterWrite(&writer, 3, 8) ||
+        !JxrBitWriterWrite(&writer, 5, 8) || !JxrBitWriterWrite(&writer, 0, 8) ||
+        !JxrBitWriterWrite(&writer, 0, 8) || !JxrBitWriterWrite(&writer, 0, 8) ||
+        !JxrBitWriterWrite(&writer, 0, 8) || !JxrBitWriterWrite(&writer, 0, 6) ||
+        !JxrBitWriterWrite(&writer, 0, 6) || !JxrBitWriterWrite(&writer, 0, 6) ||
+        !JxrBitWriterWrite(&writer, 0, 6) || !JxrBitWriterFlush(&writer) ||
+        !read_main_header_vector(data, JxrBitWriterBytes(&writer), &header)) return 0;
+    return header.codecVersion == CODEC_VERSION &&
+        header.codecSubVersion == CODEC_SUBVERSION_NEWSCALING_HARD_TILES &&
+        header.useHardTileBoundaries && header.bitstreamFormat == FREQUENCY &&
+        header.orientation == O_RCW && header.hasIndexTable && header.overlap == OL_TWO &&
+        header.codedBitDepth == BD_LONG && header.trimFlexbits && header.redBlueSwapped &&
+        header.hasAlphaChannel && header.sourceColorFormat == CF_RGB &&
+        header.sourceBitDepth == BD_32F && header.width == 32 && header.height == 16 &&
+        header.verticalSliceCountMinusOne == 1 && header.horizontalSliceCountMinusOne == 1 &&
+        header.tileX[1] == 3 && header.tileY[1] == 5;
 }
 
 static int test_image_plane_descriptor_reader_vectors(void)
@@ -2484,6 +2536,7 @@ int main(int argc, char** argv)
         { "transcode_tile_extraction_decision_vectors", test_transcode_tile_extraction_decision_vectors },
         { "transcode_roi_geometry_vectors", test_transcode_roi_geometry_vectors },
         { "decoder_tile_quantizer_syntax_vectors", test_decoder_tile_quantizer_syntax_vectors },
+        { "main_header_reader_vectors", test_main_header_reader_vectors },
         { "image_plane_descriptor_reader_vectors", test_image_plane_descriptor_reader_vectors },
         { "image_plane_quantizer_header_reader_vectors", test_image_plane_quantizer_header_reader_vectors },
         { "decoder_dc_quantizer_header_applier_vectors", test_decoder_dc_quantizer_header_applier_vectors },
