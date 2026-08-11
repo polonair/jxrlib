@@ -1520,33 +1520,22 @@ Int outputMBRow(CWMImageStrCodec * pSC)
     {
         const CWMImageInfo* pII = &pSC->WMII;
 
-#define fixupFullSize(type, nCh) \
-for(iRow = iFirstRow; iRow < cHeight; iRow ++) {\
-    size_t iOffsetY;\
-    for(iColumn = iFirstColumn, iOffsetY = pOffsetY[iRow]; iColumn < cWidth; iColumn ++){\
-        type *pT = (type*)(U8 *)pSC->WMIBI.pv + iOffsetY + pOffsetX[iColumn];\
-        pT[2] = pT[1] = pT[0]; \
-        pT += nCh; \
-    } \
-} \
-break
-
         switch (pII->bdBitDepth)
         {
             case BD_8:
-                fixupFullSize(U8, (pII->cBitsPerUnit >> 3));
+                JxrMonochromeExpansionReplicateByteAtOffsets((U8*)pSC->WMIBI.pv, pOffsetX, pOffsetY, iFirstRow, cHeight, iFirstColumn, cWidth);
                 break;
 
             case BD_16:
             case BD_16S:
             case BD_16F:
-                fixupFullSize(U16, (pII->cBitsPerUnit >> 3) / sizeof(U16));
+                JxrMonochromeExpansionReplicateUInt16AtOffsets((U16*)pSC->WMIBI.pv, pOffsetX, pOffsetY, iFirstRow, cHeight, iFirstColumn, cWidth);
                 break;
 
             case BD_32:
             case BD_32S:
             case BD_32F:
-                fixupFullSize(U32, (pII->cBitsPerUnit >> 3) / sizeof(float));
+                JxrMonochromeExpansionReplicateUInt32AtOffsets((U32*)pSC->WMIBI.pv, pOffsetX, pOffsetY, iFirstRow, cHeight, iFirstColumn, cWidth);
                 break;
 
             case BD_5:

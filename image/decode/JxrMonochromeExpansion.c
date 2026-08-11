@@ -41,3 +41,42 @@ Void JxrMonochromeExpansionReplicateUInt32(U32* buffer, size_t strideBytes,
         }
     }
 }
+
+Void JxrMonochromeExpansionReplicateByteAtOffsets(U8* buffer, const size_t* xOffsets,
+    const size_t* yOffsets, size_t firstRow, size_t endRow, size_t firstColumn,
+    size_t endColumn)
+{
+    size_t row;
+    size_t column;
+    for (row = firstRow; row < endRow; ++row)
+        for (column = firstColumn; column < endColumn; ++column) {
+            U8* pixel = buffer + yOffsets[row] + xOffsets[column];
+            pixel[2] = pixel[1] = pixel[0];
+        }
+}
+
+Void JxrMonochromeExpansionReplicateUInt16AtOffsets(U16* buffer, const size_t* xOffsets,
+    const size_t* yOffsets, size_t firstRow, size_t endRow, size_t firstColumn,
+    size_t endColumn)
+{
+    size_t row;
+    size_t column;
+    for (row = firstRow; row < endRow; ++row)
+        for (column = firstColumn; column < endColumn; ++column) {
+            U16* pixel = buffer + yOffsets[row] + xOffsets[column];
+            pixel[2] = pixel[1] = pixel[0];
+        }
+}
+
+Void JxrMonochromeExpansionReplicateUInt32AtOffsets(U32* buffer, const size_t* xOffsets,
+    const size_t* yOffsets, size_t firstRow, size_t endRow, size_t firstColumn,
+    size_t endColumn)
+{
+    size_t row;
+    size_t column;
+    for (row = firstRow; row < endRow; ++row)
+        for (column = firstColumn; column < endColumn; ++column) {
+            U32* pixel = buffer + yOffsets[row] + xOffsets[column];
+            pixel[2] = pixel[1] = pixel[0];
+        }
+}

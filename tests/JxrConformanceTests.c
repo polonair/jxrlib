@@ -717,6 +717,31 @@ static int test_monochrome_expansion_vectors(void)
         words32[7] == 2000 && words32[8] == 4001 && words32[9] == 0xffffffff;
 }
 
+static int test_monochrome_expansion_offset_vectors(void)
+{
+    size_t xOffsets[3] = { 0, 4, 10 };
+    size_t yOffsets[2] = { 0, 16 };
+    U8 bytes[32] = { 0 };
+    U16 words16[32] = { 0 };
+    U32 words32[32] = { 0 };
+
+    bytes[20] = 10; bytes[21] = 80; bytes[22] = 90; bytes[23] = 40;
+    bytes[26] = 20; bytes[27] = 81; bytes[28] = 91; bytes[29] = 41;
+    words16[20] = 100; words16[21] = 800; words16[22] = 900; words16[23] = 400;
+    words16[26] = 200; words16[27] = 801; words16[28] = 901; words16[29] = 401;
+    words32[20] = 1000; words32[21] = 8000; words32[22] = 9000; words32[23] = 4000;
+    words32[26] = 2000; words32[27] = 8001; words32[28] = 9001; words32[29] = 4001;
+    JxrMonochromeExpansionReplicateByteAtOffsets(bytes, xOffsets, yOffsets, 1, 2, 1, 3);
+    JxrMonochromeExpansionReplicateUInt16AtOffsets(words16, xOffsets, yOffsets, 1, 2, 1, 3);
+    JxrMonochromeExpansionReplicateUInt32AtOffsets(words32, xOffsets, yOffsets, 1, 2, 1, 3);
+    return bytes[20] == 10 && bytes[21] == 10 && bytes[22] == 10 && bytes[23] == 40 &&
+        bytes[26] == 20 && bytes[27] == 20 && bytes[28] == 20 && bytes[29] == 41 &&
+        words16[20] == 100 && words16[21] == 100 && words16[22] == 100 && words16[23] == 400 &&
+        words16[26] == 200 && words16[27] == 200 && words16[28] == 200 && words16[29] == 401 &&
+        words32[20] == 1000 && words32[21] == 1000 && words32[22] == 1000 && words32[23] == 4000 &&
+        words32[26] == 2000 && words32[27] == 2000 && words32[28] == 2000 && words32[29] == 4001;
+}
+
 static int test_bit_input_buffer_state_vectors(void)
 {
     JxrBitInputBufferState state;
@@ -1529,6 +1554,7 @@ int main(int argc, char** argv)
         { "sample_clipping_vectors", test_sample_clipping_vectors },
         { "float_sample_conversion_vectors", test_float_sample_conversion_vectors },
         { "monochrome_expansion_vectors", test_monochrome_expansion_vectors },
+        { "monochrome_expansion_offset_vectors", test_monochrome_expansion_offset_vectors },
         { "bit_input_buffer_state_vectors", test_bit_input_buffer_state_vectors },
         { "packet_source_vectors", test_packet_source_vectors },
         { "packet_executor_vectors", test_packet_executor_vectors },
