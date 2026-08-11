@@ -66,6 +66,9 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup>
+    <JxrReentrantMode Condition="'$(JxrReentrantMode)'==''">false</JxrReentrantMode>
+  </PropertyGroup>
+  <PropertyGroup>
     <_ProjectFileVersion>10.0.30319.1</_ProjectFileVersion>
     <OutDir Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(Configuration)/$(ProjectName)\</OutDir>
     <IntDir Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(OutDir)</IntDir>
@@ -163,6 +166,11 @@
       <OutputFile>$(OutDir)$(ProjectName).lib</OutputFile>
       <LinkTimeCodeGeneration>true</LinkTimeCodeGeneration>
     </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(JxrReentrantMode)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>REENTRANT_MODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\decode\decode.c" />
