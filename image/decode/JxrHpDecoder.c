@@ -298,6 +298,7 @@ Int JxrHpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
     const JxrDecoderTileState* tile = JxrDecoderFormatStateGetCurrentTile(format);
     JxrEntropyBitReader* highpassReader = &state->highpassReader;
     Int tableIndex;
+    Int result = ICERR_OK;
 
     /** reset adaptive scan totals **/
     if (JxrDecoderFormatStateShouldResetScan(format)) {
@@ -311,7 +312,7 @@ Int JxrHpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
                 JxrDecoderTileStateGetHighpassQuantizerBits(tile)));
         if (JxrMacroblockStateGetHighpassQuantizerIndex(macroblock) >=
             JxrDecoderTileStateGetHighpassQuantizerCount(tile))
-            goto ErrorExit;
+            result = ICERR_ERROR;
     }
     else if(JxrDecoderTileStateGetHighpassQuantizerBits(tile) == 0 &&
         JxrDecoderTileStateGetHighpassQuantizerCount(tile) > 1) // use LP QP
@@ -319,13 +320,14 @@ Int JxrHpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
             JxrMacroblockStateGetLowpassQuantizerIndex(macroblock));
 
 
-    if (!JxrHpDecoderDecodeCbp(state)) goto ErrorExit;
-    JxrCbpPredictorDecode(state);
+    if (result == ICERR_OK && !JxrHpDecoderDecodeCbp(state)) result = ICERR_ERROR;
+    if (result == ICERR_OK) JxrCbpPredictorDecode(state);
 
-    if (JxrHpDecoderDecodeCoefficients(state, macroblockX, macroblockY) != ICERR_OK)
-        goto ErrorExit;
+    if (result == ICERR_OK &&
+        JxrHpDecoderDecodeCoefficients(state, macroblockX, macroblockY) != ICERR_OK)
+        result = ICERR_ERROR;
 
-    if (JxrDecoderFormatStateShouldResetContext(format)) {
+    if (result == ICERR_OK && JxrDecoderFormatStateShouldResetContext(format)) {
         JxrHighpassCbpStateAdapt(&state->highpassCbpState);
         for (tableIndex = 0; tableIndex < CONTEXTX; ++tableIndex) {
             JxrHuffmanStateSetAdapt(&state->huffmanStateSet,
@@ -335,11 +337,7 @@ Int JxrHpDecoderDecodeSubband(JxrDecoderSubbandContext* state,
 
     JxrMacroblockStateCommitToNative(macroblock);
     JxrMacroblockCbpStateCommitToNative(&state->macroblockCbpState);
-    return ICERR_OK;
-ErrorExit:
-    JxrMacroblockStateCommitToNative(macroblock);
-    JxrMacroblockCbpStateCommitToNative(&state->macroblockCbpState);
-    return ICERR_ERROR;
+    return result;
 }
 
 Int JxrHpDecoderDecodeMacroblock(CWMImageStrCodec* codec, CCodingContext* entropy,
