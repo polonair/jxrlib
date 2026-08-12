@@ -47,6 +47,7 @@
 #include "JxrMainHeaderReader.h"
 #include "JxrHeaderStateApplier.h"
 #include "JxrHeaderValidation.h"
+#include "JxrHeaderStreamReader.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -836,6 +837,35 @@ static int test_header_validation_vectors(void)
         JXR_HEADER_VALID || JxrHeaderValidationValidateSourceFormat(NULL, &codecParameters) !=
         JXR_HEADER_UNSUPPORTED_SOURCE_FORMAT) return 0;
     return 1;
+}
+
+static int test_header_stream_reader_vectors(void)
+{
+    U8 data[10] = { 'W', 'M', 'P', 'H', 'O', 'T', 'O', 0, 0xa5, 0x5a };
+    U8 invalid[8] = { 'W', 'M', 'P', 'H', 'O', 'T', 'O', 1 };
+    struct WMPStream* stream = NULL;
+    JxrHeaderStreamReader reader;
+    SimpleBitIO* input;
+    U32 bytesRead;
+    if (CreateWS_Memory(&stream, data, sizeof(data)) != WMP_errSuccess ||
+        !JxrHeaderStreamReaderOpen(&reader, stream)) {
+        if (stream != NULL) CloseWS_Memory(&stream);
+        return 0;
+    }
+    input = JxrHeaderStreamReaderGetBitInput(&reader);
+    if (input == NULL || getBit32_SB(input, 4) != 0xa ||
+        !JxrHeaderStreamReaderAlignToByte(&reader) ||
+        !JxrHeaderStreamReaderClose(&reader, &bytesRead) || bytesRead != 1 ||
+        JxrHeaderStreamReaderGetBitInput(&reader) != NULL ||
+        CloseWS_Memory(&stream) != WMP_errSuccess) return 0;
+    if (CreateWS_Memory(&stream, invalid, sizeof(invalid)) != WMP_errSuccess) return 0;
+    if (JxrHeaderStreamReaderOpen(&reader, stream)) {
+        JxrHeaderStreamReaderClose(&reader, &bytesRead);
+        CloseWS_Memory(&stream);
+        return 0;
+    }
+    return CloseWS_Memory(&stream) == WMP_errSuccess &&
+        !JxrHeaderStreamReaderOpen(NULL, NULL);
 }
 
 static int test_image_plane_descriptor_reader_vectors(void)
@@ -2640,6 +2670,7 @@ int main(int argc, char** argv)
         { "main_header_reader_vectors", test_main_header_reader_vectors },
         { "header_state_applier_vectors", test_header_state_applier_vectors },
         { "header_validation_vectors", test_header_validation_vectors },
+        { "header_stream_reader_vectors", test_header_stream_reader_vectors },
         { "image_plane_descriptor_reader_vectors", test_image_plane_descriptor_reader_vectors },
         { "image_plane_quantizer_header_reader_vectors", test_image_plane_quantizer_header_reader_vectors },
         { "decoder_dc_quantizer_header_applier_vectors", test_decoder_dc_quantizer_header_applier_vectors },

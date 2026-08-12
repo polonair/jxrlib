@@ -35,6 +35,7 @@
 #include "JxrMainHeaderReader.h"
 #include "JxrHeaderStateApplier.h"
 #include "JxrHeaderValidation.h"
+#include "JxrHeaderStreamReader.h"
 #include "JxrDecoderDcQuantizerHeaderApplier.h"
 #include "JxrDecoderLpQuantizerHeaderApplier.h"
 #include "JxrDecoderHpQuantizerHeaderApplier.h"
@@ -2693,56 +2694,33 @@ Int ReadWMIHeader(
     CWMIStrCodecParam *pSCP,
     CCoreParameters *pSC)
 {
-    ERR err = WMP_errSuccess;
-    struct WMPStream* pWS = pSCP->pWStream;
+    JxrHeaderStreamReader streamReader;
+    SimpleBitIO* bitInput;
+    U32 headerBytesRead;
 
-    SimpleBitIO SB = {0};
-    SimpleBitIO* pSB = &SB;
-
-    U8 szMS[8] = {0};
-    U32 cbStream = 0;
-
-    // U32 bits = 0;
-    // Int HEADERSIZE = 0;
-
-    assert(pSC != NULL);
-    //================================
-// 0
-    /** signature **/
-    Call(pWS->Read(pWS, szMS, sizeof(szMS)));
-    FailIf(szMS != (U8 *) strstr((char *) szMS, "WMPHOTO"), WMP_errUnsupportedFormat);
-    //================================
-    Call(attach_SB(pSB, pWS));
-
+    if (pII == NULL || pSCP == NULL || pSC == NULL ||
+        !JxrHeaderStreamReaderOpen(&streamReader, pSCP->pWStream))
+        return ICERR_ERROR;
+    bitInput = JxrHeaderStreamReaderGetBitInput(&streamReader);
     {
         JxrMainHeaderDescriptor header;
-        if (!JxrMainHeaderReaderRead(pSB, &header))
+        if (!JxrMainHeaderReaderRead(bitInput, &header) ||
+            !JxrHeaderStateApplierApplyMain(&header, pII, pSCP, pSC)) {
+            JxrHeaderStreamReaderClose(&streamReader, &headerBytesRead);
             return ICERR_ERROR;
-        if (!JxrHeaderStateApplierApplyMain(&header, pII, pSCP, pSC))
-            return ICERR_ERROR;
+        }
     }
-
-    flushToByte_SB(pSB);  // redundant
-
-    // read header of first image plane
-    FailIf(ReadImagePlaneHeader(pII, pSCP, pSC, pSB), WMP_errUnsupportedFormat);
-
-    // maybe UNALIGNED!!!
-
-    //================================
-    detach_SB(pSB);
-    pSCP->cbStream = cbStream - getByteRead_SB(pSB);
-
-    pSCP->uAlphaMode = (pSC->bAlphaChannel ? pSCP->uAlphaMode : 0);
-    pSCP->cChannel = pSC->cNumChannels;
-
-    if (JxrHeaderValidationValidateSourceFormat(pII, pSCP) != JXR_HEADER_VALID)
+    if (!JxrHeaderStreamReaderAlignToByte(&streamReader) ||
+        ReadImagePlaneHeader(pII, pSCP, pSC, bitInput) != ICERR_OK ||
+        !JxrHeaderStreamReaderClose(&streamReader, &headerBytesRead))
         return ICERR_ERROR;
-    
-Cleanup:
-    return WMP_errSuccess == err ? ICERR_OK : ICERR_ERROR;
-}
 
+    pSCP->cbStream = (U32)0 - headerBytesRead;
+    pSCP->uAlphaMode = pSC->bAlphaChannel ? pSCP->uAlphaMode : 0;
+    pSCP->cChannel = pSC->cNumChannels;
+    return JxrHeaderValidationValidateSourceFormat(pII, pSCP) == JXR_HEADER_VALID ?
+        ICERR_OK : ICERR_ERROR;
+}
 //----------------------------------------------------------------
 // streaming api init/decode/term
 EXTERN_C Int ImageStrDecGetInfo(
