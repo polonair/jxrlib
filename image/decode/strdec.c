@@ -36,6 +36,7 @@
 #include "JxrHeaderStateApplier.h"
 #include "JxrHeaderValidation.h"
 #include "JxrHeaderStreamReader.h"
+#include "JxrStreamPositionScope.h"
 #include "JxrDecoderDcQuantizerHeaderApplier.h"
 #include "JxrDecoderLpQuantizerHeaderApplier.h"
 #include "JxrDecoderHpQuantizerHeaderApplier.h"
@@ -2727,20 +2728,18 @@ EXTERN_C Int ImageStrDecGetInfo(
     CWMImageInfo* pII,
     CWMIStrCodecParam *pSCP)
 {
-    ERR err = WMP_errSuccess;
-    size_t cMarker;
-    CCoreParameters aDummy;
-    // mark position of start of data
-    Call(pSCP->pWStream->GetPos(pSCP->pWStream, &cMarker));
-    Call(ReadWMIHeader(pII, pSCP, &aDummy));
-    // rewind to start of data
-    Call(pSCP->pWStream->SetPos(pSCP->pWStream, cMarker));
-    return ICERR_OK;
+    JxrStreamPositionScope positionScope;
+    CCoreParameters dummyParameters;
+    Int readResult;
+    Bool restored;
 
-Cleanup:
-    return ICERR_ERROR;
+    if (pII == NULL || pSCP == NULL ||
+        !JxrStreamPositionScopeCapture(&positionScope, pSCP->pWStream))
+        return ICERR_ERROR;
+    readResult = ReadWMIHeader(pII, pSCP, &dummyParameters);
+    restored = JxrStreamPositionScopeRestore(&positionScope);
+    return readResult == ICERR_OK && restored ? ICERR_OK : ICERR_ERROR;
 }
-
 EXTERN_C Int WMPhotoValidate(
     CWMImageInfo * pII,
     CWMIStrCodecParam * pSCP)

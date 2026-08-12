@@ -48,6 +48,7 @@
 #include "JxrHeaderStateApplier.h"
 #include "JxrHeaderValidation.h"
 #include "JxrHeaderStreamReader.h"
+#include "JxrStreamPositionScope.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -866,6 +867,23 @@ static int test_header_stream_reader_vectors(void)
     }
     return CloseWS_Memory(&stream) == WMP_errSuccess &&
         !JxrHeaderStreamReaderOpen(NULL, NULL);
+}
+
+static int test_stream_position_scope_vectors(void)
+{
+    U8 data[8] = {0};
+    struct WMPStream* stream = NULL;
+    JxrStreamPositionScope scope;
+    size_t position;
+    if (CreateWS_Memory(&stream, data, sizeof(data)) != WMP_errSuccess ||
+        stream->SetPos(stream, 3) != WMP_errSuccess ||
+        !JxrStreamPositionScopeCapture(&scope, stream) ||
+        stream->SetPos(stream, 7) != WMP_errSuccess ||
+        !JxrStreamPositionScopeRestore(&scope) ||
+        stream->GetPos(stream, &position) != WMP_errSuccess || position != 3 ||
+        JxrStreamPositionScopeRestore(&scope) || CloseWS_Memory(&stream) != WMP_errSuccess)
+        return 0;
+    return !JxrStreamPositionScopeCapture(NULL, NULL);
 }
 
 static int test_image_plane_descriptor_reader_vectors(void)
@@ -2671,6 +2689,7 @@ int main(int argc, char** argv)
         { "header_state_applier_vectors", test_header_state_applier_vectors },
         { "header_validation_vectors", test_header_validation_vectors },
         { "header_stream_reader_vectors", test_header_stream_reader_vectors },
+        { "stream_position_scope_vectors", test_stream_position_scope_vectors },
         { "image_plane_descriptor_reader_vectors", test_image_plane_descriptor_reader_vectors },
         { "image_plane_quantizer_header_reader_vectors", test_image_plane_quantizer_header_reader_vectors },
         { "decoder_dc_quantizer_header_applier_vectors", test_decoder_dc_quantizer_header_applier_vectors },
