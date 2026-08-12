@@ -37,6 +37,7 @@
 #include "JxrHeaderValidation.h"
 #include "JxrHeaderStreamReader.h"
 #include "JxrStreamPositionScope.h"
+#include "JxrHeaderMetadataFinalizer.h"
 #include "JxrDecoderDcQuantizerHeaderApplier.h"
 #include "JxrDecoderLpQuantizerHeaderApplier.h"
 #include "JxrDecoderHpQuantizerHeaderApplier.h"
@@ -2716,9 +2717,8 @@ Int ReadWMIHeader(
         !JxrHeaderStreamReaderClose(&streamReader, &headerBytesRead))
         return ICERR_ERROR;
 
-    pSCP->cbStream = (U32)0 - headerBytesRead;
-    pSCP->uAlphaMode = pSC->bAlphaChannel ? pSCP->uAlphaMode : 0;
-    pSCP->cChannel = pSC->cNumChannels;
+    if (!JxrHeaderMetadataFinalizerApply(headerBytesRead, pSC, pSCP))
+        return ICERR_ERROR;
     return JxrHeaderValidationValidateSourceFormat(pII, pSCP) == JXR_HEADER_VALID ?
         ICERR_OK : ICERR_ERROR;
 }

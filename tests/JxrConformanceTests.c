@@ -49,6 +49,7 @@
 #include "JxrHeaderValidation.h"
 #include "JxrHeaderStreamReader.h"
 #include "JxrStreamPositionScope.h"
+#include "JxrHeaderMetadataFinalizer.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -884,6 +885,28 @@ static int test_stream_position_scope_vectors(void)
         JxrStreamPositionScopeRestore(&scope) || CloseWS_Memory(&stream) != WMP_errSuccess)
         return 0;
     return !JxrStreamPositionScopeCapture(NULL, NULL);
+}
+
+static int test_header_metadata_finalizer_vectors(void)
+{
+    CCoreParameters coreParameters;
+    CWMIStrCodecParam codecParameters;
+    memset(&coreParameters, 0, sizeof(coreParameters));
+    memset(&codecParameters, 0, sizeof(codecParameters));
+    coreParameters.bAlphaChannel = TRUE;
+    coreParameters.cNumChannels = 3;
+    codecParameters.uAlphaMode = 3;
+    if (!JxrHeaderMetadataFinalizerApply(10, &coreParameters, &codecParameters) ||
+        codecParameters.cbStream != (size_t)((U32)0 - 10) ||
+        codecParameters.uAlphaMode != 3 || codecParameters.cChannel != 3) return 0;
+    coreParameters.bAlphaChannel = FALSE;
+    coreParameters.cNumChannels = 1;
+    codecParameters.uAlphaMode = 2;
+    if (!JxrHeaderMetadataFinalizerApply(0, &coreParameters, &codecParameters) ||
+        codecParameters.cbStream != 0 || codecParameters.uAlphaMode != 0 ||
+        codecParameters.cChannel != 1) return 0;
+    return !JxrHeaderMetadataFinalizerApply(1, NULL, &codecParameters) &&
+        !JxrHeaderMetadataFinalizerApply(1, &coreParameters, NULL);
 }
 
 static int test_image_plane_descriptor_reader_vectors(void)
@@ -2690,6 +2713,7 @@ int main(int argc, char** argv)
         { "header_validation_vectors", test_header_validation_vectors },
         { "header_stream_reader_vectors", test_header_stream_reader_vectors },
         { "stream_position_scope_vectors", test_stream_position_scope_vectors },
+        { "header_metadata_finalizer_vectors", test_header_metadata_finalizer_vectors },
         { "image_plane_descriptor_reader_vectors", test_image_plane_descriptor_reader_vectors },
         { "image_plane_quantizer_header_reader_vectors", test_image_plane_quantizer_header_reader_vectors },
         { "decoder_dc_quantizer_header_applier_vectors", test_decoder_dc_quantizer_header_applier_vectors },

@@ -202,6 +202,7 @@
     <ClCompile Include="..\decode\JxrHeaderValidation.c" />
     <ClCompile Include="..\decode\JxrHeaderStreamReader.c" />
     <ClCompile Include="..\decode\JxrStreamPositionScope.c" />
+    <ClCompile Include="..\decode\JxrHeaderMetadataFinalizer.c" />
     <ClCompile Include="..\decode\JxrInverseColorTransform.c" />
     <ClCompile Include="..\decode\JxrSampleClipping.c" />
     <ClCompile Include="..\decode\JxrFloatSampleConversion.c" />
