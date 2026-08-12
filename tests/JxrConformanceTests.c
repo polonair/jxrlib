@@ -52,6 +52,7 @@
 #include "JxrHeaderMetadataFinalizer.h"
 #include "JxrHeaderDecodePipeline.h"
 #include "JxrDecoderInitializationPipeline.h"
+#include "JxrSecondaryPlaneInitializer.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -976,6 +977,88 @@ static int test_decoder_initialization_pipeline_vectors(void)
     JxrDecoderInitializationPipelineInit(&pipeline, NULL, NULL,
         initialize_pipeline_test_io, initialize_pipeline_test_decoder);
     return JxrDecoderInitializationPipelineRun(&pipeline) == ICERR_ERROR;
+}
+
+typedef struct JxrSecondaryPlaneInitializerTestContext {
+    Int headerResult;
+    U8 initializeCalls;
+    U8 headerCalls;
+} JxrSecondaryPlaneInitializerTestContext;
+
+static JxrSecondaryPlaneInitializerTestContext* g_secondary_plane_initializer_test;
+
+static Void initialize_secondary_plane_test_codec(CWMImageStrCodec* codec,
+    const CCoreParameters* parameters, const CWMImageStrCodec* templateCodec)
+{
+    UNREFERENCED_PARAMETER(parameters);
+    UNREFERENCED_PARAMETER(templateCodec);
+    g_secondary_plane_initializer_test->initializeCalls++;
+    codec->cmbWidth = 2;
+}
+
+static Int read_secondary_plane_test_header(CWMImageInfo* imageInfo,
+    CWMIStrCodecParam* codecParameters, CCoreParameters* coreParameters,
+    SimpleBitIO* bitInput)
+{
+    UNREFERENCED_PARAMETER(imageInfo);
+    UNREFERENCED_PARAMETER(codecParameters);
+    UNREFERENCED_PARAMETER(coreParameters);
+    UNREFERENCED_PARAMETER(bitInput);
+    g_secondary_plane_initializer_test->headerCalls++;
+    return g_secondary_plane_initializer_test->headerResult;
+}
+
+static int test_secondary_plane_initializer_vectors(void)
+{
+    U8 data[1] = { 0 };
+    struct WMPStream* stream = NULL;
+    CWMImageStrCodec primaryCodec, templateCodec, *secondaryCodec = NULL;
+    CCoreParameters parameters;
+    BitIOInfo headerBitIO;
+    JxrSecondaryPlaneInitializer initializer;
+    JxrSecondaryPlaneInitializerTestContext context;
+    CWMDecoderParameters decoderParameters;
+    if (CreateWS_Memory(&stream, data, sizeof(data)) != WMP_errSuccess) return 0;
+    memset(&primaryCodec, 0, sizeof(primaryCodec));
+    memset(&templateCodec, 0, sizeof(templateCodec));
+    memset(&parameters, 0, sizeof(parameters));
+    memset(&headerBitIO, 0, sizeof(headerBitIO));
+    memset(&decoderParameters, 0, sizeof(decoderParameters));
+    memset(&context, 0, sizeof(context));
+    primaryCodec.WMISCP.pWStream = stream;
+    primaryCodec.m_Dparam = &decoderParameters;
+    primaryCodec.pIOHeader = &headerBitIO;
+    g_secondary_plane_initializer_test = &context;
+    JxrSecondaryPlaneInitializerInit(&initializer, &primaryCodec, &parameters,
+        &templateCodec, 2, 2, initialize_secondary_plane_test_codec,
+        read_secondary_plane_test_header);
+    if (JxrSecondaryPlaneInitializerRun(&initializer, &secondaryCodec) != ICERR_OK ||
+        secondaryCodec == NULL || context.initializeCalls != 1 || context.headerCalls != 1 ||
+        secondaryCodec->m_Dparam != &decoderParameters || secondaryCodec->cbChannel != 2 ||
+        secondaryCodec->m_param.cfColorFormat != Y_ONLY ||
+        secondaryCodec->m_param.cNumChannels != 1 || !secondaryCodec->m_param.bAlphaChannel ||
+        secondaryCodec->a0MBbuffer[0] == NULL || secondaryCodec->a1MBbuffer[0] == NULL ||
+        secondaryCodec->pIOHeader != &headerBitIO || secondaryCodec->m_pNextSC != &primaryCodec ||
+        !secondaryCodec->m_bSecondary) {
+        free(secondaryCodec);
+        CloseWS_Memory(&stream);
+        return 0;
+    }
+    free(secondaryCodec);
+    secondaryCodec = NULL;
+    context.headerResult = ICERR_ERROR;
+    JxrSecondaryPlaneInitializerInit(&initializer, &primaryCodec, &parameters,
+        &templateCodec, 2, 2, initialize_secondary_plane_test_codec,
+        read_secondary_plane_test_header);
+    if (JxrSecondaryPlaneInitializerRun(&initializer, &secondaryCodec) != ICERR_ERROR ||
+        secondaryCodec != NULL || context.initializeCalls != 2 || context.headerCalls != 2) {
+        CloseWS_Memory(&stream);
+        return 0;
+    }
+    JxrSecondaryPlaneInitializerInit(&initializer, NULL, &parameters, &templateCodec, 2, 2,
+        initialize_secondary_plane_test_codec, read_secondary_plane_test_header);
+    return JxrSecondaryPlaneInitializerRun(&initializer, &secondaryCodec) == ICERR_ERROR &&
+        CloseWS_Memory(&stream) == WMP_errSuccess;
 }
 
 static int test_image_plane_descriptor_reader_vectors(void)
@@ -2785,6 +2868,7 @@ int main(int argc, char** argv)
         { "header_metadata_finalizer_vectors", test_header_metadata_finalizer_vectors },
         { "header_decode_pipeline_vectors", test_header_decode_pipeline_vectors },
         { "decoder_initialization_pipeline_vectors", test_decoder_initialization_pipeline_vectors },
+        { "secondary_plane_initializer_vectors", test_secondary_plane_initializer_vectors },
         { "image_plane_descriptor_reader_vectors", test_image_plane_descriptor_reader_vectors },
         { "image_plane_quantizer_header_reader_vectors", test_image_plane_quantizer_header_reader_vectors },
         { "decoder_dc_quantizer_header_applier_vectors", test_decoder_dc_quantizer_header_applier_vectors },

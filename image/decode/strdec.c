@@ -40,6 +40,7 @@
 #include "JxrHeaderMetadataFinalizer.h"
 #include "JxrHeaderDecodePipeline.h"
 #include "JxrDecoderInitializationPipeline.h"
+#include "JxrSecondaryPlaneInitializer.h"
 #include "JxrDecoderDcQuantizerHeaderApplier.h"
 #include "JxrDecoderLpQuantizerHeaderApplier.h"
 #include "JxrDecoderHpQuantizerHeaderApplier.h"
@@ -2814,6 +2815,18 @@ static Void InitializeStrDec(CWMImageStrCodec *pSC,
     pSC->m_bSecondary = FALSE;
 }
 
+static Void JxrLegacySecondaryPlaneInitializeCodec(CWMImageStrCodec* codec,
+    const CCoreParameters* parameters, const CWMImageStrCodec* templateCodec)
+{
+    InitializeStrDec(codec, parameters, templateCodec);
+}
+
+static Int JxrLegacySecondaryPlaneReadHeader(CWMImageInfo* imageInfo,
+    CWMIStrCodecParam* codecParameters, CCoreParameters* coreParameters,
+    SimpleBitIO* bitInput)
+{
+    return ReadImagePlaneHeader(imageInfo, codecParameters, coreParameters, bitInput);
+}
 /*************************************************************************
   ImageStrDecInit
 *************************************************************************/
@@ -2823,8 +2836,6 @@ Int ImageStrDecInit(
     CTXSTRCODEC* pctxSC)
 {
     static size_t cbChannels[BD_MAX] = {2, 4};
-    ERR err = WMP_errSuccess;
-
     size_t cbChannel = 0, cblkChroma = 0;
     size_t cbMacBlockStride = 0, cbMacBlockChroma = 0, cMacBlock = 0;
 
@@ -2925,58 +2936,19 @@ Int ImageStrDecInit(
     pb = (char*)ALIGNUP(pb, PACKETLENGTH * 4) + PACKETLENGTH * 2;
     pSC->pIOHeader = (BitIOInfo*)pb; pb += sizeof(*pSC->pIOHeader);
 
-    // if interleaved alpha is needed
+    // Create and read the alpha plane before the shared decoder initialization pipeline.
     if (pSC->m_param.bAlphaChannel) {
-        SimpleBitIO SB = {0};
-        cbMacBlockStride = cbChannel * 16 * 16;
-
-        // 1. allocate new pNextSC info
-        //================================================
-        cb = sizeof(*pNextSC) + (128 - 1) + cbMacBlockStride * cMacBlock * 2;
-        // if primary image is safe to allocate, alpha channel is certainly safe
-        pb = malloc(cb);
-        if(pb == NULL)
-            return WMP_errOutOfMemory;
-        memset(pb, 0, cb);
-        //================================================
-        pNextSC = (CWMImageStrCodec*)pb; pb += sizeof(*pNextSC);
-
-        // read plane header of second image plane
-        Call(attach_SB(&SB, pSCP->pWStream));
-        InitializeStrDec(pNextSC, &SC.m_param, &SC);
-        ReadImagePlaneHeader(&pNextSC->WMII, &pNextSC->WMISCP, &pNextSC->m_param, &SB);
-        detach_SB(&SB);
-
-        // 2. initialize pNextSC
-        if(pNextSC == NULL)
-            return ICERR_ERROR;
-        pNextSC->m_Dparam = pSC->m_Dparam;
-        pNextSC->cbChannel = cbChannel;
-        //================================================
-
-        // 3. initialize arrays
-//        InitializeStrDec(pNextSC, &SC.m_param, &SC);
-        pNextSC->m_param.cfColorFormat = Y_ONLY;
-        pNextSC->m_param.cNumChannels = 1;
-        pNextSC->m_param.bAlphaChannel = TRUE;
-        //================================================
-
-        // 2 Macro Row buffers for each channel
-        pb = ALIGNUP(pb, 128);
-        pNextSC->a0MBbuffer[0] = (PixelI*)pb; pb += cbMacBlockStride * pNextSC->cmbWidth;
-        pNextSC->a1MBbuffer[0] = (PixelI*)pb;
-        //================================================
-        pNextSC->pIOHeader = pSC->pIOHeader;
-        //================================================
-
-        // 4. link pSC->pNextSC = pNextSC
-        pNextSC->m_pNextSC = pSC;
-        pNextSC->m_bSecondary = TRUE;
-
+        JxrSecondaryPlaneInitializer secondaryInitializer;
+        Int secondaryResult;
+        JxrSecondaryPlaneInitializerInit(&secondaryInitializer, pSC, &SC.m_param, &SC,
+            cbChannel, cMacBlock, JxrLegacySecondaryPlaneInitializeCodec,
+            JxrLegacySecondaryPlaneReadHeader);
+        secondaryResult = JxrSecondaryPlaneInitializerRun(&secondaryInitializer, &pNextSC);
+        if (secondaryResult != ICERR_OK)
+            return secondaryResult;
     }
     else
         pSC->WMISCP.uAlphaMode = 0;
-
     //================================================
     {
         JxrDecoderInitializationPipeline initialization;
@@ -2998,8 +2970,7 @@ Int ImageStrDecInit(
 
     PERFTIMER_STOP(pSC->m_fMeasurePerf, pSC->m_ptEncDecPerf);
 
-Cleanup:
-    return WMP_errSuccess == err ? ICERR_OK : ICERR_ERROR;
+    return ICERR_OK;
 }
 
 Int ImageStrDecDecode(
