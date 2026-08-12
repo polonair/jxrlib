@@ -198,6 +198,7 @@
     <ClCompile Include="..\decode\JxrImagePlaneQuantizerHeaderReader.c" />
     <ClCompile Include="..\decode\JxrImagePlaneDescriptorReader.c" />
     <ClCompile Include="..\decode\JxrMainHeaderReader.c" />
+    <ClCompile Include="..\decode\JxrHeaderStateApplier.c" />
     <ClCompile Include="..\decode\JxrInverseColorTransform.c" />
     <ClCompile Include="..\decode\JxrSampleClipping.c" />
     <ClCompile Include="..\decode\JxrFloatSampleConversion.c" />

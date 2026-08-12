@@ -33,6 +33,7 @@
 #include "JxrImagePlaneQuantizerHeaderReader.h"
 #include "JxrImagePlaneDescriptorReader.h"
 #include "JxrMainHeaderReader.h"
+#include "JxrHeaderStateApplier.h"
 #include "JxrDecoderDcQuantizerHeaderApplier.h"
 #include "JxrDecoderLpQuantizerHeaderApplier.h"
 #include "JxrDecoderHpQuantizerHeaderApplier.h"
@@ -92,14 +93,6 @@ U8 readQuantizerSB(U8 pQPIndex[MAX_CHANNELS], SimpleBitIO * pIO, size_t cChannel
 // packet header: 00000000 00000000 00000001 ?????xxx
 // xxx:           000(spatial) 001(DC) 010(AD) 011(AC) 100(FL) 101-111(reserved)
 // ?????:         (iTileY * cNumOfSliceV + iTileX) % 32
-static Void applyImagePlaneQuantizer(U8 destination[MAX_CHANNELS], const U8 source[MAX_CHANNELS], U8 mode, size_t channelCount)
-{
-    size_t channel;
-    destination[0] = source[0];
-    if (mode == 1) destination[1] = source[1];
-    else if (mode > 0)
-        for (channel = 1; channel < channelCount; ++channel) destination[channel] = source[channel];
-}
 Int readPacketHeader(BitIOInfo * pIO, U8 ptPacketType, U8 pID)
 {
     JxrDecoderBitSource source;
@@ -2675,35 +2668,15 @@ Int ReadImagePlaneHeader(CWMImageInfo* pII, CWMIStrCodecParam *pSCP,
         JxrImagePlaneDescriptor descriptor;
         if (!JxrImagePlaneDescriptorReaderRead(pSB, pII->bdBitDepth, &descriptor))
             return ICERR_ERROR;
-        pSC->cfColorFormat = descriptor.colorFormat;
-        pSCP->cfColorFormat = descriptor.colorFormat;
-        pSC->bScaledArith = descriptor.scaledArithmetic;
-        pSCP->sbSubband = descriptor.subband;
-        pSC->cNumChannels = descriptor.channelCount;
-        if (descriptor.hasChromaCenteringX)
-            pII->cChromaCenteringX = descriptor.chromaCenteringX;
-        if (descriptor.hasChromaCenteringY)
-            pII->cChromaCenteringY = descriptor.chromaCenteringY;
-        if (descriptor.hasSampleConversion) {
-            pSCP->nLenMantissaOrShift = descriptor.mantissaOrShift;
-            if (pII->bdBitDepth == BD_32F)
-                pSCP->nExpBias = descriptor.exponentBias;
-        }
+        if (!JxrHeaderStateApplierApplyImagePlane(&descriptor, pII, pSCP, pSC))
+            return ICERR_ERROR;
     }    {
         JxrImagePlaneQuantizerHeader quantizers;
         if (!JxrImagePlaneQuantizerHeaderReaderRead(pSB, pSC->cNumChannels,
             pSCP->sbSubband, &quantizers))
             return ICERR_ERROR;
-        pSC->uQPMode = quantizers.quantizerMode;
-        if (quantizers.hasDc)
-            applyImagePlaneQuantizer(pSC->uiQPIndexDC, quantizers.dcIndices,
-                quantizers.dcMode, pSC->cNumChannels);
-        if (quantizers.hasLp)
-            applyImagePlaneQuantizer(pSC->uiQPIndexLP, quantizers.lpIndices,
-                quantizers.lpMode, pSC->cNumChannels);
-        if (quantizers.hasHp)
-            applyImagePlaneQuantizer(pSC->uiQPIndexHP, quantizers.hpIndices,
-                quantizers.hpMode, pSC->cNumChannels);
+        if (!JxrHeaderStateApplierApplyImagePlaneQuantizers(&quantizers, pSC))
+            return ICERR_ERROR;
     }
 FailIf((pSC->uQPMode & 0x600) == 0, WMP_errInvalidParameter); // frame level QPs must be specified independently!
 
@@ -2746,32 +2719,8 @@ Int ReadWMIHeader(
         JxrMainHeaderDescriptor header;
         if (!JxrMainHeaderReaderRead(pSB, &header))
             return ICERR_ERROR;
-        pSC->cVersion = header.codecVersion;
-        pSC->cSubVersion = header.codecSubVersion;
-        pSC->bUseHardTileBoundaries = header.useHardTileBoundaries;
-        pSCP->bUseHardTileBoundaries = header.useHardTileBoundaries;
-        pSCP->bfBitstreamFormat = header.bitstreamFormat;
-        pII->oOrientation = header.orientation;
-        pSC->bIndexTable = header.hasIndexTable;
-        pSCP->olOverlap = header.overlap;
-        pSCP->bdBitDepth = BD_LONG;
-        pSC->bTrimFlexbitsFlag = header.trimFlexbits;
-        pSC->bRBSwapped = header.redBlueSwapped;
-        pSC->bAlphaChannel = header.hasAlphaChannel;
-        pII->cfColorFormat = header.sourceColorFormat;
-        pII->bdBitDepth = header.sourceBitDepth;
-        if (header.blackWhite)
-            pSCP->bBlackWhite = 1;
-        pII->cWidth = header.width;
-        pII->cHeight = header.height;
-        pSC->cExtraPixelsTop = header.extraPixelsTop;
-        pSC->cExtraPixelsLeft = header.extraPixelsLeft;
-        pSC->cExtraPixelsBottom = header.extraPixelsBottom;
-        pSC->cExtraPixelsRight = header.extraPixelsRight;
-        pSCP->cNumOfSliceMinus1V = header.verticalSliceCountMinusOne;
-        pSCP->cNumOfSliceMinus1H = header.horizontalSliceCountMinusOne;
-        memcpy(pSCP->uiTileX, header.tileX, sizeof(header.tileX));
-        memcpy(pSCP->uiTileY, header.tileY, sizeof(header.tileY));
+        if (!JxrHeaderStateApplierApplyMain(&header, pII, pSCP, pSC))
+            return ICERR_ERROR;
     }
 
     flushToByte_SB(pSB);  // redundant

@@ -45,6 +45,7 @@
 #include "JxrImagePlaneQuantizerHeaderReader.h"
 #include "JxrImagePlaneDescriptorReader.h"
 #include "JxrMainHeaderReader.h"
+#include "JxrHeaderStateApplier.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -735,6 +736,74 @@ static int test_main_header_reader_vectors(void)
         header.sourceBitDepth == BD_32F && header.width == 32 && header.height == 16 &&
         header.verticalSliceCountMinusOne == 1 && header.horizontalSliceCountMinusOne == 1 &&
         header.tileX[1] == 3 && header.tileY[1] == 5;
+}
+
+static int test_header_state_applier_vectors(void)
+{
+    JxrMainHeaderDescriptor mainHeader;
+    JxrImagePlaneDescriptor plane;
+    JxrImagePlaneQuantizerHeader quantizers;
+    CWMImageInfo imageInfo;
+    CWMIStrCodecParam codecParameters;
+    CCoreParameters coreParameters;
+
+    memset(&mainHeader, 0, sizeof(mainHeader));
+    memset(&plane, 0, sizeof(plane));
+    memset(&quantizers, 0, sizeof(quantizers));
+    memset(&imageInfo, 0, sizeof(imageInfo));
+    memset(&codecParameters, 0, sizeof(codecParameters));
+    memset(&coreParameters, 0, sizeof(coreParameters));
+
+    mainHeader.codecVersion = CODEC_VERSION;
+    mainHeader.codecSubVersion = CODEC_SUBVERSION_NEWSCALING_HARD_TILES;
+    mainHeader.useHardTileBoundaries = TRUE;
+    mainHeader.bitstreamFormat = SPATIAL;
+    mainHeader.orientation = O_RCW;
+    mainHeader.hasIndexTable = TRUE;
+    mainHeader.overlap = OL_ONE;
+    mainHeader.trimFlexbits = TRUE;
+    mainHeader.redBlueSwapped = TRUE;
+    mainHeader.hasAlphaChannel = TRUE;
+    mainHeader.sourceColorFormat = CF_RGB;
+    mainHeader.sourceBitDepth = BD_32F;
+    mainHeader.blackWhite = TRUE;
+    mainHeader.width = 334; mainHeader.height = 330;
+    mainHeader.extraPixelsRight = 2; mainHeader.extraPixelsBottom = 6;
+    mainHeader.verticalSliceCountMinusOne = 1; mainHeader.horizontalSliceCountMinusOne = 1;
+    mainHeader.tileX[1] = 7; mainHeader.tileY[1] = 9;
+    if (!JxrHeaderStateApplierApplyMain(&mainHeader, &imageInfo, &codecParameters,
+        &coreParameters) || coreParameters.cVersion != CODEC_VERSION ||
+        !coreParameters.bUseHardTileBoundaries || !codecParameters.bUseHardTileBoundaries ||
+        codecParameters.bfBitstreamFormat != SPATIAL || imageInfo.oOrientation != O_RCW ||
+        !coreParameters.bIndexTable || codecParameters.olOverlap != OL_ONE ||
+        codecParameters.bdBitDepth != BD_LONG || !coreParameters.bTrimFlexbitsFlag ||
+        !coreParameters.bRBSwapped || !coreParameters.bAlphaChannel ||
+        imageInfo.cfColorFormat != CF_RGB || imageInfo.bdBitDepth != BD_32F ||
+        !codecParameters.bBlackWhite || imageInfo.cWidth != 334 || imageInfo.cHeight != 330 ||
+        coreParameters.cExtraPixelsRight != 2 || coreParameters.cExtraPixelsBottom != 6 ||
+        codecParameters.uiTileX[1] != 7 || codecParameters.uiTileY[1] != 9) return 0;
+
+    plane.colorFormat = YUV_420; plane.scaledArithmetic = TRUE; plane.subband = SB_ALL;
+    plane.channelCount = 3; plane.hasChromaCenteringX = plane.hasChromaCenteringY = TRUE;
+    plane.chromaCenteringX = 4; plane.chromaCenteringY = 2;
+    plane.hasSampleConversion = TRUE; plane.mantissaOrShift = 13; plane.exponentBias = -126;
+    if (!JxrHeaderStateApplierApplyImagePlane(&plane, &imageInfo, &codecParameters,
+        &coreParameters) || coreParameters.cfColorFormat != YUV_420 ||
+        !coreParameters.bScaledArith || codecParameters.sbSubband != SB_ALL ||
+        coreParameters.cNumChannels != 3 || imageInfo.cChromaCenteringX != 4 ||
+        imageInfo.cChromaCenteringY != 2 || codecParameters.nLenMantissaOrShift != 13 ||
+        codecParameters.nExpBias != -126) return 0;
+
+    quantizers.quantizerMode = 0x720; quantizers.hasDc = quantizers.hasLp = quantizers.hasHp = TRUE;
+    quantizers.dcMode = 0; quantizers.lpMode = 1; quantizers.hpMode = 2;
+    quantizers.dcIndices[0] = 7; quantizers.lpIndices[0] = 8; quantizers.lpIndices[1] = 9;
+    quantizers.hpIndices[0] = 10; quantizers.hpIndices[1] = 11; quantizers.hpIndices[2] = 12;
+    if (!JxrHeaderStateApplierApplyImagePlaneQuantizers(&quantizers, &coreParameters) ||
+        coreParameters.uQPMode != 0x720 || coreParameters.uiQPIndexDC[0] != 7 ||
+        coreParameters.uiQPIndexLP[1] != 9 || coreParameters.uiQPIndexHP[2] != 12) return 0;
+    return !JxrHeaderStateApplierApplyMain(NULL, &imageInfo, &codecParameters, &coreParameters) &&
+        !JxrHeaderStateApplierApplyImagePlane(&plane, NULL, &codecParameters, &coreParameters) &&
+        !JxrHeaderStateApplierApplyImagePlaneQuantizers(NULL, &coreParameters);
 }
 
 static int test_image_plane_descriptor_reader_vectors(void)
@@ -2537,6 +2606,7 @@ int main(int argc, char** argv)
         { "transcode_roi_geometry_vectors", test_transcode_roi_geometry_vectors },
         { "decoder_tile_quantizer_syntax_vectors", test_decoder_tile_quantizer_syntax_vectors },
         { "main_header_reader_vectors", test_main_header_reader_vectors },
+        { "header_state_applier_vectors", test_header_state_applier_vectors },
         { "image_plane_descriptor_reader_vectors", test_image_plane_descriptor_reader_vectors },
         { "image_plane_quantizer_header_reader_vectors", test_image_plane_quantizer_header_reader_vectors },
         { "decoder_dc_quantizer_header_applier_vectors", test_decoder_dc_quantizer_header_applier_vectors },
