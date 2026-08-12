@@ -51,6 +51,7 @@
 #include "JxrStreamPositionScope.h"
 #include "JxrHeaderMetadataFinalizer.h"
 #include "JxrHeaderDecodePipeline.h"
+#include "JxrDecoderInitializationPipeline.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -926,6 +927,55 @@ static int test_header_decode_pipeline_vectors(void)
         CloseWS_Memory(&stream) == WMP_errSuccess &&
         !JxrHeaderDecodePipelineRead(NULL, NULL, NULL) &&
         !JxrHeaderDecodePipelineReadImagePlane(NULL, NULL, NULL, NULL);
+}
+
+typedef struct JxrDecoderInitializationPipelineTestContext {
+    Int ioResult;
+    Int decoderResult;
+    U8 callOrder[3];
+    U8 callCount;
+} JxrDecoderInitializationPipelineTestContext;
+
+static JxrDecoderInitializationPipelineTestContext* g_decoder_initialization_test;
+
+static Int initialize_pipeline_test_io(CWMImageStrCodec* codec)
+{
+    UNREFERENCED_PARAMETER(codec);
+    g_decoder_initialization_test->callOrder[g_decoder_initialization_test->callCount++] = 1;
+    return g_decoder_initialization_test->ioResult;
+}
+
+static Int initialize_pipeline_test_decoder(CWMImageStrCodec* codec)
+{
+    UNREFERENCED_PARAMETER(codec);
+    g_decoder_initialization_test->callOrder[g_decoder_initialization_test->callCount++] = 2;
+    return g_decoder_initialization_test->decoderResult;
+}
+
+static int test_decoder_initialization_pipeline_vectors(void)
+{
+    CWMImageStrCodec primaryCodec, secondaryCodec;
+    JxrDecoderInitializationPipeline pipeline;
+    JxrDecoderInitializationPipelineTestContext context;
+    memset(&primaryCodec, 0, sizeof(primaryCodec));
+    memset(&secondaryCodec, 0, sizeof(secondaryCodec));
+    memset(&context, 0, sizeof(context));
+    g_decoder_initialization_test = &context;
+    JxrDecoderInitializationPipelineInit(&pipeline, &primaryCodec, &secondaryCodec,
+        initialize_pipeline_test_io, initialize_pipeline_test_decoder);
+    if (JxrDecoderInitializationPipelineRun(&pipeline) != ICERR_OK || context.callCount != 3 ||
+        context.callOrder[0] != 1 || context.callOrder[1] != 2 ||
+        context.callOrder[2] != 2 || primaryCodec.m_pNextSC != &secondaryCodec) return 0;
+    memset(&primaryCodec, 0, sizeof(primaryCodec));
+    memset(&context, 0, sizeof(context));
+    context.ioResult = ICERR_ERROR;
+    JxrDecoderInitializationPipelineInit(&pipeline, &primaryCodec, NULL,
+        initialize_pipeline_test_io, initialize_pipeline_test_decoder);
+    if (JxrDecoderInitializationPipelineRun(&pipeline) != ICERR_ERROR || context.callCount != 1 ||
+        primaryCodec.m_pNextSC != NULL) return 0;
+    JxrDecoderInitializationPipelineInit(&pipeline, NULL, NULL,
+        initialize_pipeline_test_io, initialize_pipeline_test_decoder);
+    return JxrDecoderInitializationPipelineRun(&pipeline) == ICERR_ERROR;
 }
 
 static int test_image_plane_descriptor_reader_vectors(void)
@@ -2734,6 +2784,7 @@ int main(int argc, char** argv)
         { "stream_position_scope_vectors", test_stream_position_scope_vectors },
         { "header_metadata_finalizer_vectors", test_header_metadata_finalizer_vectors },
         { "header_decode_pipeline_vectors", test_header_decode_pipeline_vectors },
+        { "decoder_initialization_pipeline_vectors", test_decoder_initialization_pipeline_vectors },
         { "image_plane_descriptor_reader_vectors", test_image_plane_descriptor_reader_vectors },
         { "image_plane_quantizer_header_reader_vectors", test_image_plane_quantizer_header_reader_vectors },
         { "decoder_dc_quantizer_header_applier_vectors", test_decoder_dc_quantizer_header_applier_vectors },

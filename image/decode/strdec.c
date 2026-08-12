@@ -39,6 +39,7 @@
 #include "JxrStreamPositionScope.h"
 #include "JxrHeaderMetadataFinalizer.h"
 #include "JxrHeaderDecodePipeline.h"
+#include "JxrDecoderInitializationPipeline.h"
 #include "JxrDecoderDcQuantizerHeaderApplier.h"
 #include "JxrDecoderLpQuantizerHeaderApplier.h"
 #include "JxrDecoderHpQuantizerHeaderApplier.h"
@@ -2977,14 +2978,13 @@ Int ImageStrDecInit(
         pSC->WMISCP.uAlphaMode = 0;
 
     //================================================
-    FailIf((StrIODecInit(pSC) != ICERR_OK), WMP_errOutOfMemory);
-    FailIf((StrDecInit(pSC) != ICERR_OK), WMP_errOutOfMemory);
-    if (pNextSC) {
-        // 5. StrEncInit
-        FailIf((StrDecInit(pNextSC) != ICERR_OK), WMP_errOutOfMemory);
+    {
+        JxrDecoderInitializationPipeline initialization;
+        JxrDecoderInitializationPipelineInit(&initialization, pSC, pNextSC,
+            StrIODecInit, StrDecInit);
+        if (JxrDecoderInitializationPipelineRun(&initialization) != ICERR_OK)
+            return ICERR_ERROR;
     }
-
-    pSC->m_pNextSC = pNextSC;
     //================================================
     *pII = pSC->WMII;
     *pSCP = pSC->WMISCP;
