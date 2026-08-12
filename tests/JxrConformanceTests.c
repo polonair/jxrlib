@@ -46,6 +46,7 @@
 #include "JxrImagePlaneDescriptorReader.h"
 #include "JxrMainHeaderReader.h"
 #include "JxrHeaderStateApplier.h"
+#include "JxrHeaderValidation.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -804,6 +805,37 @@ static int test_header_state_applier_vectors(void)
     return !JxrHeaderStateApplierApplyMain(NULL, &imageInfo, &codecParameters, &coreParameters) &&
         !JxrHeaderStateApplierApplyImagePlane(&plane, NULL, &codecParameters, &coreParameters) &&
         !JxrHeaderStateApplierApplyImagePlaneQuantizers(NULL, &coreParameters);
+}
+
+static int test_header_validation_vectors(void)
+{
+    CCoreParameters coreParameters;
+    CWMImageInfo imageInfo;
+    CWMIStrCodecParam codecParameters;
+    memset(&coreParameters, 0, sizeof(coreParameters));
+    memset(&imageInfo, 0, sizeof(imageInfo));
+    memset(&codecParameters, 0, sizeof(codecParameters));
+    coreParameters.uQPMode = 0x600;
+    if (JxrHeaderValidationValidateImagePlaneQuantizers(&coreParameters) != JXR_HEADER_VALID)
+        return 0;
+    coreParameters.uQPMode = 0;
+    if (JxrHeaderValidationValidateImagePlaneQuantizers(&coreParameters) !=
+        JXR_HEADER_INVALID_QUANTIZER_MODE ||
+        JxrHeaderValidationValidateImagePlaneQuantizers(NULL) !=
+        JXR_HEADER_INVALID_QUANTIZER_MODE) return 0;
+
+    imageInfo.bdBitDepth = BD_5;
+    codecParameters.cfColorFormat = YUV_420;
+    if (JxrHeaderValidationValidateSourceFormat(&imageInfo, &codecParameters) !=
+        JXR_HEADER_VALID) return 0;
+    codecParameters.cfColorFormat = CMYK;
+    if (JxrHeaderValidationValidateSourceFormat(&imageInfo, &codecParameters) !=
+        JXR_HEADER_UNSUPPORTED_SOURCE_FORMAT) return 0;
+    imageInfo.bdBitDepth = BD_8;
+    if (JxrHeaderValidationValidateSourceFormat(&imageInfo, &codecParameters) !=
+        JXR_HEADER_VALID || JxrHeaderValidationValidateSourceFormat(NULL, &codecParameters) !=
+        JXR_HEADER_UNSUPPORTED_SOURCE_FORMAT) return 0;
+    return 1;
 }
 
 static int test_image_plane_descriptor_reader_vectors(void)
@@ -2607,6 +2639,7 @@ int main(int argc, char** argv)
         { "decoder_tile_quantizer_syntax_vectors", test_decoder_tile_quantizer_syntax_vectors },
         { "main_header_reader_vectors", test_main_header_reader_vectors },
         { "header_state_applier_vectors", test_header_state_applier_vectors },
+        { "header_validation_vectors", test_header_validation_vectors },
         { "image_plane_descriptor_reader_vectors", test_image_plane_descriptor_reader_vectors },
         { "image_plane_quantizer_header_reader_vectors", test_image_plane_quantizer_header_reader_vectors },
         { "decoder_dc_quantizer_header_applier_vectors", test_decoder_dc_quantizer_header_applier_vectors },

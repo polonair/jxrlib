@@ -34,6 +34,7 @@
 #include "JxrImagePlaneDescriptorReader.h"
 #include "JxrMainHeaderReader.h"
 #include "JxrHeaderStateApplier.h"
+#include "JxrHeaderValidation.h"
 #include "JxrDecoderDcQuantizerHeaderApplier.h"
 #include "JxrDecoderLpQuantizerHeaderApplier.h"
 #include "JxrDecoderHpQuantizerHeaderApplier.h"
@@ -2662,8 +2663,6 @@ Int StrDecTerm(CWMImageStrCodec* pSC)
 Int ReadImagePlaneHeader(CWMImageInfo* pII, CWMIStrCodecParam *pSCP,
     CCoreParameters *pSC, SimpleBitIO* pSB)
 {
-    ERR err = WMP_errSuccess;
-
     {
         JxrImagePlaneDescriptor descriptor;
         if (!JxrImagePlaneDescriptorReaderRead(pSB, pII->bdBitDepth, &descriptor))
@@ -2678,12 +2677,12 @@ Int ReadImagePlaneHeader(CWMImageInfo* pII, CWMIStrCodecParam *pSCP,
         if (!JxrHeaderStateApplierApplyImagePlaneQuantizers(&quantizers, pSC))
             return ICERR_ERROR;
     }
-FailIf((pSC->uQPMode & 0x600) == 0, WMP_errInvalidParameter); // frame level QPs must be specified independently!
+    if (JxrHeaderValidationValidateImagePlaneQuantizers(pSC) != JXR_HEADER_VALID)
+        return ICERR_ERROR;
 
     flushToByte_SB(pSB);  // remove this later
 
-Cleanup:
-    return WMP_errSuccess == err ? ICERR_OK : ICERR_ERROR;
+    return ICERR_OK;
 }
 
 /*************************************************************************
@@ -2737,8 +2736,7 @@ Int ReadWMIHeader(
     pSCP->uAlphaMode = (pSC->bAlphaChannel ? pSCP->uAlphaMode : 0);
     pSCP->cChannel = pSC->cNumChannels;
 
-    if((pII->bdBitDepth == BD_5 || pII->bdBitDepth == BD_10 || pII->bdBitDepth == BD_565) && 
-        (pSCP->cfColorFormat != YUV_444 && pSCP->cfColorFormat != YUV_422 && pSCP->cfColorFormat != YUV_420 && pSCP->cfColorFormat != Y_ONLY))
+    if (JxrHeaderValidationValidateSourceFormat(pII, pSCP) != JXR_HEADER_VALID)
         return ICERR_ERROR;
     
 Cleanup:
