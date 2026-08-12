@@ -38,6 +38,7 @@
 #include "JxrHeaderStreamReader.h"
 #include "JxrStreamPositionScope.h"
 #include "JxrHeaderMetadataFinalizer.h"
+#include "JxrHeaderDecodePipeline.h"
 #include "JxrDecoderDcQuantizerHeaderApplier.h"
 #include "JxrDecoderLpQuantizerHeaderApplier.h"
 #include "JxrDecoderHpQuantizerHeaderApplier.h"
@@ -2666,28 +2667,9 @@ Int StrDecTerm(CWMImageStrCodec* pSC)
 Int ReadImagePlaneHeader(CWMImageInfo* pII, CWMIStrCodecParam *pSCP,
     CCoreParameters *pSC, SimpleBitIO* pSB)
 {
-    {
-        JxrImagePlaneDescriptor descriptor;
-        if (!JxrImagePlaneDescriptorReaderRead(pSB, pII->bdBitDepth, &descriptor))
-            return ICERR_ERROR;
-        if (!JxrHeaderStateApplierApplyImagePlane(&descriptor, pII, pSCP, pSC))
-            return ICERR_ERROR;
-    }    {
-        JxrImagePlaneQuantizerHeader quantizers;
-        if (!JxrImagePlaneQuantizerHeaderReaderRead(pSB, pSC->cNumChannels,
-            pSCP->sbSubband, &quantizers))
-            return ICERR_ERROR;
-        if (!JxrHeaderStateApplierApplyImagePlaneQuantizers(&quantizers, pSC))
-            return ICERR_ERROR;
-    }
-    if (JxrHeaderValidationValidateImagePlaneQuantizers(pSC) != JXR_HEADER_VALID)
-        return ICERR_ERROR;
-
-    flushToByte_SB(pSB);  // remove this later
-
-    return ICERR_OK;
+    return JxrHeaderDecodePipelineReadImagePlane(pII, pSCP, pSC, pSB) ?
+        ICERR_OK : ICERR_ERROR;
 }
-
 /*************************************************************************
     Read header of image, and header of FIRST PLANE only
 *************************************************************************/
@@ -2696,31 +2678,7 @@ Int ReadWMIHeader(
     CWMIStrCodecParam *pSCP,
     CCoreParameters *pSC)
 {
-    JxrHeaderStreamReader streamReader;
-    SimpleBitIO* bitInput;
-    U32 headerBytesRead;
-
-    if (pII == NULL || pSCP == NULL || pSC == NULL ||
-        !JxrHeaderStreamReaderOpen(&streamReader, pSCP->pWStream))
-        return ICERR_ERROR;
-    bitInput = JxrHeaderStreamReaderGetBitInput(&streamReader);
-    {
-        JxrMainHeaderDescriptor header;
-        if (!JxrMainHeaderReaderRead(bitInput, &header) ||
-            !JxrHeaderStateApplierApplyMain(&header, pII, pSCP, pSC)) {
-            JxrHeaderStreamReaderClose(&streamReader, &headerBytesRead);
-            return ICERR_ERROR;
-        }
-    }
-    if (!JxrHeaderStreamReaderAlignToByte(&streamReader) ||
-        ReadImagePlaneHeader(pII, pSCP, pSC, bitInput) != ICERR_OK ||
-        !JxrHeaderStreamReaderClose(&streamReader, &headerBytesRead))
-        return ICERR_ERROR;
-
-    if (!JxrHeaderMetadataFinalizerApply(headerBytesRead, pSC, pSCP))
-        return ICERR_ERROR;
-    return JxrHeaderValidationValidateSourceFormat(pII, pSCP) == JXR_HEADER_VALID ?
-        ICERR_OK : ICERR_ERROR;
+    return JxrHeaderDecodePipelineRead(pII, pSCP, pSC) ? ICERR_OK : ICERR_ERROR;
 }
 //----------------------------------------------------------------
 // streaming api init/decode/term

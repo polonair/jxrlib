@@ -50,6 +50,7 @@
 #include "JxrHeaderStreamReader.h"
 #include "JxrStreamPositionScope.h"
 #include "JxrHeaderMetadataFinalizer.h"
+#include "JxrHeaderDecodePipeline.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -907,6 +908,24 @@ static int test_header_metadata_finalizer_vectors(void)
         codecParameters.cChannel != 1) return 0;
     return !JxrHeaderMetadataFinalizerApply(1, NULL, &codecParameters) &&
         !JxrHeaderMetadataFinalizerApply(1, &coreParameters, NULL);
+}
+
+static int test_header_decode_pipeline_vectors(void)
+{
+    struct WMPStream* stream = NULL;
+    CWMImageInfo imageInfo;
+    CWMIStrCodecParam codecParameters;
+    CCoreParameters coreParameters;
+    U8 invalid[8] = { 'W', 'M', 'P', 'H', 'O', 'T', 'O', 1 };
+    if (CreateWS_Memory(&stream, invalid, sizeof(invalid)) != WMP_errSuccess) return 0;
+    memset(&imageInfo, 0, sizeof(imageInfo));
+    memset(&codecParameters, 0, sizeof(codecParameters));
+    memset(&coreParameters, 0, sizeof(coreParameters));
+    codecParameters.pWStream = stream;
+    return !JxrHeaderDecodePipelineRead(&imageInfo, &codecParameters, &coreParameters) &&
+        CloseWS_Memory(&stream) == WMP_errSuccess &&
+        !JxrHeaderDecodePipelineRead(NULL, NULL, NULL) &&
+        !JxrHeaderDecodePipelineReadImagePlane(NULL, NULL, NULL, NULL);
 }
 
 static int test_image_plane_descriptor_reader_vectors(void)
@@ -2714,6 +2733,7 @@ int main(int argc, char** argv)
         { "header_stream_reader_vectors", test_header_stream_reader_vectors },
         { "stream_position_scope_vectors", test_stream_position_scope_vectors },
         { "header_metadata_finalizer_vectors", test_header_metadata_finalizer_vectors },
+        { "header_decode_pipeline_vectors", test_header_decode_pipeline_vectors },
         { "image_plane_descriptor_reader_vectors", test_image_plane_descriptor_reader_vectors },
         { "image_plane_quantizer_header_reader_vectors", test_image_plane_quantizer_header_reader_vectors },
         { "decoder_dc_quantizer_header_applier_vectors", test_decoder_dc_quantizer_header_applier_vectors },
