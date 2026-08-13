@@ -34,6 +34,7 @@
 #include "JxrPostProcessSmoothing.h"
 #include "JxrPostProcessMacroblockAnalyzer.h"
 #include "JxrPostProcessBlockDcCollector.h"
+#include "JxrPostProcessMacroblockNeighborhood.h"
 
 Int initPostProc(struct tagPostProcInfo * strPostProcInfo[MAX_CHANNELS][2], size_t mbWidth, size_t iNumChannels)
 {
@@ -65,33 +66,35 @@ Void postProcMB(struct tagPostProcInfo * strPostProcInfo[MAX_CHANNELS][2], Pixel
     /* - - + +  */
     /*  c ! d   */
     /*    !     */
-    struct tagPostProcInfo * pMBb = strPostProcInfo[cc][0] + mbX, * pMBa = pMBb - 1, * pMBd = strPostProcInfo[cc][1] + mbX, * pMBc = pMBd - 1;
+    JxrPostProcessMacroblockNeighborhood macroblocks;
+
+    JxrPostProcessMacroblockNeighborhoodLoad(&macroblocks, strPostProcInfo, cc, mbX);
 
     // demacroblock segment --
-   if(JxrPostProcessShouldDemacroblock(pMBa, pMBc, threshold)){
+   if(JxrPostProcessShouldDemacroblock(macroblocks.topLeft, macroblocks.bottomLeft, threshold)){
         JxrPostProcessSmoothingApplyMacroblockEdge(p0 - 256 + 10 * 16, p0 - 256 + 11 * 16, p1 - 256 +  8 * 16, p1 - 256 +  9 * 16);
         JxrPostProcessSmoothingApplyMacroblockEdge(p0 - 256 + 14 * 16, p0 - 256 + 15 * 16, p1 - 256 + 12 * 16, p1 - 256 + 13 * 16);
     }
 
     // demacroblock segment ++
-    if(JxrPostProcessShouldDemacroblock(pMBb, pMBd, threshold)){
+    if(JxrPostProcessShouldDemacroblock(macroblocks.topRight, macroblocks.bottomRight, threshold)){
         JxrPostProcessSmoothingApplyMacroblockEdge(p0 + 2 * 16, p0 + 3 * 16, p1 + 0 * 16, p1 + 1 * 16);
         JxrPostProcessSmoothingApplyMacroblockEdge(p0 + 6 * 16, p0 + 7 * 16, p1 + 4 * 16, p1 + 5 * 16);
     }
 
     // demacroblock segment |
-    if(JxrPostProcessShouldDemacroblock(pMBa, pMBb, threshold)){
+    if(JxrPostProcessShouldDemacroblock(macroblocks.topLeft, macroblocks.topRight, threshold)){
         JxrPostProcessSmoothingApplyMacroblockEdge(p0 - 256 + 10 * 16, p0 - 256 + 14 * 16, p0 + 2 * 16, p0 + 6 * 16);
         JxrPostProcessSmoothingApplyMacroblockEdge(p0 - 256 + 11 * 16, p0 - 256 + 15 * 16, p0 + 3 * 16, p0 + 7 * 16);
     }
 
     // demacroblock segment !
-    if(JxrPostProcessShouldDemacroblock(pMBc, pMBd, threshold)){
+    if(JxrPostProcessShouldDemacroblock(macroblocks.bottomLeft, macroblocks.bottomRight, threshold)){
         JxrPostProcessSmoothingApplyMacroblockEdge(p1 - 256 + 8 * 16, p1 - 256 + 12 * 16, p1 + 0 * 16, p1 + 4 * 16);
         JxrPostProcessSmoothingApplyMacroblockEdge(p1 - 256 + 9 * 16, p1 - 256 + 13 * 16, p1 + 1 * 16, p1 + 5 * 16);
     }
 
-    JxrPostProcessBlockDcCollectorCollect(p0, p1, pMBa, pMBb, pMBc, pMBd);
+    JxrPostProcessBlockDcCollectorCollect(p0, p1, macroblocks.topLeft, macroblocks.topRight, macroblocks.bottomLeft, macroblocks.bottomRight);
 }
 
 /* deblock and destair blocks */
@@ -105,10 +108,12 @@ Void postProcBlock(struct tagPostProcInfo * strPostProcInfo[MAX_CHANNELS][2], Pi
 {
     size_t i, j, k;
     JxrPostProcessBlockNeighborhood neighborhood;
-    struct tagPostProcInfo * pMBb = strPostProcInfo[cc][0] + mbX, * pMBa = pMBb - 1, * pMBd = strPostProcInfo[cc][1] + mbX, * pMBc = pMBd - 1;
+    JxrPostProcessMacroblockNeighborhood macroblocks;
     PixelI * pc, * pt;
 
-    JxrPostProcessBlockNeighborhoodLoad(&neighborhood, pMBa, pMBb, pMBc, pMBd);
+    JxrPostProcessMacroblockNeighborhoodLoad(&macroblocks, strPostProcInfo, cc, mbX);
+
+    JxrPostProcessBlockNeighborhoodLoad(&neighborhood, macroblocks.topLeft, macroblocks.topRight, macroblocks.bottomLeft, macroblocks.bottomRight);
 
     /* block boundaries */
     /*     | */

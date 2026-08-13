@@ -60,6 +60,7 @@
 #include "JxrPostProcessSmoothing.h"
 #include "JxrPostProcessMacroblockAnalyzer.h"
 #include "JxrPostProcessBlockDcCollector.h"
+#include "JxrPostProcessMacroblockNeighborhood.h"
 #include "JxrSecondaryPlaneInitializer.h"
 #include "JxrPredictionMath.h"
 #include "JxrInverseTransformMath.h"
@@ -1740,6 +1741,32 @@ static int test_postprocess_block_dc_collector_vectors(void)
         macroblockA.iBlockDC[3][2] == 1176 && macroblockA.iBlockDC[3][3] == 1240;
 }
 
+static int test_postprocess_macroblock_neighborhood_vectors(void)
+{
+    struct tagPostProcInfo* rows[MAX_CHANNELS][2];
+    JxrPostProcessMacroblockNeighborhood neighborhood;
+    Bool isValid = TRUE;
+
+    memset(rows, 0, sizeof(rows));
+    if (JxrPostProcessRowStateInitialize(rows, 2, 1) != ICERR_OK) return 0;
+    rows[0][0][-1].iMBDC = 10;
+    rows[0][0][0].iMBDC = 11;
+    rows[0][0][1].iMBDC = 12;
+    rows[0][1][-1].iMBDC = 20;
+    rows[0][1][0].iMBDC = 21;
+    rows[0][1][1].iMBDC = 22;
+
+    JxrPostProcessMacroblockNeighborhoodLoad(&neighborhood, rows, 0, 1);
+    if (neighborhood.topLeft->iMBDC != 11 || neighborhood.topRight->iMBDC != 12 ||
+        neighborhood.bottomLeft->iMBDC != 21 || neighborhood.bottomRight->iMBDC != 22) isValid = FALSE;
+    JxrPostProcessMacroblockNeighborhoodLoad(&neighborhood, rows, 0, 0);
+    if (neighborhood.topLeft->iMBDC != 10 || neighborhood.topRight->iMBDC != 11 ||
+        neighborhood.bottomLeft->iMBDC != 20 || neighborhood.bottomRight->iMBDC != 21) isValid = FALSE;
+
+    JxrPostProcessRowStateRelease(rows, 1);
+    return isValid;
+}
+
 static int test_sample_clipping_vectors(void)
 {
     return JxrSampleClippingClamp(-2, 0, 31) == 0 &&
@@ -3180,6 +3207,7 @@ int main(int argc, char** argv)
         { "postprocess_smoothing_vectors", test_postprocess_smoothing_vectors },
         { "postprocess_macroblock_analyzer_vectors", test_postprocess_macroblock_analyzer_vectors },
         { "postprocess_block_dc_collector_vectors", test_postprocess_block_dc_collector_vectors },
+        { "postprocess_macroblock_neighborhood_vectors", test_postprocess_macroblock_neighborhood_vectors },
         { "sample_clipping_vectors", test_sample_clipping_vectors },
         { "float_sample_conversion_vectors", test_float_sample_conversion_vectors },
         { "monochrome_expansion_vectors", test_monochrome_expansion_vectors },
