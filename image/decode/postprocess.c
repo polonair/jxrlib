@@ -35,6 +35,7 @@
 #include "JxrPostProcessMacroblockAnalyzer.h"
 #include "JxrPostProcessBlockDcCollector.h"
 #include "JxrPostProcessMacroblockNeighborhood.h"
+#include "JxrPostProcessBlockEdgeApplier.h"
 
 Int initPostProc(struct tagPostProcInfo * strPostProcInfo[MAX_CHANNELS][2], size_t mbWidth, size_t iNumChannels)
 {
@@ -106,10 +107,9 @@ Void postProcMB(struct tagPostProcInfo * strPostProcInfo[MAX_CHANNELS][2], Pixel
 /*    |     */
 Void postProcBlock(struct tagPostProcInfo * strPostProcInfo[MAX_CHANNELS][2], PixelI * p0, PixelI * p1, size_t mbX, size_t cc, Int threshold)
 {
-    size_t i, j, k;
+    size_t i, j;
     JxrPostProcessBlockNeighborhood neighborhood;
     JxrPostProcessMacroblockNeighborhood macroblocks;
-    PixelI * pc, * pt;
 
     JxrPostProcessMacroblockNeighborhoodLoad(&macroblocks, strPostProcInfo, cc, mbX);
 
@@ -122,24 +122,12 @@ Void postProcBlock(struct tagPostProcInfo * strPostProcInfo[MAX_CHANNELS][2], Pi
 
     for(j = 0; j < 4; j ++){
         for(i = 0; i < 4; i ++){
-            pc = p0 - 256 + i * 64 + j * 16;
-
-            // deblock
             if(JxrPostProcessBlockNeighborhoodShouldSmoothHorizontal(&neighborhood, j, i, threshold)){
-                // smooth horizontal boundary ----
-                pt = (j < 3 ? pc + 16 : p1 - 256 + i * 64);
-                for(k = 0; k < 4; k ++){
-                    JxrPostProcessSmoothingApplyBlockEdge(pc + idxCC[1][k], pc + idxCC[2][k], pc + idxCC[3][k], pt + idxCC[0][k], pt + idxCC[1][k], pt + idxCC[2][k]);
-                }
+                JxrPostProcessBlockEdgeApplierApplyHorizontal(p0, p1, j, i);
             }
 
-            // two horizontally adjacent blocks have same texture and similiar DCs
             if(JxrPostProcessBlockNeighborhoodShouldSmoothVertical(&neighborhood, j, i, threshold)){
-                // smooth vertical boundary |
-                pt = pc + 64;
-                for(k = 0; k < 4; k ++){
-                    JxrPostProcessSmoothingApplyBlockEdge(pc + idxCC[k][1], pc + idxCC[k][2], pc + idxCC[k][3], pt + idxCC[k][0], pt + idxCC[k][1], pt + idxCC[k][2]);
-                }
+                JxrPostProcessBlockEdgeApplierApplyVertical(p0, j, i);
             }
         }
     }

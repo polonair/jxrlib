@@ -61,6 +61,7 @@
 #include "JxrPostProcessMacroblockAnalyzer.h"
 #include "JxrPostProcessBlockDcCollector.h"
 #include "JxrPostProcessMacroblockNeighborhood.h"
+#include "JxrPostProcessBlockEdgeApplier.h"
 #include "JxrSecondaryPlaneInitializer.h"
 #include "JxrPredictionMath.h"
 #include "JxrInverseTransformMath.h"
@@ -1767,6 +1768,26 @@ static int test_postprocess_macroblock_neighborhood_vectors(void)
     return isValid;
 }
 
+static int test_postprocess_block_edge_applier_vectors(void)
+{
+    PixelI samples[1024];
+    PixelI* previousRow = samples + 256;
+    PixelI* currentRow = samples + 512;
+    Int index;
+
+    for (index = 0; index < 1024; ++index) samples[index] = index;
+    JxrPostProcessBlockEdgeApplierApplyHorizontal(previousRow, currentRow, 0, 0);
+    if (samples[8] != 11 || samples[10] != 8 || samples[16] != 13 || samples[18] != 18) return 0;
+
+    for (index = 0; index < 1024; ++index) samples[index] = index;
+    JxrPostProcessBlockEdgeApplierApplyHorizontal(previousRow, currentRow, 3, 0);
+    if (samples[56] != 131 || samples[58] != 74 || samples[256] != 181 || samples[258] != 240) return 0;
+
+    for (index = 0; index < 1024; ++index) samples[index] = index;
+    JxrPostProcessBlockEdgeApplierApplyVertical(previousRow, 0, 0);
+    return samples[4] == 26 && samples[5] == 8 && samples[64] == 42 && samples[65] == 59;
+}
+
 static int test_sample_clipping_vectors(void)
 {
     return JxrSampleClippingClamp(-2, 0, 31) == 0 &&
@@ -3208,6 +3229,7 @@ int main(int argc, char** argv)
         { "postprocess_macroblock_analyzer_vectors", test_postprocess_macroblock_analyzer_vectors },
         { "postprocess_block_dc_collector_vectors", test_postprocess_block_dc_collector_vectors },
         { "postprocess_macroblock_neighborhood_vectors", test_postprocess_macroblock_neighborhood_vectors },
+        { "postprocess_block_edge_applier_vectors", test_postprocess_block_edge_applier_vectors },
         { "sample_clipping_vectors", test_sample_clipping_vectors },
         { "float_sample_conversion_vectors", test_float_sample_conversion_vectors },
         { "monochrome_expansion_vectors", test_monochrome_expansion_vectors },
