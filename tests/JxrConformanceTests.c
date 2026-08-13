@@ -54,6 +54,7 @@
 #include "JxrHeaderMetadataFinalizer.h"
 #include "JxrHeaderDecodePipeline.h"
 #include "JxrDecoderInitializationPipeline.h"
+#include "JxrPostProcessDecision.h"
 #include "JxrSecondaryPlaneInitializer.h"
 #include "JxrPredictionMath.h"
 #include "JxrInverseTransformMath.h"
@@ -1545,6 +1546,29 @@ static int test_inverse_color_transform_vectors(void)
     return cyan == 7 && magenta == 8 && yellow == -1 && black == -2;
 }
 
+static int test_postprocess_demacroblock_decision_vectors(void)
+{
+    struct tagPostProcInfo first;
+    struct tagPostProcInfo second;
+
+    memset(&first, 0, sizeof(first));
+    memset(&second, 0, sizeof(second));
+    first.iMBDC = 100;
+    second.iMBDC = 103;
+    if (!JxrPostProcessShouldDemacroblock(&first, &second, 3)) return 0;
+    if (!JxrPostProcessShouldDemacroblock(&second, &first, 3)) return 0;
+    if (JxrPostProcessShouldDemacroblock(&first, &second, 2)) return 0;
+
+    second.iMBDC = 100;
+    first.ucMBTexture = 1;
+    if (JxrPostProcessShouldDemacroblock(&first, &second, 0)) return 0;
+    first.ucMBTexture = 0;
+    second.ucMBTexture = 3;
+    if (JxrPostProcessShouldDemacroblock(&first, &second, 0)) return 0;
+    second.ucMBTexture = 0;
+    return !JxrPostProcessShouldDemacroblock(&first, &second, -1);
+}
+
 static int test_sample_clipping_vectors(void)
 {
     return JxrSampleClippingClamp(-2, 0, 31) == 0 &&
@@ -2967,6 +2991,7 @@ int main(int argc, char** argv)
         { "decoder_coding_context_resetter_vectors", test_decoder_coding_context_resetter_vectors },
         { "decoder_packet_row_reader_vectors", test_decoder_packet_row_reader_vectors },
         { "inverse_color_transform_vectors", test_inverse_color_transform_vectors },
+        { "postprocess_demacroblock_decision_vectors", test_postprocess_demacroblock_decision_vectors },
         { "sample_clipping_vectors", test_sample_clipping_vectors },
         { "float_sample_conversion_vectors", test_float_sample_conversion_vectors },
         { "monochrome_expansion_vectors", test_monochrome_expansion_vectors },
