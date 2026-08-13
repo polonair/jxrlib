@@ -277,15 +277,6 @@ Void strPost4_alternate(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
   ( 5)( 4)|( 0+64) (1+64) p1 ( 5)( 4)|(64)(65)
   ( 7)( 6)|( 2+64) (3+64)    ( 7)( 6)|(66)(67)
 *****************************************************************************************/
-int ClipDCL(int directCurrent, int alternateCurrent)
-{
-    if (directCurrent > 0 && alternateCurrent > 0)
-        return directCurrent < alternateCurrent ? directCurrent : alternateCurrent;
-    if (directCurrent < 0 && alternateCurrent < 0)
-        return directCurrent > alternateCurrent ? directCurrent : alternateCurrent;
-    return 0;
-}
-
 Void strPost4x4Stage1Split(PixelI *p0, PixelI *p1, Int iOffset, Int iHPQP, Bool bHPAbsent)
 {
     int iDCLAlt1, iDCLAlt2, iDCLAlt3, iDCLAlt0;
@@ -332,22 +323,22 @@ Void strPost4x4Stage1Split(PixelI *p0, PixelI *p1, Int iOffset, Int iHPQP, Bool 
     iDCL3 = (iTmp3 * 595 + 65536)>>17; 
     if (JxrInverseTransformMathShouldCompensateDc(iDCL0, iHPQP, bHPAbsent)) {
         iDCLAlt0 = (*(p0 +0) - *(p1 +0) - *(p2 +0) + *(p3 +0))>>1;
-        iDCL0 = ClipDCL (iDCL0, iDCLAlt0);
+        iDCL0 = JxrInverseTransformMathClipDcWithAlternate(iDCL0, iDCLAlt0);
         JxrInverseTransformMathApplyDcCompensation(p0 + 0, p2 + 0, p1 + 0, p3 + 0, iDCL0);
     }
     if (JxrInverseTransformMathShouldCompensateDc(iDCL1, iHPQP, bHPAbsent)) {
             iDCLAlt1 = (*(p0 +1) - *(p1 +1) - *(p2 +1) + *(p3 +1))>>1;
-            iDCL1 = ClipDCL (iDCL1, iDCLAlt1);
+            iDCL1 = JxrInverseTransformMathClipDcWithAlternate(iDCL1, iDCLAlt1);
         JxrInverseTransformMathApplyDcCompensation(p0 + 1, p2 + 1, p1 + 1, p3 + 1, iDCL1);
     }
     if (JxrInverseTransformMathShouldCompensateDc(iDCL2, iHPQP, bHPAbsent)) {
             iDCLAlt2 = (*(p0 +2) - *(p1 +2) - *(p2 +2) + *(p3 +2))>>1;
-            iDCL2 = ClipDCL (iDCL2, iDCLAlt2);
+            iDCL2 = JxrInverseTransformMathClipDcWithAlternate(iDCL2, iDCLAlt2);
         JxrInverseTransformMathApplyDcCompensation(p0 + 2, p2 + 2, p1 + 2, p3 + 2, iDCL2);
     }
     if (JxrInverseTransformMathShouldCompensateDc(iDCL3, iHPQP, bHPAbsent)) {
             iDCLAlt3 = (*(p0 +3) - *(p1 +3) - *(p2 +3) + *(p3 +3))>>1;
-            iDCL3 = ClipDCL (iDCL3, iDCLAlt3);
+            iDCL3 = JxrInverseTransformMathClipDcWithAlternate(iDCL3, iDCLAlt3);
         JxrInverseTransformMathApplyDcCompensation(p0 + 3, p2 + 3, p1 + 3, p3 + 3, iDCL3);
     }
 }

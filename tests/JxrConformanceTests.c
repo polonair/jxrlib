@@ -2789,13 +2789,13 @@ static int test_four_butterfly_vectors(void)
 
 static int test_inverse_transform_dc_clip_vectors(void)
 {
-    return ClipDCL(0, 7) == 0 &&
-        ClipDCL(7, 3) == 3 &&
-        ClipDCL(3, 7) == 3 &&
-        ClipDCL(7, -3) == 0 &&
-        ClipDCL(-7, -3) == -3 &&
-        ClipDCL(-3, -7) == -3 &&
-        ClipDCL(-7, 3) == 0;
+    return JxrInverseTransformMathClipDcWithAlternate(0, 7) == 0 &&
+        JxrInverseTransformMathClipDcWithAlternate(7, 3) == 3 &&
+        JxrInverseTransformMathClipDcWithAlternate(3, 7) == 3 &&
+        JxrInverseTransformMathClipDcWithAlternate(7, -3) == 0 &&
+        JxrInverseTransformMathClipDcWithAlternate(-7, -3) == -3 &&
+        JxrInverseTransformMathClipDcWithAlternate(-3, -7) == -3 &&
+        JxrInverseTransformMathClipDcWithAlternate(-7, 3) == 0;
 }
 
 static int test_entropy_reader_signed_residual_vectors(void)

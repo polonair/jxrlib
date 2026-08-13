@@ -15,5 +15,8 @@ Void JxrInverseTransformMathApplyDcCompensation(
     PixelI* bottomLeft,
     PixelI* bottomRight,
     Int directCurrent);
+Int JxrInverseTransformMathClipDcWithAlternate(
+    Int directCurrent,
+    Int alternateCurrent);
 
 #endif

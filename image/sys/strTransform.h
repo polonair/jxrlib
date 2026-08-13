@@ -39,7 +39,6 @@ Void strTransformAddCornerPrediction(PixelI* target, PixelI prediction);
 Void strTransformApplyFourButterfly(PixelI* buffer, const Int* offsets);
 extern const Int JxrTransformFirstStageFourButterflyOffsets[16];
 extern const Int JxrTransformSecondStageFourButterflyOffsets[16];
-int ClipDCL(int directCurrent, int alternateCurrent);
 
 
 #endif // WMI_STRTRANSFORM_H

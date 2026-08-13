@@ -46,3 +46,17 @@ Void JxrInverseTransformMathApplyDcCompensation(
     *topRight += halfDirectCurrent;
     *bottomLeft += halfDirectCurrent;
 }
+
+Int JxrInverseTransformMathClipDcWithAlternate(
+    Int directCurrent,
+    Int alternateCurrent)
+{
+    if (directCurrent > 0 && alternateCurrent > 0) {
+        return directCurrent < alternateCurrent ? directCurrent : alternateCurrent;
+    }
+    if (directCurrent < 0 && alternateCurrent < 0) {
+        return directCurrent > alternateCurrent ? directCurrent : alternateCurrent;
+    }
+
+    return 0;
+}
