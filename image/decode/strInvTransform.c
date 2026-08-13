@@ -29,10 +29,7 @@
 #include "strTransform.h"
 #include "strcodec.h"
 #include "decode.h"
-
-/** rotation by -pi/8 **/
-#define IROTATE1(a, b) (a) -= (((b) + 1) >> 1), (b) += (((a) + 1) >> 1)  // this works well too
-#define IROTATE2(a, b) (a) -= (((b)*3 + 4) >> 3), (b) += (((a)*3 + 4) >> 3)  // this works well too
+#include "JxrInverseTransformMath.h"
 
 /** local functions **/
 static Void invOddOdd(PixelI *, PixelI *, PixelI *, PixelI *);
@@ -236,7 +233,7 @@ Void strPost4(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
     a += d, b += c;
     d -= ((a + 1) >> 1), c -= ((b + 1) >> 1);
     
-    IROTATE1(c, d);
+    JxrInverseTransformMathRotateHalf(&c, &d);
 
     d += ((a + 1) >> 1), c += ((b + 1) >> 1);
     a -= d - ((d * 3 + 16) >> 5), b -= c - ((c * 3 + 16) >> 5);
@@ -261,7 +258,7 @@ Void strPost4_alternate(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
     d -= ((a + 1) >> 1), c -= ((b + 1) >> 1);
     
     strHSTdec1_edge(&a, &d); strHSTdec1_edge(&b, &c);
-    IROTATE1(c, d);
+    JxrInverseTransformMathRotateHalf(&c, &d);
     d += ((a + 1) >> 1), c += ((b + 1) >> 1);
 
     a -= d, b -= c;
@@ -336,10 +333,10 @@ Void strPost4x4Stage1Split(PixelI *p0, PixelI *p1, Int iOffset, Int iHPQP, Bool 
     invOddOddPost(p3 + 0, p3 + 1, p3 + 2, p3 + 3);
     
     /** anti diagonal corners: rotation by -pi/8 **/
-    IROTATE1(p1[2], p1[3]);
-    IROTATE1(p1[0], p1[1]);
-    IROTATE1(p2[1], p2[3]);
-    IROTATE1(p2[0], p2[2]);
+    JxrInverseTransformMathRotateHalf(&p1[2], &p1[3]);
+    JxrInverseTransformMathRotateHalf(&p1[0], &p1[1]);
+    JxrInverseTransformMathRotateHalf(&p2[1], &p2[3]);
+    JxrInverseTransformMathRotateHalf(&p2[0], &p2[2]);
 
     /** butterfly **/
     strHSTdec1(p0 + 0, p3 + 0);
@@ -403,10 +400,10 @@ Void strPost4x4Stage1Split_alternate(PixelI *p0, PixelI *p1, Int iOffset)
     invOddOddPost(p3 + 0, p3 + 1, p3 + 2, p3 + 3);
     
     /** anti diagonal corners: rotation by -pi/8 **/
-    IROTATE1(p1[2], p1[3]);
-    IROTATE1(p1[0], p1[1]);
-    IROTATE1(p2[1], p2[3]);
-    IROTATE1(p2[0], p2[2]);
+    JxrInverseTransformMathRotateHalf(&p1[2], &p1[3]);
+    JxrInverseTransformMathRotateHalf(&p1[0], &p1[1]);
+    JxrInverseTransformMathRotateHalf(&p2[1], &p2[3]);
+    JxrInverseTransformMathRotateHalf(&p2[0], &p2[2]);
 
     /** butterfly **/
     strHSTdec1_alternate(p0 + 0, p3 + 0);
@@ -453,10 +450,10 @@ Void strPost4x4Stage2Split(PixelI* p0, PixelI* p1)
     invOddOddPost(p1 + 0, p1 + 64, p1 + 16, p1 + 80);
     
     /** anti diagonal corners: rotation by -pi/8 **/
-    IROTATE1(p0[ 48], p0[  32]);
-    IROTATE1(p0[112], p0[  96]);
-    IROTATE1(p1[-64], p1[-128]);
-    IROTATE1(p1[-48], p1[-112]);
+    JxrInverseTransformMathRotateHalf(&p0[ 48], &p0[  32]);
+    JxrInverseTransformMathRotateHalf(&p0[112], &p0[  96]);
+    JxrInverseTransformMathRotateHalf(&p1[-64], &p1[-128]);
+    JxrInverseTransformMathRotateHalf(&p1[-48], &p1[-112]);
     
     /** butterfly **/
     strHSTdec1(p0 - 96, p1 + 80);
@@ -482,10 +479,10 @@ Void strPost4x4Stage2Split_alternate(PixelI* p0, PixelI* p1)
     invOddOddPost(p1 + 0, p1 + 64, p1 + 16, p1 + 80);
     
     /** anti diagonal corners: rotation by -pi/8 **/
-    IROTATE1(p0[ 48], p0[  32]);
-    IROTATE1(p0[112], p0[  96]);
-    IROTATE1(p1[-64], p1[-128]);
-    IROTATE1(p1[-48], p1[-112]);
+    JxrInverseTransformMathRotateHalf(&p0[ 48], &p0[  32]);
+    JxrInverseTransformMathRotateHalf(&p0[112], &p0[  96]);
+    JxrInverseTransformMathRotateHalf(&p1[-64], &p1[-128]);
+    JxrInverseTransformMathRotateHalf(&p1[-48], &p1[-112]);
     
     /** butterfly **/
     strHSTdec1_alternate(p0 - 96, p1 + 80);
@@ -668,8 +665,8 @@ Void invOdd(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
     c += (a + 1) >> 1;
 
     /** rotate pi/8 **/
-    IROTATE2(a, b);
-    IROTATE2(c, d);
+    JxrInverseTransformMathRotateThreeEighths(&a, &b);
+    JxrInverseTransformMathRotateThreeEighths(&c, &d);
 
     /** butterflies **/
     c -= (b + 1) >> 1;

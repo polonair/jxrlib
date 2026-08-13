@@ -54,6 +54,7 @@
 #include "JxrDecoderInitializationPipeline.h"
 #include "JxrSecondaryPlaneInitializer.h"
 #include "JxrPredictionMath.h"
+#include "JxrInverseTransformMath.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -2453,6 +2454,24 @@ static int test_prediction_math_vectors(void)
         JxrPredictionMathSaturateAdaptiveCount(16) == 15;
 }
 
+static int test_inverse_transform_math_vectors(void)
+{
+    PixelI first, second;
+
+    first = 10; second = 5;
+    JxrInverseTransformMathRotateHalf(&first, &second);
+    if (first != 7 || second != 9) return 0;
+    first = -10; second = 5;
+    JxrInverseTransformMathRotateHalf(&first, &second);
+    if (first != -13 || second != -1) return 0;
+    first = 10; second = 5;
+    JxrInverseTransformMathRotateThreeEighths(&first, &second);
+    if (first != 8 || second != 8) return 0;
+    first = -10; second = 5;
+    JxrInverseTransformMathRotateThreeEighths(&first, &second);
+    return first == -12 && second == 1;
+}
+
 static int test_entropy_reader_signed_residual_vectors(void)
 {
     return JxrEntropyBitReaderDecodeSignedResidualValue(0) == 0 &&
@@ -2924,6 +2943,7 @@ int main(int argc, char** argv)
         { "macroblock_cbp_state_vectors", test_macroblock_cbp_state_vectors },
         { "bit_math_vectors", test_bit_math_vectors },
         { "prediction_math_vectors", test_prediction_math_vectors },
+        { "inverse_transform_math_vectors", test_inverse_transform_math_vectors },
         { "entropy_reader_signed_residual_vectors", test_entropy_reader_signed_residual_vectors },
         { "entropy_reader_state_vectors", test_entropy_reader_state_vectors },
         { "legacy_bit_reader_mirror_vectors", test_legacy_bit_reader_mirror_vectors },
