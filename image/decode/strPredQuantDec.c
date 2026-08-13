@@ -28,33 +28,33 @@
 
 #include "strcodec.h"
 #include "JxrCbpPredictor.h"
+#include "JxrPredictionMath.h"
 
-#define DEQUANT(iRaw, iQP) ((iRaw) * (iQP))
 
 Void dequantizeBlock4x4(PixelI * pRec, Int * pOrg, const Int * pIndex, Int iQPLP)
 {
     Int i;
     
     for(i = 1; i < 16; i ++)
-        pRec[pIndex[i]] = DEQUANT(pOrg[i], iQPLP);
+        pRec[pIndex[i]] = JxrPredictionMathDequantize(pOrg[i], iQPLP);
 }
 
 Void dequantizeBlock2x2(PixelI * pRec, Int * pOrg, Int iQPLP)
 {
-    pRec[32] = DEQUANT(pOrg[1], iQPLP);
-    pRec[16] = DEQUANT(pOrg[2], iQPLP);
-    pRec[48] = DEQUANT(pOrg[3], iQPLP);
+    pRec[32] = JxrPredictionMathDequantize(pOrg[1], iQPLP);
+    pRec[16] = JxrPredictionMathDequantize(pOrg[2], iQPLP);
+    pRec[48] = JxrPredictionMathDequantize(pOrg[3], iQPLP);
 }
 
 Void dequantizeBlock4x2(PixelI * pRec, Int * pOrg, Int iQPLP)
 {
-    pRec[ 64] = DEQUANT(pOrg[1], iQPLP);
-    pRec[ 16] = DEQUANT(pOrg[2], iQPLP);
-    pRec[ 80] = DEQUANT(pOrg[3], iQPLP);
-    pRec[ 32] = DEQUANT(pOrg[4], iQPLP);
-    pRec[ 96] = DEQUANT(pOrg[5], iQPLP);
-    pRec[ 48] = DEQUANT(pOrg[6], iQPLP);
-    pRec[112] = DEQUANT(pOrg[7], iQPLP);
+    pRec[ 64] = JxrPredictionMathDequantize(pOrg[1], iQPLP);
+    pRec[ 16] = JxrPredictionMathDequantize(pOrg[2], iQPLP);
+    pRec[ 80] = JxrPredictionMathDequantize(pOrg[3], iQPLP);
+    pRec[ 32] = JxrPredictionMathDequantize(pOrg[4], iQPLP);
+    pRec[ 96] = JxrPredictionMathDequantize(pOrg[5], iQPLP);
+    pRec[ 48] = JxrPredictionMathDequantize(pOrg[6], iQPLP);
+    pRec[112] = JxrPredictionMathDequantize(pOrg[7], iQPLP);
 }
 
 
@@ -68,7 +68,7 @@ Int dequantizeMacroblock(CWMImageStrCodec * pSC)
 
     for(i = 0; i < iChannels; i ++){
         //dequantize DC
-        pSC->p1MBbuffer[i][0] = DEQUANT(pMBInfo->iBlockDC[i][0], pTile->pQuantizerDC[i]->iQP);
+        pSC->p1MBbuffer[i][0] = JxrPredictionMathDequantize(pMBInfo->iBlockDC[i][0], pTile->pQuantizerDC[i]->iQP);
 
         // dequantize LP
         if(pSC->WMISCP.sbSubband != SB_DC_ONLY)
@@ -333,7 +333,6 @@ static int NumOnes(int i)
     return retval;
 }
 
-#define SATURATE32(x) if((unsigned int)(x + 16) >= 32) { if (x < 0) x = -16; else x = 15; }
 
 /* CBP prediction for 16 x 16 MB */
 /* block index */
@@ -395,10 +394,10 @@ static Int predCBPCDec(CWMImageStrCodec * pSC, Int iCBP, size_t mbX, size_t mbY,
     iNOrig = NumOnes(iCBP);
 
     pModel->m_iCount0[c1] += iNOrig - iNDiff;
-    SATURATE32(pModel->m_iCount0[c1]);
+    pModel->m_iCount0[c1] = JxrPredictionMathSaturateAdaptiveCount(pModel->m_iCount0[c1]);
 
     pModel->m_iCount1[c1] += 16 - iNOrig - iNDiff;
-    SATURATE32(pModel->m_iCount1[c1]);
+    pModel->m_iCount1[c1] = JxrPredictionMathSaturateAdaptiveCount(pModel->m_iCount1[c1]);
 
     if (pModel->m_iCount0[c1] < 0) {
         if (pModel->m_iCount0[c1] < pModel->m_iCount1[c1]) {
@@ -449,10 +448,10 @@ static Int predCBPC420Dec(CWMImageStrCodec * pSC, Int iCBP, size_t mbX, size_t m
     iNOrig = NumOnes(iCBP) * 4;
 
     pModel->m_iCount0[1] += iNOrig - iNDiff;
-    SATURATE32(pModel->m_iCount0[1]);
+    pModel->m_iCount0[1] = JxrPredictionMathSaturateAdaptiveCount(pModel->m_iCount0[1]);
 
     pModel->m_iCount1[1] += 16 - iNOrig - iNDiff;
-    SATURATE32(pModel->m_iCount1[1]);
+    pModel->m_iCount1[1] = JxrPredictionMathSaturateAdaptiveCount(pModel->m_iCount1[1]);
 
     if (pModel->m_iCount0[1] < 0) {
         if (pModel->m_iCount0[1] < pModel->m_iCount1[1]) {
@@ -506,10 +505,10 @@ static Int predCBPC422Dec(CWMImageStrCodec * pSC, Int iCBP, size_t mbX, size_t m
     iNOrig = NumOnes(iCBP) * 2;
 
     pModel->m_iCount0[1] += iNOrig - iNDiff;
-    SATURATE32(pModel->m_iCount0[1]);
+    pModel->m_iCount0[1] = JxrPredictionMathSaturateAdaptiveCount(pModel->m_iCount0[1]);
 
     pModel->m_iCount1[1] += 16 - iNOrig - iNDiff;
-    SATURATE32(pModel->m_iCount1[1]);
+    pModel->m_iCount1[1] = JxrPredictionMathSaturateAdaptiveCount(pModel->m_iCount1[1]);
 
     if (pModel->m_iCount0[1] < 0) {
         if (pModel->m_iCount0[1] < pModel->m_iCount1[1]) {

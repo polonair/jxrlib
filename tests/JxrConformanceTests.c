@@ -53,6 +53,7 @@
 #include "JxrHeaderDecodePipeline.h"
 #include "JxrDecoderInitializationPipeline.h"
 #include "JxrSecondaryPlaneInitializer.h"
+#include "JxrPredictionMath.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -2438,6 +2439,20 @@ static int test_bit_math_vectors(void)
         JxrBitMathLowMask32(32) == 0xffffffffU;
 }
 
+static int test_prediction_math_vectors(void)
+{
+    return JxrPredictionMathDequantize(0, 17) == 0 &&
+        JxrPredictionMathDequantize(3, 5) == 15 &&
+        JxrPredictionMathDequantize(-3, 5) == -15 &&
+        JxrPredictionMathSaturateAdaptiveCount(-17) == -16 &&
+        JxrPredictionMathSaturateAdaptiveCount(-16) == -16 &&
+        JxrPredictionMathSaturateAdaptiveCount(-1) == -1 &&
+        JxrPredictionMathSaturateAdaptiveCount(0) == 0 &&
+        JxrPredictionMathSaturateAdaptiveCount(14) == 14 &&
+        JxrPredictionMathSaturateAdaptiveCount(15) == 15 &&
+        JxrPredictionMathSaturateAdaptiveCount(16) == 15;
+}
+
 static int test_entropy_reader_signed_residual_vectors(void)
 {
     return JxrEntropyBitReaderDecodeSignedResidualValue(0) == 0 &&
@@ -2908,6 +2923,7 @@ int main(int argc, char** argv)
         { "lowpass_cbp_state_vectors", test_lowpass_cbp_state_vectors },
         { "macroblock_cbp_state_vectors", test_macroblock_cbp_state_vectors },
         { "bit_math_vectors", test_bit_math_vectors },
+        { "prediction_math_vectors", test_prediction_math_vectors },
         { "entropy_reader_signed_residual_vectors", test_entropy_reader_signed_residual_vectors },
         { "entropy_reader_state_vectors", test_entropy_reader_state_vectors },
         { "legacy_bit_reader_mirror_vectors", test_legacy_bit_reader_mirror_vectors },
