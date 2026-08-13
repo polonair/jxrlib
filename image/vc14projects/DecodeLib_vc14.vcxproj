@@ -178,6 +178,7 @@
     <ClCompile Include="..\decode\JxrPostProcessDecision.c" />
     <ClCompile Include="..\decode\JxrPostProcessRowState.c" />
     <ClCompile Include="..\decode\JxrPostProcessBlockNeighborhood.c" />
+    <ClCompile Include="..\decode\JxrPostProcessSmoothing.c" />
     <ClCompile Include="..\decode\segdec.c" />
     <ClCompile Include="..\decode\strdec.c" />
     <ClCompile Include="..\decode\strdec_x86.c" />
@@ -263,6 +264,7 @@
     <ClInclude Include="..\decode\JxrPostProcessDecision.h" />
     <ClInclude Include="..\decode\JxrPostProcessRowState.h" />
     <ClInclude Include="..\decode\JxrPostProcessBlockNeighborhood.h" />
+    <ClInclude Include="..\decode\JxrPostProcessSmoothing.h" />
     <ClInclude Include="..\sys\windowsmediaphoto.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

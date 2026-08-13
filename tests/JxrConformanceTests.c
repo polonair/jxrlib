@@ -57,6 +57,7 @@
 #include "JxrPostProcessDecision.h"
 #include "JxrPostProcessRowState.h"
 #include "JxrPostProcessBlockNeighborhood.h"
+#include "JxrPostProcessSmoothing.h"
 #include "JxrSecondaryPlaneInitializer.h"
 #include "JxrPredictionMath.h"
 #include "JxrInverseTransformMath.h"
@@ -1654,6 +1655,33 @@ static int test_postprocess_block_neighborhood_vectors(void)
     return !JxrPostProcessBlockNeighborhoodShouldSmoothVertical(&neighborhood, 1, 1, 3);
 }
 
+static int test_postprocess_smoothing_vectors(void)
+{
+    PixelI leftOuter;
+    PixelI leftInner;
+    PixelI rightInner;
+    PixelI rightOuter;
+    PixelI leftFar;
+    PixelI rightFar;
+
+    leftOuter = 0; leftInner = 10; rightInner = 30; rightOuter = 40;
+    JxrPostProcessSmoothingApplyMacroblockEdge(&leftOuter, &leftInner, &rightInner, &rightOuter);
+    if (leftOuter != 0 || leftInner != 15 || rightInner != 25 || rightOuter != 40) return 0;
+
+    leftOuter = 40; leftInner = 30; rightInner = 10; rightOuter = 0;
+    JxrPostProcessSmoothingApplyMacroblockEdge(&leftOuter, &leftInner, &rightInner, &rightOuter);
+    if (leftOuter != 40 || leftInner != 25 || rightInner != 15 || rightOuter != 0) return 0;
+
+    leftFar = 0; leftOuter = 10; leftInner = 20; rightInner = 40; rightOuter = 50; rightFar = 60;
+    JxrPostProcessSmoothingApplyBlockEdge(&leftFar, &leftOuter, &leftInner, &rightInner, &rightOuter, &rightFar);
+    if (leftFar != 0 || leftOuter != 11 || leftInner != 25 || rightInner != 35 || rightOuter != 48 || rightFar != 60) return 0;
+
+    leftFar = 60; leftOuter = 50; leftInner = 40; rightInner = 20; rightOuter = 10; rightFar = 0;
+    JxrPostProcessSmoothingApplyBlockEdge(&leftFar, &leftOuter, &leftInner, &rightInner, &rightOuter, &rightFar);
+    return leftFar == 60 && leftOuter == 48 && leftInner == 35 &&
+        rightInner == 25 && rightOuter == 11 && rightFar == 0;
+}
+
 static int test_sample_clipping_vectors(void)
 {
     return JxrSampleClippingClamp(-2, 0, 31) == 0 &&
@@ -3091,6 +3119,7 @@ int main(int argc, char** argv)
         { "postprocess_deblock_boundary_decision_vectors", test_postprocess_deblock_boundary_decision_vectors },
         { "postprocess_row_state_vectors", test_postprocess_row_state_vectors },
         { "postprocess_block_neighborhood_vectors", test_postprocess_block_neighborhood_vectors },
+        { "postprocess_smoothing_vectors", test_postprocess_smoothing_vectors },
         { "sample_clipping_vectors", test_sample_clipping_vectors },
         { "float_sample_conversion_vectors", test_float_sample_conversion_vectors },
         { "monochrome_expansion_vectors", test_monochrome_expansion_vectors },

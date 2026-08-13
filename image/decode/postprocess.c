@@ -31,27 +31,7 @@
 #include "JxrPostProcessDecision.h"
 #include "JxrPostProcessRowState.h"
 #include "JxrPostProcessBlockNeighborhood.h"
-
-Void smoothMB(PixelI * p1, PixelI * p0, PixelI * q0, PixelI * q1)
-{
-    //  p1 p0 | q0 q1
-    PixelI delta = ((((*q0 - *p0) << 2) + (*p1 - *q1)) >> 3);
-    
-    *q0 -= delta;
-    *p0 += delta;
-}
-
-Void smooth(PixelI * p2, PixelI * p1, PixelI * p0, PixelI * q0, PixelI * q1, PixelI * q2)
-{
-    //    p2 p1 p0 | q0 q1 q2
-    PixelI delta = ((((*q0 - *p0) << 2) + (*p1 - *q1)) >> 3);
-
-    *q0 -= delta;
-    *p0 += delta;
-
-    *p1 = (*p1 >> 1) + ((*p0 + *p2) >> 2);
-    *q1 = (*q1 >> 1) + ((*q0 + *q2) >> 2);
-}
+#include "JxrPostProcessSmoothing.h"
 
 Int initPostProc(struct tagPostProcInfo * strPostProcInfo[MAX_CHANNELS][2], size_t mbWidth, size_t iNumChannels)
 {
@@ -115,26 +95,26 @@ Void postProcMB(struct tagPostProcInfo * strPostProcInfo[MAX_CHANNELS][2], Pixel
 
     // demacroblock segment --
    if(JxrPostProcessShouldDemacroblock(pMBa, pMBc, threshold)){
-        smoothMB(p0 - 256 + 10 * 16, p0 - 256 + 11 * 16, p1 - 256 +  8 * 16, p1 - 256 +  9 * 16);
-        smoothMB(p0 - 256 + 14 * 16, p0 - 256 + 15 * 16, p1 - 256 + 12 * 16, p1 - 256 + 13 * 16);
+        JxrPostProcessSmoothingApplyMacroblockEdge(p0 - 256 + 10 * 16, p0 - 256 + 11 * 16, p1 - 256 +  8 * 16, p1 - 256 +  9 * 16);
+        JxrPostProcessSmoothingApplyMacroblockEdge(p0 - 256 + 14 * 16, p0 - 256 + 15 * 16, p1 - 256 + 12 * 16, p1 - 256 + 13 * 16);
     }
 
     // demacroblock segment ++
     if(JxrPostProcessShouldDemacroblock(pMBb, pMBd, threshold)){
-        smoothMB(p0 + 2 * 16, p0 + 3 * 16, p1 + 0 * 16, p1 + 1 * 16);
-        smoothMB(p0 + 6 * 16, p0 + 7 * 16, p1 + 4 * 16, p1 + 5 * 16);
+        JxrPostProcessSmoothingApplyMacroblockEdge(p0 + 2 * 16, p0 + 3 * 16, p1 + 0 * 16, p1 + 1 * 16);
+        JxrPostProcessSmoothingApplyMacroblockEdge(p0 + 6 * 16, p0 + 7 * 16, p1 + 4 * 16, p1 + 5 * 16);
     }
 
     // demacroblock segment |
     if(JxrPostProcessShouldDemacroblock(pMBa, pMBb, threshold)){
-        smoothMB(p0 - 256 + 10 * 16, p0 - 256 + 14 * 16, p0 + 2 * 16, p0 + 6 * 16);
-        smoothMB(p0 - 256 + 11 * 16, p0 - 256 + 15 * 16, p0 + 3 * 16, p0 + 7 * 16);
+        JxrPostProcessSmoothingApplyMacroblockEdge(p0 - 256 + 10 * 16, p0 - 256 + 14 * 16, p0 + 2 * 16, p0 + 6 * 16);
+        JxrPostProcessSmoothingApplyMacroblockEdge(p0 - 256 + 11 * 16, p0 - 256 + 15 * 16, p0 + 3 * 16, p0 + 7 * 16);
     }
 
     // demacroblock segment !
     if(JxrPostProcessShouldDemacroblock(pMBc, pMBd, threshold)){
-        smoothMB(p1 - 256 + 8 * 16, p1 - 256 + 12 * 16, p1 + 0 * 16, p1 + 4 * 16);
-        smoothMB(p1 - 256 + 9 * 16, p1 - 256 + 13 * 16, p1 + 1 * 16, p1 + 5 * 16);
+        JxrPostProcessSmoothingApplyMacroblockEdge(p1 - 256 + 8 * 16, p1 - 256 + 12 * 16, p1 + 0 * 16, p1 + 4 * 16);
+        JxrPostProcessSmoothingApplyMacroblockEdge(p1 - 256 + 9 * 16, p1 - 256 + 13 * 16, p1 + 1 * 16, p1 + 5 * 16);
     }
 
     /* update DCs of blocks */
@@ -193,7 +173,7 @@ Void postProcBlock(struct tagPostProcInfo * strPostProcInfo[MAX_CHANNELS][2], Pi
                 // smooth horizontal boundary ----
                 pt = (j < 3 ? pc + 16 : p1 - 256 + i * 64);
                 for(k = 0; k < 4; k ++){
-                    smooth(pc + idxCC[1][k], pc + idxCC[2][k], pc + idxCC[3][k], pt + idxCC[0][k], pt + idxCC[1][k], pt + idxCC[2][k]);
+                    JxrPostProcessSmoothingApplyBlockEdge(pc + idxCC[1][k], pc + idxCC[2][k], pc + idxCC[3][k], pt + idxCC[0][k], pt + idxCC[1][k], pt + idxCC[2][k]);
                 }
             }
 
@@ -202,7 +182,7 @@ Void postProcBlock(struct tagPostProcInfo * strPostProcInfo[MAX_CHANNELS][2], Pi
                 // smooth vertical boundary |
                 pt = pc + 64;
                 for(k = 0; k < 4; k ++){
-                    smooth(pc + idxCC[k][1], pc + idxCC[k][2], pc + idxCC[k][3], pt + idxCC[k][0], pt + idxCC[k][1], pt + idxCC[k][2]);
+                    JxrPostProcessSmoothingApplyBlockEdge(pc + idxCC[k][1], pc + idxCC[k][2], pc + idxCC[k][3], pt + idxCC[k][0], pt + idxCC[k][1], pt + idxCC[k][2]);
                 }
             }
         }
