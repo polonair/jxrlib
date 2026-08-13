@@ -9,5 +9,11 @@ Bool JxrInverseTransformMathShouldCompensateDc(
     Int directCurrent,
     Int highPassQuantizer,
     Bool highPassAbsent);
+Void JxrInverseTransformMathApplyDcCompensation(
+    PixelI* topLeft,
+    PixelI* topRight,
+    PixelI* bottomLeft,
+    PixelI* bottomRight,
+    Int directCurrent);
 
 #endif

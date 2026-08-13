@@ -31,3 +31,18 @@ Bool JxrInverseTransformMathShouldCompensateDc(
 
     return absoluteDirectCurrent < highPassQuantizer;
 }
+
+Void JxrInverseTransformMathApplyDcCompensation(
+    PixelI* topLeft,
+    PixelI* topRight,
+    PixelI* bottomLeft,
+    PixelI* bottomRight,
+    Int directCurrent)
+{
+    Int halfDirectCurrent = directCurrent >> 1;
+
+    *topLeft -= halfDirectCurrent;
+    *bottomRight -= halfDirectCurrent;
+    *topRight += halfDirectCurrent;
+    *bottomLeft += halfDirectCurrent;
+}

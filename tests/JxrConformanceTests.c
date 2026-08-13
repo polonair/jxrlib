@@ -2702,6 +2702,7 @@ static int test_prediction_math_vectors(void)
 static int test_inverse_transform_math_vectors(void)
 {
     PixelI first, second;
+    PixelI topLeft, topRight, bottomLeft, bottomRight;
 
     first = 10; second = 5;
     JxrInverseTransformMathRotateHalf(&first, &second);
@@ -2715,12 +2716,22 @@ static int test_inverse_transform_math_vectors(void)
     first = -10; second = 5;
     JxrInverseTransformMathRotateThreeEighths(&first, &second);
     if (first != -12 || second != 1) return 0;
-    return !JxrInverseTransformMathShouldCompensateDc(0, 20, FALSE) &&
+    if (!(!JxrInverseTransformMathShouldCompensateDc(0, 20, FALSE) &&
         JxrInverseTransformMathShouldCompensateDc(0, 21, FALSE) &&
         JxrInverseTransformMathShouldCompensateDc(-20, 21, FALSE) &&
         !JxrInverseTransformMathShouldCompensateDc(21, 21, FALSE) &&
         !JxrInverseTransformMathShouldCompensateDc(-21, 21, FALSE) &&
-        JxrInverseTransformMathShouldCompensateDc(500, 0, TRUE);
+        JxrInverseTransformMathShouldCompensateDc(500, 0, TRUE))) return 0;
+
+    topLeft = 10; topRight = 20; bottomLeft = 30; bottomRight = 40;
+    JxrInverseTransformMathApplyDcCompensation(&topLeft, &topRight, &bottomLeft, &bottomRight, 6);
+    if (topLeft != 7 || topRight != 23 || bottomLeft != 33 || bottomRight != 37) return 0;
+    topLeft = 10; topRight = 20; bottomLeft = 30; bottomRight = 40;
+    JxrInverseTransformMathApplyDcCompensation(&topLeft, &topRight, &bottomLeft, &bottomRight, -6);
+    if (topLeft != 13 || topRight != 17 || bottomLeft != 27 || bottomRight != 43) return 0;
+    topLeft = 10; topRight = 20; bottomLeft = 30; bottomRight = 40;
+    JxrInverseTransformMathApplyDcCompensation(&topLeft, &topRight, &bottomLeft, &bottomRight, 5);
+    return topLeft == 8 && topRight == 22 && bottomLeft == 32 && bottomRight == 38;
 }
 
 static int test_forward_transform_math_vectors(void)
