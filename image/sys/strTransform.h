@@ -31,13 +31,12 @@
 
 #include "windowsmediaphoto.h"
 
-#define COMPUTE_CORNER_PRED_DIFF(a, b) (*(a) -= (b))
-#define COMPUTE_CORNER_PRED_ADD(a, b) (*(a) += (b))
-
 /** 2x2 foward DCT == 2x2 inverse DCT **/
 Void strDCT2x2dn(PixelI *, PixelI *, PixelI *, PixelI *);
 Void strDCT2x2up(PixelI *, PixelI *, PixelI *, PixelI *);
 Void FOURBUTTERFLY_HARDCODED1(PixelI *p);
+Void strTransformSubtractCornerPrediction(PixelI* target, PixelI prediction);
+Void strTransformAddCornerPrediction(PixelI* target, PixelI prediction);
 int ClipDCL(int directCurrent, int alternateCurrent);
 
 /** 2x2 dct of a group of 4**/

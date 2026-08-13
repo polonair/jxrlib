@@ -76,6 +76,15 @@ Void strDCT2x2up(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
     *pd = d;
 }
 
+Void strTransformSubtractCornerPrediction(PixelI* target, PixelI prediction)
+{
+    *target -= prediction;
+}
+
+Void strTransformAddCornerPrediction(PixelI* target, PixelI prediction)
+{
+    *target += prediction;
+}
 Void FOURBUTTERFLY_HARDCODED1(PixelI *p)
 {
     strDCT2x2dn(&p[0], &p[4], &p[8], &p[12]);

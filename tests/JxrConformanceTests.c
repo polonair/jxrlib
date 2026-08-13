@@ -2473,6 +2473,16 @@ static int test_inverse_transform_math_vectors(void)
     return first == -12 && second == 1;
 }
 
+static int test_inverse_transform_corner_prediction_vectors(void)
+{
+    PixelI value = 12;
+
+    strTransformSubtractCornerPrediction(&value, 5);
+    if (value != 7) return 0;
+    strTransformAddCornerPrediction(&value, -3);
+    return value == 4;
+}
+
 static int test_inverse_transform_dc_clip_vectors(void)
 {
     return ClipDCL(0, 7) == 0 &&
@@ -2956,6 +2966,7 @@ int main(int argc, char** argv)
         { "bit_math_vectors", test_bit_math_vectors },
         { "prediction_math_vectors", test_prediction_math_vectors },
         { "inverse_transform_math_vectors", test_inverse_transform_math_vectors },
+        { "inverse_transform_corner_prediction_vectors", test_inverse_transform_corner_prediction_vectors },
         { "inverse_transform_dc_clip_vectors", test_inverse_transform_dc_clip_vectors },
         { "entropy_reader_signed_residual_vectors", test_entropy_reader_signed_residual_vectors },
         { "entropy_reader_state_vectors", test_entropy_reader_state_vectors },
