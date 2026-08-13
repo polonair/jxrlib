@@ -28,6 +28,13 @@
 
 #include "strTransform.h"
 
+const Int JxrTransformFirstStageFourButterflyOffsets[16] = {
+    0, 4, 8, 12,
+    1, 5, 9, 13,
+    2, 6, 10, 14,
+    3, 7, 11, 15
+};
+
 /** need to swap b and c **/
 /** rounding behavior: [0 0 0 0] <-> [+ - - -]
     [+ + + +] <-> [+3/4 - - -]
@@ -95,12 +102,4 @@ Void strTransformApplyFourButterfly(PixelI* buffer, const Int* offsets)
         strDCT2x2dn(&buffer[offsets[index]], &buffer[offsets[index + 1]],
             &buffer[offsets[index + 2]], &buffer[offsets[index + 3]]);
     }
-}
-
-Void FOURBUTTERFLY_HARDCODED1(PixelI *p)
-{
-    strDCT2x2dn(&p[0], &p[4], &p[8], &p[12]);
-    strDCT2x2dn(&p[1], &p[5], &p[9], &p[13]);
-    strDCT2x2dn(&p[2], &p[6], &p[10], &p[14]);
-    strDCT2x2dn(&p[3], &p[7], &p[11], &p[15]);
 }

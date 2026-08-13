@@ -34,10 +34,10 @@
 /** 2x2 foward DCT == 2x2 inverse DCT **/
 Void strDCT2x2dn(PixelI *, PixelI *, PixelI *, PixelI *);
 Void strDCT2x2up(PixelI *, PixelI *, PixelI *, PixelI *);
-Void FOURBUTTERFLY_HARDCODED1(PixelI *p);
 Void strTransformSubtractCornerPrediction(PixelI* target, PixelI prediction);
 Void strTransformAddCornerPrediction(PixelI* target, PixelI prediction);
 Void strTransformApplyFourButterfly(PixelI* buffer, const Int* offsets);
+extern const Int JxrTransformFirstStageFourButterflyOffsets[16];
 int ClipDCL(int directCurrent, int alternateCurrent);
 
 

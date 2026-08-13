@@ -68,7 +68,7 @@ Void strIDCT4x4Stage1(PixelI* p)
     
     /** butterfly **/
     //FOURBUTTERFLY(p, 0, 4, 8, 12, 1, 5, 9, 13, 2, 6, 10, 14, 3, 7, 11, 15);
-    FOURBUTTERFLY_HARDCODED1(p);
+    strTransformApplyFourButterfly(p, JxrTransformFirstStageFourButterflyOffsets);
 }
 
 Void strIDCT4x4Stage2(PixelI* p)

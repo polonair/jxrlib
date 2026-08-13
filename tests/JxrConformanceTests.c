@@ -2568,14 +2568,12 @@ static int test_inverse_transform_corner_prediction_vectors(void)
 static int test_four_butterfly_vectors(void)
 {
     PixelI actual[16];
-    PixelI expected[16];
-    const Int offsets[16] = { 0, 4, 8, 12, 1, 5, 9, 13,
-        2, 6, 10, 14, 3, 7, 11, 15 };
+    const PixelI expected[16] = { -2, 0, 2, 4, -8, -8, -8, -8,
+        -4, -4, -4, -4, 0, 0, 0, 0 };
     Int index;
 
-    for (index = 0; index < 16; ++index) actual[index] = expected[index] = index - 7;
-    strTransformApplyFourButterfly(actual, offsets);
-    FOURBUTTERFLY_HARDCODED1(expected);
+    for (index = 0; index < 16; ++index) actual[index] = index - 7;
+    strTransformApplyFourButterfly(actual, JxrTransformFirstStageFourButterflyOffsets);
     return memcmp(actual, expected, sizeof(actual)) == 0;
 }
 
