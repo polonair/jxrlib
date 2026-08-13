@@ -1184,53 +1184,42 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
     Int qp[MAX_CHANNELS], dcqp[MAX_CHANNELS], iStrength = (1 << pSC->WMII.cPostProcStrength);
     // ERR_CODE result = ICERR_OK;
 
-#define mbX               pSC->mbX
-#define mbY               pSC->mbY
-#define tileX             pSC->tileX
-#define tileY             pSC->tileY
-#define bVertTileBoundary pSC->bVertTileBoundary
-#define bHoriTileBoundary pSC->bHoriTileBoundary
-#define bOneMBLeftVertTB  pSC->bOneMBLeftVertTB
-#define bOneMBRightVertTB pSC->bOneMBRightVertTB
-#define iPredBefore       pSC->iPredBefore
-#define iPredAfter        pSC->iPredAfter
-
     if (pSC->WMISCP.bUseHardTileBoundaries) {
         //Add tile location information
         if (pSC->cColumn == 0) {
-            bVertTileBoundary = FALSE;
-            tileY = 0;
+            pSC->bVertTileBoundary = FALSE;
+            pSC->tileY = 0;
         }
-        bOneMBLeftVertTB = bOneMBRightVertTB = FALSE;
-        if(tileY > 0 && tileY <= pSC->WMISCP.cNumOfSliceMinus1H && (pSC->cColumn - 1) == pSC->WMISCP.uiTileY[tileY]) 
-            bOneMBRightVertTB = TRUE;
-        if(tileY < pSC->WMISCP.cNumOfSliceMinus1H && pSC->cColumn == pSC->WMISCP.uiTileY[tileY + 1]) {
-            bVertTileBoundary = TRUE;
-            tileY++; 
+        pSC->bOneMBLeftVertTB = pSC->bOneMBRightVertTB = FALSE;
+        if(pSC->tileY > 0 && pSC->tileY <= pSC->WMISCP.cNumOfSliceMinus1H && (pSC->cColumn - 1) == pSC->WMISCP.uiTileY[pSC->tileY])
+            pSC->bOneMBRightVertTB = TRUE;
+        if(pSC->tileY < pSC->WMISCP.cNumOfSliceMinus1H && pSC->cColumn == pSC->WMISCP.uiTileY[pSC->tileY + 1]) {
+            pSC->bVertTileBoundary = TRUE;
+            pSC->tileY++;
         }
         else 
-            bVertTileBoundary = FALSE;
-        if(tileY < pSC->WMISCP.cNumOfSliceMinus1H && (pSC->cColumn + 1) == pSC->WMISCP.uiTileY[tileY + 1]) 
-            bOneMBLeftVertTB = TRUE;
+            pSC->bVertTileBoundary = FALSE;
+        if(pSC->tileY < pSC->WMISCP.cNumOfSliceMinus1H && (pSC->cColumn + 1) == pSC->WMISCP.uiTileY[pSC->tileY + 1])
+            pSC->bOneMBLeftVertTB = TRUE;
 
         if (pSC->cRow == 0) {
-            bHoriTileBoundary = FALSE;
-            tileX = 0;
+            pSC->bHoriTileBoundary = FALSE;
+            pSC->tileX = 0;
         }
-        else if(mbY != pSC->cRow && tileX < pSC->WMISCP.cNumOfSliceMinus1V && pSC->cRow == pSC->WMISCP.uiTileX[tileX + 1]) {
-            bHoriTileBoundary = TRUE;
-            tileX++; 
+        else if(pSC->mbY != pSC->cRow && pSC->tileX < pSC->WMISCP.cNumOfSliceMinus1V && pSC->cRow == pSC->WMISCP.uiTileX[pSC->tileX + 1]) {
+            pSC->bHoriTileBoundary = TRUE;
+            pSC->tileX++;
         }
-        else if(mbY != pSC->cRow)
-            bHoriTileBoundary = FALSE;
+        else if(pSC->mbY != pSC->cRow)
+            pSC->bHoriTileBoundary = FALSE;
     }
     else {
-        bVertTileBoundary = FALSE;
-        bHoriTileBoundary = FALSE;
-        bOneMBLeftVertTB = FALSE;
-        bOneMBRightVertTB = FALSE;
+        pSC->bVertTileBoundary = FALSE;
+        pSC->bHoriTileBoundary = FALSE;
+        pSC->bOneMBLeftVertTB = FALSE;
+        pSC->bOneMBRightVertTB = FALSE;
     }
-    mbX = pSC->cColumn, mbY = pSC->cRow;
+    pSC->mbX = pSC->cColumn, pSC->mbY = pSC->cRow;
 
     if(pSC->WMII.cPostProcStrength > 0){
         // threshold for post processing
@@ -1255,7 +1244,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
         if (!bottomORright)
         {
             if(pSC->WMII.cPostProcStrength > 0)
-                updatePostProcInfo(pSC->pPostProcInfo, p1, mbX, i); // update postproc info before IDCT
+                updatePostProcInfo(pSC->pPostProcInfo, p1, pSC->mbX, i); // update postproc info before IDCT
 
             strIDCT4x4Stage2(p1);
             if (pSC->m_param.bScaledArith) {
@@ -1268,22 +1257,22 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
         if (OL_TWO == olOverlap)
         {
             /* Corner operations */
-            if ((top || bHoriTileBoundary) && (left || bVertTileBoundary))
+            if ((top || pSC->bHoriTileBoundary) && (left || pSC->bVertTileBoundary))
                 strPost4_alternate(p1 + 0, p1 + 64, p1 + 0 + 16, p1 + 64 + 16);
-            if ((top || bHoriTileBoundary) && (right || bVertTileBoundary))
+            if ((top || pSC->bHoriTileBoundary) && (right || pSC->bVertTileBoundary))
                 strPost4_alternate(p1 - 128, p1 - 64, p1 - 128 + 16, p1 - 64 + 16); 
-            if ((bottom || bHoriTileBoundary) && (left || bVertTileBoundary))
+            if ((bottom || pSC->bHoriTileBoundary) && (left || pSC->bVertTileBoundary))
                 strPost4_alternate(p0 + 32, p0 + 96, p0 + 32 + 16, p0 + 96 + 16);
-            if ((bottom || bHoriTileBoundary) && (right || bVertTileBoundary))
+            if ((bottom || pSC->bHoriTileBoundary) && (right || pSC->bVertTileBoundary))
                 strPost4_alternate(p0 - 96, p0 - 32, p0 - 96 + 16, p0 - 32 + 16);
-            if ((leftORright || bVertTileBoundary) && (!topORbottom  && !bHoriTileBoundary))
+            if ((leftORright || pSC->bVertTileBoundary) && (!topORbottom  && !pSC->bHoriTileBoundary))
             {
-                if (left || bVertTileBoundary) {
+                if (left || pSC->bVertTileBoundary) {
                     j = 0;
                     strPost4_alternate(p0 + j + 32, p0 + j +  48, p1 + j +  0, p1 + j + 16);
                     strPost4_alternate(p0 + j + 96, p0 + j + 112, p1 + j + 64, p1 + j + 80);
                 }
-                if (right || bVertTileBoundary) {
+                if (right || pSC->bVertTileBoundary) {
                     j = -128;
                     strPost4_alternate(p0 + j + 32, p0 + j +  48, p1 + j +  0, p1 + j + 16);
                     strPost4_alternate(p0 + j + 96, p0 + j + 112, p1 + j + 64, p1 + j + 80);
@@ -1292,15 +1281,15 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
 
             if (!leftORright)
             {
-                if ((topORbottom || bHoriTileBoundary) && !bVertTileBoundary)
+                if ((topORbottom || pSC->bHoriTileBoundary) && !pSC->bVertTileBoundary)
                 {
-                    if (top || bHoriTileBoundary) {
+                    if (top || pSC->bHoriTileBoundary) {
                         p = p1;
                         strPost4_alternate(p - 128, p - 64, p +  0, p + 64);
                         strPost4_alternate(p - 112, p - 48, p + 16, p + 80);
                         p = NULL;
                     }
-                    if (bottom || bHoriTileBoundary) {
+                    if (bottom || pSC->bHoriTileBoundary) {
                         p = p0 + 32;
                         strPost4_alternate(p - 128, p - 64, p +  0, p + 64);
                         strPost4_alternate(p - 112, p - 48, p + 16, p + 80);
@@ -1308,13 +1297,13 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                     }
                 }
                 
-                if (!topORbottom && !bHoriTileBoundary && !bVertTileBoundary)
+                if (!topORbottom && !pSC->bHoriTileBoundary && !pSC->bVertTileBoundary)
                     strPost4x4Stage2Split_alternate(p0, p1);
             }
         }
 
         if(pSC->WMII.cPostProcStrength > 0)
-            postProcMB(pSC->pPostProcInfo, p0, p1, mbX, i, dcqp[i]); // second stage deblocking
+            postProcMB(pSC->pPostProcInfo, p0, p1, pSC->mbX, i, dcqp[i]); // second stage deblocking
 
         //================================
         // first level inverse transform
@@ -1347,18 +1336,18 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
         // first level inverse overlap
         if (OL_NONE != olOverlap)
         {
-            if (leftORright || bVertTileBoundary)
+            if (leftORright || pSC->bVertTileBoundary)
             {
                 /* Corner operations */
-                if ((top || bHoriTileBoundary) && (left || bVertTileBoundary))
+                if ((top || pSC->bHoriTileBoundary) && (left || pSC->bVertTileBoundary))
                     strPost4_alternate(p1 + 0, p1 + 1, p1 + 2, p1 + 3);
-                if ((top || bHoriTileBoundary) && (right || bVertTileBoundary))
+                if ((top || pSC->bHoriTileBoundary) && (right || pSC->bVertTileBoundary))
                     strPost4_alternate(p1 - 59, p1 - 60, p1 - 57, p1 - 58); 
-                if ((bottom || bHoriTileBoundary) && (left || bVertTileBoundary))
+                if ((bottom || pSC->bHoriTileBoundary) && (left || pSC->bVertTileBoundary))
                     strPost4_alternate(p0 + 48 + 10, p0 + 48 + 11, p0 + 48 + 8, p0 + 48 + 9);
-                if ((bottom || bHoriTileBoundary) && (right || bVertTileBoundary))
+                if ((bottom || pSC->bHoriTileBoundary) && (right || pSC->bVertTileBoundary))
                     strPost4_alternate(p0 - 1, p0 - 2, p0 - 3, p0 - 4);
-                if (left || bVertTileBoundary) {
+                if (left || pSC->bVertTileBoundary) {
                     j = 0 + 10;
                     if (!top)
                     {
@@ -1376,13 +1365,13 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                         strPost4_alternate(p + 1, p - 1, p + 7, p + 9);
                         p = NULL;
                     }
-                    if (!topORbottom && !bHoriTileBoundary)
+                    if (!topORbottom && !pSC->bHoriTileBoundary)
                     {
                         strPost4_alternate(p0 + 48 + j + 0, p0 + 48 + j - 2, p1 - 10 + j, p1 - 8 + j);
                         strPost4_alternate(p0 + 48 + j + 1, p0 + 48 + j - 1, p1 -  9 + j, p1 - 7 + j);
                     }
                 }
-                if (right || bVertTileBoundary) {
+                if (right || pSC->bVertTileBoundary) {
                     j = -64 + 14;
                     if (!top)
                     {
@@ -1400,7 +1389,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                         strPost4_alternate(p + 1, p - 1, p + 7, p + 9);
                         p = NULL;
                     }
-                    if (!topORbottom && !bHoriTileBoundary)
+                    if (!topORbottom && !pSC->bHoriTileBoundary)
                     {
                         strPost4_alternate(p0 + 48 + j + 0, p0 + 48 + j - 2, p1 - 10 + j, p1 - 8 + j);
                         strPost4_alternate(p0 + 48 + j + 1, p0 + 48 + j - 1, p1 -  9 + j, p1 - 7 + j);
@@ -1408,11 +1397,11 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                 }
             }
 
-            if (top || bHoriTileBoundary)
+            if (top || pSC->bHoriTileBoundary)
             {
                 for (j = (left ? 0 : -192); j < (right ? -64 : 64); j += 64)
                 {
-                    if (!bVertTileBoundary || j != -64) {
+                    if (!pSC->bVertTileBoundary || j != -64) {
                         p = p1 + j;
                         strPost4_alternate(p + 5, p + 4, p + 64, p + 65);
                         strPost4_alternate(p + 7, p + 6, p + 66, p + 67);
@@ -1423,11 +1412,11 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                 }
             }
 
-            if (bottom || bHoriTileBoundary)
+            if (bottom || pSC->bHoriTileBoundary)
             {
                 for (j = (left ? 0 : -192); j < (right ? -64 : 64); j += 64)
                 {
-                    if (!bVertTileBoundary || j != -64) {
+                    if (!pSC->bVertTileBoundary || j != -64) {
                         strPost4x4Stage1_alternate(p0 + 16 + j, 0);
                         strPost4x4Stage1_alternate(p0 + 32 + j, 0);
 
@@ -1439,11 +1428,11 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                 }
             }
 
-            if (!top && !bottom && !bHoriTileBoundary)
+            if (!top && !bottom && !pSC->bHoriTileBoundary)
             {
                 for (j = (left ? 0 : -192); j < (right ? -64 : 64); j += 64)
                 {
-                    if (!bVertTileBoundary || j != -64) {
+                    if (!pSC->bVertTileBoundary || j != -64) {
                         strPost4x4Stage1_alternate(p0 + 16 + j, 0);
                         strPost4x4Stage1_alternate(p0 + 32 + j, 0);
                         strPost4x4Stage1Split_alternate(p0 + 48 + j, p1 + j, 0);
@@ -1454,7 +1443,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
         }
         
         if(pSC->WMII.cPostProcStrength > 0 && (!topORleft))
-            postProcBlock(pSC->pPostProcInfo, p0, p1, mbX, i, qp[i]); // destairing and first stage deblocking
+            postProcBlock(pSC->pPostProcInfo, p0, p1, pSC->mbX, i, qp[i]); // destairing and first stage deblocking
     }
 
     //================================================================
@@ -1480,52 +1469,52 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
         // second level inverse overlap (420_UV)
         if (OL_TWO == olOverlap)
         {
-            if ((leftAdjacentColumn || bOneMBRightVertTB) && (top || bHoriTileBoundary)) 
+            if ((leftAdjacentColumn || pSC->bOneMBRightVertTB) && (top || pSC->bHoriTileBoundary))
                 COMPUTE_CORNER_PRED_DIFF(p1 - 64 + 0, *(p1 - 64 + 32));
-            if ((rightAdjacentColumn || bOneMBLeftVertTB) && (top || bHoriTileBoundary))
-                iPredBefore[i][0] = *(p1 + 0);
-            if ((right || bVertTileBoundary) && (top || bHoriTileBoundary))
-                COMPUTE_CORNER_PRED_DIFF(p1 - 64 + 32, iPredBefore[i][0]);
-            if ((leftAdjacentColumn || bOneMBRightVertTB) && (bottom || bHoriTileBoundary)) 
+            if ((rightAdjacentColumn || pSC->bOneMBLeftVertTB) && (top || pSC->bHoriTileBoundary))
+                pSC->iPredBefore[i][0] = *(p1 + 0);
+            if ((right || pSC->bVertTileBoundary) && (top || pSC->bHoriTileBoundary))
+                COMPUTE_CORNER_PRED_DIFF(p1 - 64 + 32, pSC->iPredBefore[i][0]);
+            if ((leftAdjacentColumn || pSC->bOneMBRightVertTB) && (bottom || pSC->bHoriTileBoundary))
                 COMPUTE_CORNER_PRED_DIFF(p0 - 64 + 16, *(p0 - 64 + 48));
-            if ((rightAdjacentColumn || bOneMBLeftVertTB) && (bottom || bHoriTileBoundary)) 
-                iPredBefore[i][1] = *(p0 + 16);
-            if ((right || bVertTileBoundary) && (bottom || bHoriTileBoundary))
-                COMPUTE_CORNER_PRED_DIFF(p0 - 64 + 48, iPredBefore[i][1]);
+            if ((rightAdjacentColumn || pSC->bOneMBLeftVertTB) && (bottom || pSC->bHoriTileBoundary))
+                pSC->iPredBefore[i][1] = *(p0 + 16);
+            if ((right || pSC->bVertTileBoundary) && (bottom || pSC->bHoriTileBoundary))
+                COMPUTE_CORNER_PRED_DIFF(p0 - 64 + 48, pSC->iPredBefore[i][1]);
 
-            if ((leftORright || bVertTileBoundary) && !topORbottom && !bHoriTileBoundary)
+            if ((leftORright || pSC->bVertTileBoundary) && !topORbottom && !pSC->bHoriTileBoundary)
             {
-                if (left || bVertTileBoundary)
+                if (left || pSC->bVertTileBoundary)
                     strPost2_alternate(p0 +   0 + 16, p1 +   0);
-                if (right || bVertTileBoundary)
+                if (right || pSC->bVertTileBoundary)
                     strPost2_alternate(p0 + -32 + 16, p1 + -32);
             }
 
             if (!leftORright)
             {
-                if ((topORbottom || bHoriTileBoundary) && !bVertTileBoundary)
+                if ((topORbottom || pSC->bHoriTileBoundary) && !pSC->bVertTileBoundary)
                 {
-                    if (top || bHoriTileBoundary) 
+                    if (top || pSC->bHoriTileBoundary)
                         strPost2_alternate(p1 - 32, p1);
-                    if (bottom || bHoriTileBoundary) 
+                    if (bottom || pSC->bHoriTileBoundary)
                         strPost2_alternate(p0 + 16 - 32, p0 + 16);
                 }
-                else if (!topORbottom && !bHoriTileBoundary && !bVertTileBoundary) { 
+                else if (!topORbottom && !pSC->bHoriTileBoundary && !pSC->bVertTileBoundary) {
                     strPost2x2_alternate(p0 - 16, p0 + 16, p1 - 32, p1);
                 }
             }
-            if ((leftAdjacentColumn || bOneMBRightVertTB) && (top || bHoriTileBoundary)) 
+            if ((leftAdjacentColumn || pSC->bOneMBRightVertTB) && (top || pSC->bHoriTileBoundary))
                 COMPUTE_CORNER_PRED_ADD(p1 - 64 + 0, *(p1 - 64 + 32));
-            if ((rightAdjacentColumn || bOneMBLeftVertTB) && (top || bHoriTileBoundary))
-                iPredAfter[i][0] = *(p1 + 0);
-            if ((right || bVertTileBoundary) && (top || bHoriTileBoundary))
-                COMPUTE_CORNER_PRED_ADD(p1 - 64 + 32, iPredAfter[i][0]);
-            if ((leftAdjacentColumn || bOneMBRightVertTB) && (bottom || bHoriTileBoundary)) 
+            if ((rightAdjacentColumn || pSC->bOneMBLeftVertTB) && (top || pSC->bHoriTileBoundary))
+                pSC->iPredAfter[i][0] = *(p1 + 0);
+            if ((right || pSC->bVertTileBoundary) && (top || pSC->bHoriTileBoundary))
+                COMPUTE_CORNER_PRED_ADD(p1 - 64 + 32, pSC->iPredAfter[i][0]);
+            if ((leftAdjacentColumn || pSC->bOneMBRightVertTB) && (bottom || pSC->bHoriTileBoundary))
                 COMPUTE_CORNER_PRED_ADD(p0 - 64 + 16, *(p0 - 64 + 48));
-            if ((rightAdjacentColumn || bOneMBLeftVertTB) && (bottom || bHoriTileBoundary)) 
-                iPredAfter[i][1] = *(p0 + 16);
-            if ((right || bVertTileBoundary) && (bottom || bHoriTileBoundary))
-                COMPUTE_CORNER_PRED_ADD(p0 - 64 + 48, iPredAfter[i][1]);
+            if ((rightAdjacentColumn || pSC->bOneMBLeftVertTB) && (bottom || pSC->bHoriTileBoundary))
+                pSC->iPredAfter[i][1] = *(p0 + 16);
+            if ((right || pSC->bVertTileBoundary) && (bottom || pSC->bHoriTileBoundary))
+                COMPUTE_CORNER_PRED_ADD(p0 - 64 + 48, pSC->iPredAfter[i][1]);
         }
 
         //========================================
@@ -1538,7 +1527,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
             // In order to allow correction operation of corner chroma overlap operators (fixed)
             // processing of left most MB column must be delayed by one MB 
             // Thus left MB not processed until leftAdjacentColumn = 1
-            for (j = ((left) ? 48 : ((leftAdjacentColumn || bOneMBRightVertTB) ? -48 : -16)); j < ((right || bVertTileBoundary) ? 16 : 48); j += 32)
+            for (j = ((left) ? 48 : ((leftAdjacentColumn || pSC->bOneMBRightVertTB) ? -48 : -16)); j < ((right || pSC->bVertTileBoundary) ? 16 : 48); j += 32)
             {
                 strIDCT4x4Stage1(p0 + j);
             }
@@ -1549,7 +1538,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
             // In order to allow correction operation of corner chroma overlap operators (fixed)
             // processing of left most MB column must be delayed by one MB 
             // Thus left MB not processed until leftAdjacentColumn = 1
-            for (j = ((left) ? 32 : ((leftAdjacentColumn || bOneMBRightVertTB) ? -64 : -32)); j < ((right || bVertTileBoundary) ? 0 : 32); j += 32)
+            for (j = ((left) ? 32 : ((leftAdjacentColumn || pSC->bOneMBRightVertTB) ? -64 : -32)); j < ((right || pSC->bVertTileBoundary) ? 0 : 32); j += 32)
             {
                 strIDCT4x4Stage1(p1 + j);
             }
@@ -1561,21 +1550,21 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
         {
             /* Corner operations */
             /* Change because the top-left corner ICT will not have happened until leftAdjacentColumn ==1 */
-            if ((top || bHoriTileBoundary) && (leftAdjacentColumn || bOneMBRightVertTB)) 
+            if ((top || pSC->bHoriTileBoundary) && (leftAdjacentColumn || pSC->bOneMBRightVertTB))
                 strPost4_alternate(p1 - 64 + 0, p1 - 64 + 1, p1 - 64 + 2, p1 - 64 + 3);
-            if ((top || bHoriTileBoundary) && (right || bVertTileBoundary)) 
+            if ((top || pSC->bHoriTileBoundary) && (right || pSC->bVertTileBoundary))
                 strPost4_alternate(p1 - 27, p1 - 28, p1 - 25, p1 - 26);
             /* Change because the bottom-left corner ICT will not have happened until leftAdjacentColumn ==1 */
-            if ((bottom || bHoriTileBoundary) && (leftAdjacentColumn || bOneMBRightVertTB)) 
+            if ((bottom || pSC->bHoriTileBoundary) && (leftAdjacentColumn || pSC->bOneMBRightVertTB))
                 strPost4_alternate(p0 - 64 + 16 + 10, p0 - 64 + 16 + 11, p0 - 64 + 16 + 8, p0 - 64 + 16 + 9);
-            if ((bottom || bHoriTileBoundary) && (right || bVertTileBoundary)) 
+            if ((bottom || pSC->bHoriTileBoundary) && (right || pSC->bVertTileBoundary))
                 strPost4_alternate(p0 - 1, p0 - 2, p0 - 3, p0 - 4);
             if(!left && !top)
             {
                 /* Change because the vertical 1-D overlap operations of the left edge pixels cannot be performed until leftAdjacentColumn ==1 */
-                if (leftAdjacentColumn || bOneMBRightVertTB)
+                if (leftAdjacentColumn || pSC->bOneMBRightVertTB)
                 {
-                    if (!bottom && !bHoriTileBoundary)
+                    if (!bottom && !pSC->bHoriTileBoundary)
                     {
                         strPost4_alternate(p0 - 64 + 26, p0 - 64 + 24, p1 - 64 + 0, p1 - 64 + 2);
                         strPost4_alternate(p0 - 64 + 27, p0 - 64 + 25, p1 - 64 + 1, p1 - 64 + 3);
@@ -1584,14 +1573,14 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                     strPost4_alternate(p0 - 64 + 10, p0 - 64 + 8, p0 - 64 + 16, p0 - 64 + 18);
                     strPost4_alternate(p0 - 64 + 11, p0 - 64 + 9, p0 - 64 + 17, p0 - 64 + 19);
                 }
-                if (bottom || bHoriTileBoundary)
+                if (bottom || pSC->bHoriTileBoundary)
                 {
                     p = p0 + -48;
                     strPost4_alternate(p + 15, p + 14, p + 42, p + 43);
                     strPost4_alternate(p + 13, p + 12, p + 40, p + 41);
                     p = NULL;
 
-                    if (!right && !bVertTileBoundary)
+                    if (!right && !pSC->bVertTileBoundary)
                     {
                         p = p0 + -16;
                         strPost4_alternate(p + 15, p + 14, p + 42, p + 43);
@@ -1603,13 +1592,13 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                 {
                     strPost4x4Stage1Split_alternate(p0 + -48, p1 - 16 + -48, 32);
 
-                    if (!right && !bVertTileBoundary)
+                    if (!right && !pSC->bVertTileBoundary)
                         strPost4x4Stage1Split_alternate(p0 + -16, p1 - 16 + -16, 32);
                 }
 
-                if (right || bVertTileBoundary)
+                if (right || pSC->bVertTileBoundary)
                 {
-                    if (!bottom && !bHoriTileBoundary)
+                    if (!bottom && !pSC->bHoriTileBoundary)
                     {
                         strPost4_alternate(p0 - 2 , p0 - 4 , p1 - 28, p1 - 26);
                         strPost4_alternate(p0 - 1 , p0 - 3 , p1 - 27, p1 - 25);
@@ -1626,7 +1615,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                 strPost4x4Stage1_alternate(p0 - 64, 32);
             }
 
-            if (top || bHoriTileBoundary)
+            if (top || pSC->bHoriTileBoundary)
             {
                 if (!left)
                 {
@@ -1636,7 +1625,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                     p = NULL;
                 }
 
-                if (!left && !right && !bVertTileBoundary)
+                if (!left && !right && !pSC->bVertTileBoundary)
                 {
                     p = p1 + -32 + 4;
                     strPost4_alternate(p + 1, p + 0, p + 28, p + 29);
@@ -1676,45 +1665,45 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
         // second level inverse overlap (422_UV)
         if (OL_TWO == olOverlap)
         {
-            if ((leftAdjacentColumn || bOneMBRightVertTB) && (top || bHoriTileBoundary)) 
+            if ((leftAdjacentColumn || pSC->bOneMBRightVertTB) && (top || pSC->bHoriTileBoundary))
                 COMPUTE_CORNER_PRED_DIFF(p1 - 128 + 0, *(p1 - 128 + 64));
 
-            if ((rightAdjacentColumn || bOneMBLeftVertTB) && (top || bHoriTileBoundary))
-                iPredBefore[i][0] = *(p1 + 0);
-            if ((right || bVertTileBoundary) && (top || bHoriTileBoundary))
-                COMPUTE_CORNER_PRED_DIFF(p1 - 128 + 64, iPredBefore[i][0]);
+            if ((rightAdjacentColumn || pSC->bOneMBLeftVertTB) && (top || pSC->bHoriTileBoundary))
+                pSC->iPredBefore[i][0] = *(p1 + 0);
+            if ((right || pSC->bVertTileBoundary) && (top || pSC->bHoriTileBoundary))
+                COMPUTE_CORNER_PRED_DIFF(p1 - 128 + 64, pSC->iPredBefore[i][0]);
 
-            if ((leftAdjacentColumn || bOneMBRightVertTB) && (bottom || bHoriTileBoundary)) 
+            if ((leftAdjacentColumn || pSC->bOneMBRightVertTB) && (bottom || pSC->bHoriTileBoundary))
                 COMPUTE_CORNER_PRED_DIFF(p0 - 128 + 48, *(p0 - 128 + 112));
 
-            if ((rightAdjacentColumn || bOneMBLeftVertTB) && (bottom || bHoriTileBoundary)) 
-                iPredBefore[i][1] = *(p0 + 48);
-            if ((right || bVertTileBoundary) && (bottom || bHoriTileBoundary))
-                COMPUTE_CORNER_PRED_DIFF(p0 - 128 + 112, iPredBefore[i][1]);
+            if ((rightAdjacentColumn || pSC->bOneMBLeftVertTB) && (bottom || pSC->bHoriTileBoundary))
+                pSC->iPredBefore[i][1] = *(p0 + 48);
+            if ((right || pSC->bVertTileBoundary) && (bottom || pSC->bHoriTileBoundary))
+                COMPUTE_CORNER_PRED_DIFF(p0 - 128 + 112, pSC->iPredBefore[i][1]);
 
             if (!bottom)
             {
-                if (leftORright || bVertTileBoundary)
+                if (leftORright || pSC->bVertTileBoundary)
                 {
-                    if (!top && !bHoriTileBoundary)
+                    if (!top && !pSC->bHoriTileBoundary)
                     {
-                        if (left || bVertTileBoundary)
+                        if (left || pSC->bVertTileBoundary)
                             strPost2_alternate(p0 + 48 + 0, p1 + 0);
 
-                        if (right || bVertTileBoundary)
+                        if (right || pSC->bVertTileBoundary)
                             strPost2_alternate(p0 + 48 + -64, p1 + -64);
                     }
 
-                    if (left || bVertTileBoundary)
+                    if (left || pSC->bVertTileBoundary)
                         strPost2_alternate(p1 + 16, p1 + 16 + 16);
 
-                    if (right || bVertTileBoundary)
+                    if (right || pSC->bVertTileBoundary)
                         strPost2_alternate(p1 + -48, p1 + -48 + 16);
                 }
 
-                if (!leftORright && !bVertTileBoundary)
+                if (!leftORright && !pSC->bVertTileBoundary)
                 {
-                    if (top || bHoriTileBoundary)
+                    if (top || pSC->bHoriTileBoundary)
                         strPost2_alternate(p1 - 64, p1);
                     else
                         strPost2x2_alternate(p0 - 16, p0 + 48, p1 - 64, p1);
@@ -1723,24 +1712,24 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                 }
             }
             
-            if ((bottom || bHoriTileBoundary) && (!leftORright && !bVertTileBoundary))
+            if ((bottom || pSC->bHoriTileBoundary) && (!leftORright && !pSC->bVertTileBoundary))
                 strPost2_alternate(p0 - 16, p0 + 48);
 
-            if ((leftAdjacentColumn || bOneMBRightVertTB) && (top || bHoriTileBoundary)) 
+            if ((leftAdjacentColumn || pSC->bOneMBRightVertTB) && (top || pSC->bHoriTileBoundary))
                 COMPUTE_CORNER_PRED_ADD(p1 - 128 + 0, *(p1 - 128 + 64));
 
-            if ((rightAdjacentColumn || bOneMBLeftVertTB) && (top || bHoriTileBoundary))
-                iPredAfter[i][0] = *(p1 + 0);
-            if ((right || bVertTileBoundary) && (top || bHoriTileBoundary))
-                COMPUTE_CORNER_PRED_ADD(p1 - 128 + 64, iPredAfter[i][0]);
+            if ((rightAdjacentColumn || pSC->bOneMBLeftVertTB) && (top || pSC->bHoriTileBoundary))
+                pSC->iPredAfter[i][0] = *(p1 + 0);
+            if ((right || pSC->bVertTileBoundary) && (top || pSC->bHoriTileBoundary))
+                COMPUTE_CORNER_PRED_ADD(p1 - 128 + 64, pSC->iPredAfter[i][0]);
 
-            if ((leftAdjacentColumn || bOneMBRightVertTB) && (bottom || bHoriTileBoundary)) 
+            if ((leftAdjacentColumn || pSC->bOneMBRightVertTB) && (bottom || pSC->bHoriTileBoundary))
                 COMPUTE_CORNER_PRED_ADD(p0 - 128 + 48, *(p0 - 128 + 112));
 
-            if ((rightAdjacentColumn || bOneMBLeftVertTB) && (bottom || bHoriTileBoundary)) 
-                iPredAfter[i][1] = *(p0 + 48);
-            if ((right || bVertTileBoundary) && (bottom || bHoriTileBoundary))
-                COMPUTE_CORNER_PRED_ADD(p0 - 128 + 112, iPredAfter[i][1]);
+            if ((rightAdjacentColumn || pSC->bOneMBLeftVertTB) && (bottom || pSC->bHoriTileBoundary))
+                pSC->iPredAfter[i][1] = *(p0 + 48);
+            if ((right || pSC->bVertTileBoundary) && (bottom || pSC->bHoriTileBoundary))
+                COMPUTE_CORNER_PRED_ADD(p0 - 128 + 112, pSC->iPredAfter[i][1]);
         }
 
         //========================================
@@ -1752,7 +1741,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
         {
             // Need to delay processing of left column until leftAdjacentColumn = 1 for corner overlap operators
             // Since 422 has no vertical downsampling, no top MB delay of processing is necessary
-            for (j = (left ? 112 : ((leftAdjacentColumn || bOneMBRightVertTB) ? -80 : -16)); j < ((right || bVertTileBoundary) ? 48 : 112); j += 64)
+            for (j = (left ? 112 : ((leftAdjacentColumn || pSC->bOneMBRightVertTB) ? -80 : -16)); j < ((right || pSC->bVertTileBoundary) ? 48 : 112); j += 64)
             {
                 strIDCT4x4Stage1(p0 + j);
             }
@@ -1762,7 +1751,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
         {
             // Need to delay processing of left column until leftAdjacentColumn = 1 for corner overlap operators
             // Since 422 has no vertical downsampling, no top MB delay of processing is necessary
-            for (j = (left ? 64 : ((leftAdjacentColumn || bOneMBRightVertTB) ? -128 : -64)); j < ((right || bVertTileBoundary) ? 0 : 64); j += 64)
+            for (j = (left ? 64 : ((leftAdjacentColumn || pSC->bOneMBRightVertTB) ? -128 : -64)); j < ((right || pSC->bVertTileBoundary) ? 0 : 64); j += 64)
             {
                 strIDCT4x4Stage1(p1 + j + 0);
                 strIDCT4x4Stage1(p1 + j + 16);
@@ -1775,39 +1764,39 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
         if (OL_NONE != olOverlap)
         {
             /* Corner operations */
-            if ((top || bHoriTileBoundary) && (leftAdjacentColumn || bOneMBRightVertTB))
+            if ((top || pSC->bHoriTileBoundary) && (leftAdjacentColumn || pSC->bOneMBRightVertTB))
                 strPost4_alternate(p1 - 128 + 0, p1 - 128 + 1, p1 - 128 + 2, p1 - 128 + 3);
-            if ((top || bHoriTileBoundary) && (right || bVertTileBoundary))
+            if ((top || pSC->bHoriTileBoundary) && (right || pSC->bVertTileBoundary))
                 strPost4_alternate(p1 - 59, p1 - 60, p1 - 57, p1 - 58);
-            if ((bottom || bHoriTileBoundary) && (leftAdjacentColumn || bOneMBRightVertTB))
+            if ((bottom || pSC->bHoriTileBoundary) && (leftAdjacentColumn || pSC->bOneMBRightVertTB))
                 strPost4_alternate(p0 - 128 + 48 + 10, p0 - 128 + 48 + 11, p0 - 128 + 48 + 8, p0 - 128 + 48 + 9);
-            if ((bottom || bHoriTileBoundary) && (right || bVertTileBoundary))
+            if ((bottom || pSC->bHoriTileBoundary) && (right || pSC->bVertTileBoundary))
                 strPost4_alternate(p0 - 1, p0 - 2, p0 - 3, p0 - 4);
             if (!top)
             {
                 // Need to delay processing of left column until leftAdjacentColumn = 1 for corner overlap operators
-                if (leftAdjacentColumn || bOneMBRightVertTB) {
+                if (leftAdjacentColumn || pSC->bOneMBRightVertTB) {
                     p = p0 + 32 + 10 - 128;
                     strPost4_alternate(p + 0, p - 2, p + 6, p + 8);
                     strPost4_alternate(p + 1, p - 1, p + 7, p + 9);
                     p = NULL;
                 }
 
-                if (right || bVertTileBoundary) {
+                if (right || pSC->bVertTileBoundary) {
                     p = p0 + -32 + 14;
                     strPost4_alternate(p + 0, p - 2, p + 6, p + 8);
                     strPost4_alternate(p + 1, p - 1, p + 7, p + 9);
                     p = NULL;
                 }
 
-                for (j = (left ? 0 : -128); j < ((right || bVertTileBoundary) ? -64 : 0); j += 64)
+                for (j = (left ? 0 : -128); j < ((right || pSC->bVertTileBoundary) ? -64 : 0); j += 64)
                     strPost4x4Stage1_alternate(p0 + j + 32, 0);
             }
 
             if (!bottom)
             {
                 // Need to delay processing of left column until leftAdjacentColumn = 1 for corner overlap operators
-                if (leftAdjacentColumn || bOneMBRightVertTB)
+                if (leftAdjacentColumn || pSC->bOneMBRightVertTB)
                 {
                     p = p1 + 0 + 10 - 128;
                     strPost4_alternate(p + 0, p - 2, p + 6, p + 8);
@@ -1818,7 +1807,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                     p = NULL;
                 }
 
-                if (right || bVertTileBoundary)
+                if (right || pSC->bVertTileBoundary)
                 {
                     p = p1 + -64 + 14;
                     strPost4_alternate(p + 0, p - 2, p + 6, p + 8);
@@ -1829,18 +1818,18 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                     p = NULL;
                 }
 
-                for (j = (left ? 0 : -128); j < ((right || bVertTileBoundary) ? -64 : 0); j += 64)
+                for (j = (left ? 0 : -128); j < ((right || pSC->bVertTileBoundary) ? -64 : 0); j += 64)
                 {
                     strPost4x4Stage1_alternate(p1 + j +  0, 0);
                     strPost4x4Stage1_alternate(p1 + j + 16, 0);
                 }
             }
 
-            if (topORbottom || bHoriTileBoundary)
+            if (topORbottom || pSC->bHoriTileBoundary)
             {
-                if (top || bHoriTileBoundary) {
+                if (top || pSC->bHoriTileBoundary) {
                     p = p1 + 5;
-                    for (j = (left ? 0 : -128); j < ((right || bVertTileBoundary) ? -64 : 0); j += 64)
+                    for (j = (left ? 0 : -128); j < ((right || pSC->bVertTileBoundary) ? -64 : 0); j += 64)
                     {
                         strPost4_alternate(p + j + 0, p + j - 1, p + j + 59, p + j + 60);
                         strPost4_alternate(p + j + 2, p + j + 1, p + j + 61, p + j + 62);
@@ -1848,9 +1837,9 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                     p = NULL;
                 }
 
-                if (bottom || bHoriTileBoundary) {
+                if (bottom || pSC->bHoriTileBoundary) {
                     p = p0 + 48 + 13;
-                    for (j = (left ? 0 : -128); j < ((right || bVertTileBoundary) ? -64 : 0); j += 64)
+                    for (j = (left ? 0 : -128); j < ((right || pSC->bVertTileBoundary) ? -64 : 0); j += 64)
                     {
                         strPost4_alternate(p + j + 0, p + j - 1, p + j + 59, p + j + 60);
                         strPost4_alternate(p + j + 2, p + j + 1, p + j + 61, p + j + 62);
@@ -1861,21 +1850,21 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
             else
             {
                 // Need to delay processing of left column until leftAdjacentColumn = 1 for corner overlap operators
-                if (leftAdjacentColumn || bOneMBRightVertTB)
+                if (leftAdjacentColumn || pSC->bOneMBRightVertTB)
                 {
                     j = 0 + 0 - 128;
                     strPost4_alternate(p0 + j + 48 + 10 + 0, p0 + j + 48 + 10 - 2, p1 + j + 0, p1 + j + 2);
                     strPost4_alternate(p0 + j + 48 + 10 + 1, p0 + j + 48 + 10 - 1, p1 + j + 1, p1 + j + 3);
                 }
 
-                if (right || bVertTileBoundary)
+                if (right || pSC->bVertTileBoundary)
                 {
                     j = -64 + 4;
                     strPost4_alternate(p0 + j + 48 + 10 + 0, p0 + j + 48 + 10 - 2, p1 + j + 0, p1 + j + 2);
                     strPost4_alternate(p0 + j + 48 + 10 + 1, p0 + j + 48 + 10 - 1, p1 + j + 1, p1 + j + 3);
                 }
 
-                for (j = (left ? 0 : -128); j < ((right || bVertTileBoundary) ? -64 : 0); j += 64)
+                for (j = (left ? 0 : -128); j < ((right || pSC->bVertTileBoundary) ? -64 : 0); j += 64)
                     strPost4x4Stage1Split_alternate(p0 + j + 48, p1 + j + 0, 0);
             }
         }
