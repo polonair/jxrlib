@@ -38,6 +38,7 @@
 Void strDCT2x2dn(PixelI *, PixelI *, PixelI *, PixelI *);
 Void strDCT2x2up(PixelI *, PixelI *, PixelI *, PixelI *);
 Void FOURBUTTERFLY_HARDCODED1(PixelI *p);
+int ClipDCL(int directCurrent, int alternateCurrent);
 
 /** 2x2 dct of a group of 4**/
 #define FOURBUTTERFLY(p, i00, i01, i02, i03, i10, i11, i12, i13,\

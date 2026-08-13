@@ -286,30 +286,13 @@ Void DCCompensate (PixelI *a, PixelI *b, PixelI *c, PixelI *d, int iDC)
     *c += iDC;
 }
 
-#ifndef max
-#define max(a,b)            (((a) > (b)) ? (a) : (b))
-#endif
-
-#ifndef min
-#define min(a,b)            (((a) < (b)) ? (a) : (b))
-#endif
-
-int ClipDCL(int iDCL, int iAltDCL)
+int ClipDCL(int directCurrent, int alternateCurrent)
 {
-    int iClipDCL = 0;
-    if (iDCL > 0) {
-        if (iAltDCL > 0)
-            iClipDCL = min(iDCL, iAltDCL);
-        else
-            iClipDCL = 0;
-    }
-    else if (iDCL < 0) {
-        if (iAltDCL < 0)
-            iClipDCL = max(iDCL, iAltDCL);
-        else
-            iClipDCL = 0;
-    }
-    return iClipDCL;
+    if (directCurrent > 0 && alternateCurrent > 0)
+        return directCurrent < alternateCurrent ? directCurrent : alternateCurrent;
+    if (directCurrent < 0 && alternateCurrent < 0)
+        return directCurrent > alternateCurrent ? directCurrent : alternateCurrent;
+    return 0;
 }
 
 Void strPost4x4Stage1Split(PixelI *p0, PixelI *p1, Int iOffset, Int iHPQP, Bool bHPAbsent)

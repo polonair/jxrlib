@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include "JxrManagedBitIO.h"
 #include "strcodec.h"
+#include "strTransform.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
 #include "JxrAdaptiveScan.h"
@@ -2472,6 +2473,17 @@ static int test_inverse_transform_math_vectors(void)
     return first == -12 && second == 1;
 }
 
+static int test_inverse_transform_dc_clip_vectors(void)
+{
+    return ClipDCL(0, 7) == 0 &&
+        ClipDCL(7, 3) == 3 &&
+        ClipDCL(3, 7) == 3 &&
+        ClipDCL(7, -3) == 0 &&
+        ClipDCL(-7, -3) == -3 &&
+        ClipDCL(-3, -7) == -3 &&
+        ClipDCL(-7, 3) == 0;
+}
+
 static int test_entropy_reader_signed_residual_vectors(void)
 {
     return JxrEntropyBitReaderDecodeSignedResidualValue(0) == 0 &&
@@ -2944,6 +2956,7 @@ int main(int argc, char** argv)
         { "bit_math_vectors", test_bit_math_vectors },
         { "prediction_math_vectors", test_prediction_math_vectors },
         { "inverse_transform_math_vectors", test_inverse_transform_math_vectors },
+        { "inverse_transform_dc_clip_vectors", test_inverse_transform_dc_clip_vectors },
         { "entropy_reader_signed_residual_vectors", test_entropy_reader_signed_residual_vectors },
         { "entropy_reader_state_vectors", test_entropy_reader_state_vectors },
         { "legacy_bit_reader_mirror_vectors", test_legacy_bit_reader_mirror_vectors },
