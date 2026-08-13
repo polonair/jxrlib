@@ -5,6 +5,7 @@
 #include "JxrManagedBitIO.h"
 #include "strcodec.h"
 #include "strTransform.h"
+#include "../image/encode/JxrForwardTransformMath.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
 #include "JxrAdaptiveScan.h"
@@ -2473,6 +2474,24 @@ static int test_inverse_transform_math_vectors(void)
     return first == -12 && second == 1;
 }
 
+static int test_forward_transform_math_vectors(void)
+{
+    PixelI first, second;
+
+    first = 10; second = 5;
+    JxrForwardTransformMathRotateHalf(&first, &second);
+    if (first != 10 || second != 0) return 0;
+    first = -10; second = 5;
+    JxrForwardTransformMathRotateHalf(&first, &second);
+    if (first != -5 || second != 10) return 0;
+    first = 10; second = 5;
+    JxrForwardTransformMathRotateThreeEighths(&first, &second);
+    if (first != 10 || second != 1) return 0;
+    first = -10; second = 5;
+    JxrForwardTransformMathRotateThreeEighths(&first, &second);
+    return first == -7 && second == 9;
+}
+
 static int test_inverse_transform_corner_prediction_vectors(void)
 {
     PixelI value = 12;
@@ -2980,6 +2999,7 @@ int main(int argc, char** argv)
         { "bit_math_vectors", test_bit_math_vectors },
         { "prediction_math_vectors", test_prediction_math_vectors },
         { "inverse_transform_math_vectors", test_inverse_transform_math_vectors },
+        { "forward_transform_math_vectors", test_forward_transform_math_vectors },
         { "inverse_transform_corner_prediction_vectors", test_inverse_transform_corner_prediction_vectors },
         { "four_butterfly_vectors", test_four_butterfly_vectors },
         { "inverse_transform_dc_clip_vectors", test_inverse_transform_dc_clip_vectors },

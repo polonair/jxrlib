@@ -170,6 +170,7 @@
     <ClCompile Include="..\encode\strenc.c" />
     <ClCompile Include="..\encode\strenc_x86.c" />
     <ClCompile Include="..\encode\strFwdTransform.c" />
+    <ClCompile Include="..\encode\JxrForwardTransformMath.c" />
     <ClCompile Include="..\encode\strPredQuantEnc.c" />
   </ItemGroup>
   <ItemGroup>

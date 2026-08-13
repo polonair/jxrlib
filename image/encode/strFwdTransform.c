@@ -28,10 +28,7 @@
 
 #include "strTransform.h"
 #include "encode.h"
-
-/** rotation by pi/8 **/
-#define ROTATE1(a, b) (b) -= (((a) + 1) >> 1), (a) += (((b) + 1) >> 1)  // this works well too
-#define ROTATE2(a, b) (b) -= (((a)*3 + 4) >> 3), (a) += (((b)*3 + 4) >> 3)  // this works well too
+#include "JxrForwardTransformMath.h"
 
 /** local functions **/
 static Void fwdOddOdd(PixelI *, PixelI *, PixelI *, PixelI *);
@@ -217,7 +214,7 @@ Void strPre4(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
     a += d, b += c;
     d -= ((a + 1) >> 1), c -= ((b + 1) >> 1);
     
-    ROTATE1(c, d);
+    JxrForwardTransformMathRotateHalf(&c, &d);
     
     strHSTenc1_edge(&a, &d); strHSTenc1_edge(&b, &c);
     
@@ -256,10 +253,10 @@ Void strPre4x4Stage1Split(PixelI *p0, PixelI *p1, Int iOffset)
     strHSTenc1(p0 + 3, p3 + 3);
 
     /** anti diagonal corners: rotation by pi/8 **/
-    ROTATE1(p1[2], p1[3]);
-    ROTATE1(p1[0], p1[1]);
-    ROTATE1(p2[1], p2[3]);
-    ROTATE1(p2[0], p2[2]);
+    JxrForwardTransformMathRotateHalf(&p1[2], &p1[3]);
+    JxrForwardTransformMathRotateHalf(&p1[0], &p1[1]);
+    JxrForwardTransformMathRotateHalf(&p2[1], &p2[3]);
+    JxrForwardTransformMathRotateHalf(&p2[0], &p2[2]);
 
     /** bottom right corner: pi/8 rotation => pi/8 rotation **/
     fwdOddOddPre(p3 + 0, p3 + 1, p3 + 2, p3 + 3);
@@ -297,10 +294,10 @@ Void strPre4x4Stage2Split(PixelI* p0, PixelI* p1)
     strHSTenc1(p0 - 16, p1 +  0);
 
     /** anti diagonal corners: rotation **/
-    ROTATE1(p1[-48], p1[-112]);
-    ROTATE1(p1[-64], p1[-128]);
-    ROTATE1(p0[112], p0[  96]);
-    ROTATE1(p0[ 48], p0[  32]);
+    JxrForwardTransformMathRotateHalf(&p1[-48], &p1[-112]);
+    JxrForwardTransformMathRotateHalf(&p1[-64], &p1[-128]);
+    JxrForwardTransformMathRotateHalf(&p0[112], &p0[  96]);
+    JxrForwardTransformMathRotateHalf(&p0[ 48], &p0[  32]);
 
     /** bottom right corner: pi/8 rotation => pi/8 rotation **/
     fwdOddOddPre(p1 + 0, p1 + 64, p1 + 16, p1 + 80);
@@ -467,8 +464,8 @@ Void fwdOdd(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
     d = ((a + 1) >> 1) - d;
 
     /** rotate pi/8 **/
-    ROTATE2(a, b);
-    ROTATE2(c, d);
+    JxrForwardTransformMathRotateThreeEighths(&a, &b);
+    JxrForwardTransformMathRotateThreeEighths(&c, &d);
 
     /** butterflies **/
     d += (b) >> 1;

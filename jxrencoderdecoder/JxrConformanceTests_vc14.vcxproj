@@ -7,7 +7,10 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <PropertyGroup><OutDir>$(Configuration)\$(ProjectName)\$(Platform)\</OutDir><IntDir>$(OutDir)</IntDir></PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'"><ClCompile><AdditionalIncludeDirectories>..\image\decode;..\image\sys;..\common\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories><PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions><RuntimeLibrary>MultiThreaded</RuntimeLibrary><WarningLevel>Level4</WarningLevel><PrecompiledHeader></PrecompiledHeader></ClCompile><Link><SubSystem>Console</SubSystem><TargetMachine>MachineX64</TargetMachine></Link></ItemDefinitionGroup>
-  <ItemGroup><ClCompile Include="..\tests\JxrConformanceTests.c" /></ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\tests\JxrConformanceTests.c" />
+    <ClCompile Include="..\image\encode\JxrForwardTransformMath.c" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\image\VC14Projects\CommonLib_vc14.vcxproj"><Project>{4b4c055c-170e-4dcf-8f73-bed91be7cfa4}</Project></ProjectReference>
     <ProjectReference Include="..\image\VC14Projects\DecodeLib_vc14.vcxproj"><Project>{F3DED308-7A6F-4B9F-8EDF-AF99DEC8BDE3}</Project></ProjectReference>
