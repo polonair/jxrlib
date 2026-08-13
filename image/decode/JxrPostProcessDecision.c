@@ -7,23 +7,36 @@
 
 #include "JxrPostProcessDecision.h"
 
-#include <stdlib.h>
+static Int JxrPostProcessAbsoluteDcDifference(Int firstDc, Int secondDc)
+{
+    Int difference = firstDc - secondDc;
+
+    if (difference < 0) {
+        difference = -difference;
+    }
+
+    return difference;
+}
 
 Bool JxrPostProcessShouldDemacroblock(
     const struct tagPostProcInfo* first,
     const struct tagPostProcInfo* second,
     Int threshold)
 {
-    Int dcDifference;
-
     if (first->ucMBTexture + second->ucMBTexture != 0) {
         return FALSE;
     }
 
-    dcDifference = first->iMBDC - second->iMBDC;
-    if (dcDifference < 0) {
-        dcDifference = -dcDifference;
-    }
+    return JxrPostProcessAbsoluteDcDifference(first->iMBDC, second->iMBDC) <= threshold;
+}
 
-    return dcDifference <= threshold;
+Bool JxrPostProcessShouldDeblockBoundary(
+    U8 firstTexture,
+    Int firstDc,
+    U8 secondTexture,
+    Int secondDc,
+    Int threshold)
+{
+    return firstTexture + secondTexture < 3 &&
+        JxrPostProcessAbsoluteDcDifference(firstDc, secondDc) <= threshold;
 }

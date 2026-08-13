@@ -264,7 +264,7 @@ Void postProcBlock(struct tagPostProcInfo * strPostProcInfo[MAX_CHANNELS][2], Pi
             pc = p0 - 256 + i * 64 + j * 16;
 
             // deblock
-            if(texture[j][i] + texture[j + 1][i] < 3 && abs(dc[j][i] - dc[j + 1][i]) <= threshold){
+            if(JxrPostProcessShouldDeblockBoundary(texture[j][i], dc[j][i], texture[j + 1][i], dc[j + 1][i], threshold)){
                 // smooth horizontal boundary ----
                 pt = (j < 3 ? pc + 16 : p1 - 256 + i * 64);
                 for(k = 0; k < 4; k ++){
@@ -273,7 +273,7 @@ Void postProcBlock(struct tagPostProcInfo * strPostProcInfo[MAX_CHANNELS][2], Pi
             }
 
             // two horizontally adjacent blocks have same texture and similiar DCs
-            if(texture[j][i] + texture[j][i + 1] < 3 && abs(dc[j][i] - dc[j][i + 1]) <= threshold){
+            if(JxrPostProcessShouldDeblockBoundary(texture[j][i], dc[j][i], texture[j][i + 1], dc[j][i + 1], threshold)){
                 // smooth vertical boundary |
                 pt = pc + 64;
                 for(k = 0; k < 4; k ++){

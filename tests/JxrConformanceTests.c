@@ -1569,6 +1569,16 @@ static int test_postprocess_demacroblock_decision_vectors(void)
     return !JxrPostProcessShouldDemacroblock(&first, &second, -1);
 }
 
+static int test_postprocess_deblock_boundary_decision_vectors(void)
+{
+    if (!JxrPostProcessShouldDeblockBoundary(0, 100, 2, 103, 3)) return 0;
+    if (!JxrPostProcessShouldDeblockBoundary(1, 103, 1, 100, 3)) return 0;
+    if (JxrPostProcessShouldDeblockBoundary(1, 100, 2, 100, 0)) return 0;
+    if (JxrPostProcessShouldDeblockBoundary(3, 100, 0, 100, 0)) return 0;
+    if (JxrPostProcessShouldDeblockBoundary(0, 100, 0, 104, 3)) return 0;
+    return !JxrPostProcessShouldDeblockBoundary(0, 100, 0, 100, -1);
+}
+
 static int test_sample_clipping_vectors(void)
 {
     return JxrSampleClippingClamp(-2, 0, 31) == 0 &&
@@ -2992,6 +3002,7 @@ int main(int argc, char** argv)
         { "decoder_packet_row_reader_vectors", test_decoder_packet_row_reader_vectors },
         { "inverse_color_transform_vectors", test_inverse_color_transform_vectors },
         { "postprocess_demacroblock_decision_vectors", test_postprocess_demacroblock_decision_vectors },
+        { "postprocess_deblock_boundary_decision_vectors", test_postprocess_deblock_boundary_decision_vectors },
         { "sample_clipping_vectors", test_sample_clipping_vectors },
         { "float_sample_conversion_vectors", test_float_sample_conversion_vectors },
         { "monochrome_expansion_vectors", test_monochrome_expansion_vectors },

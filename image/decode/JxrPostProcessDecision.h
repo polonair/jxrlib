@@ -20,4 +20,16 @@ Bool JxrPostProcessShouldDemacroblock(
     const struct tagPostProcInfo* second,
     Int threshold);
 
+/*
+ * Returns TRUE when the boundary between two 4x4 blocks can be smoothed.
+ * Texture values below the combined bumpy threshold and a bounded DC delta
+ * are both required.
+ */
+Bool JxrPostProcessShouldDeblockBoundary(
+    U8 firstTexture,
+    Int firstDc,
+    U8 secondTexture,
+    Int secondDc,
+    Int threshold);
+
 #endif
