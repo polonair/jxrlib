@@ -5,6 +5,7 @@
 #include "JxrManagedBitIO.h"
 #include "strcodec.h"
 #include "strTransform.h"
+#include "JxrTransformMath.h"
 #include "../image/encode/JxrForwardTransformMath.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
@@ -2753,6 +2754,23 @@ static int test_inverse_transform_math_vectors(void)
     return topLeft == 19 && topRight == 33 && bottomLeft == 28 && bottomRight == 42;
 }
 
+static int test_transform_math_dct2x2_vectors(void)
+{
+    PixelI first, second, third, fourth;
+
+    first = 10; second = 20; third = 30; fourth = 40;
+    JxrTransformMathApplyDct2x2Down(&first, &second, &third, &fourth);
+    if (first != 50 || second != -20 || third != -10 || fourth != 0) return 0;
+
+    first = 0; second = 0; third = 1; fourth = 0;
+    JxrTransformMathApplyDct2x2Down(&first, &second, &third, &fourth);
+    if (first != 1 || second != -1 || third != 0 || fourth != -1) return 0;
+
+    first = 0; second = 0; third = 1; fourth = 0;
+    JxrTransformMathApplyDct2x2Up(&first, &second, &third, &fourth);
+    return first == 0 && second == 0 && third == 1 && fourth == 0;
+}
+
 static int test_forward_transform_math_vectors(void)
 {
     PixelI first, second;
@@ -3298,6 +3316,7 @@ int main(int argc, char** argv)
         { "bit_math_vectors", test_bit_math_vectors },
         { "prediction_math_vectors", test_prediction_math_vectors },
         { "inverse_transform_math_vectors", test_inverse_transform_math_vectors },
+        { "transform_math_dct2x2_vectors", test_transform_math_dct2x2_vectors },
         { "forward_transform_math_vectors", test_forward_transform_math_vectors },
         { "inverse_transform_corner_prediction_vectors", test_inverse_transform_corner_prediction_vectors },
         { "four_butterfly_vectors", test_four_butterfly_vectors },

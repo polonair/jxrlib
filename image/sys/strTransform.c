@@ -27,6 +27,7 @@
 //*@@@---@@@@******************************************************************
 
 #include "strTransform.h"
+#include "JxrTransformMath.h"
 
 const Int JxrTransformFirstStageFourButterflyOffsets[16] = {
     0, 4, 8, 12,
@@ -48,48 +49,12 @@ const Int JxrTransformSecondStageFourButterflyOffsets[16] = {
     [- - - -] <-> [- - - -] **/
 Void strDCT2x2dn(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
 {
-    PixelI a, b, c, d, C, t;
-    a = *pa;
-    b = *pb;
-    C = *pc;
-    d = *pd;
-  
-    a += d;
-    b -= C;
-    t = ((a - b) >> 1);
-    c = t - d;
-    d = t - C;
-    a -= d;
-    b += c;
-
-    *pa = a;
-    *pb = b;
-    *pc = c;
-    *pd = d;
+    JxrTransformMathApplyDct2x2Down(pa, pb, pc, pd);
 }
-
 Void strDCT2x2up(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
 {
-    PixelI a, b, c, d, C, t;
-    a = *pa;
-    b = *pb;
-    C = *pc;
-    d = *pd;
-  
-    a += d;
-    b -= C;
-    t = ((a - b + 1) >> 1);
-    c = t - d;
-    d = t - C;
-    a -= d;
-    b += c;
-
-    *pa = a;
-    *pb = b;
-    *pc = c;
-    *pd = d;
+    JxrTransformMathApplyDct2x2Up(pa, pb, pc, pd);
 }
-
 Void strTransformSubtractCornerPrediction(PixelI* target, PixelI prediction)
 {
     *target -= prediction;

@@ -182,6 +182,7 @@
     <ClCompile Include="..\sys\strcodec.c" />
     <ClCompile Include="..\sys\strPredQuant.c" />
     <ClCompile Include="..\sys\strTransform.c" />
+    <ClCompile Include="..\sys\JxrTransformMath.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\sys\ansi.h" />
@@ -189,6 +190,7 @@
     <ClInclude Include="..\sys\perfTimer.h" />
     <ClInclude Include="..\sys\strcodec.h" />
     <ClInclude Include="..\sys\strTransform.h" />
+    <ClInclude Include="..\sys\JxrTransformMath.h" />
     <ClInclude Include="..\sys\windowsmediaphoto.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
