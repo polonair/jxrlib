@@ -2714,7 +2714,13 @@ static int test_inverse_transform_math_vectors(void)
     if (first != 8 || second != 8) return 0;
     first = -10; second = 5;
     JxrInverseTransformMathRotateThreeEighths(&first, &second);
-    return first == -12 && second == 1;
+    if (first != -12 || second != 1) return 0;
+    return !JxrInverseTransformMathShouldCompensateDc(0, 20, FALSE) &&
+        JxrInverseTransformMathShouldCompensateDc(0, 21, FALSE) &&
+        JxrInverseTransformMathShouldCompensateDc(-20, 21, FALSE) &&
+        !JxrInverseTransformMathShouldCompensateDc(21, 21, FALSE) &&
+        !JxrInverseTransformMathShouldCompensateDc(-21, 21, FALSE) &&
+        JxrInverseTransformMathShouldCompensateDc(500, 0, TRUE);
 }
 
 static int test_forward_transform_math_vectors(void)

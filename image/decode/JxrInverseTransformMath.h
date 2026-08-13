@@ -5,5 +5,9 @@
 
 Void JxrInverseTransformMathRotateHalf(PixelI* first, PixelI* second);
 Void JxrInverseTransformMathRotateThreeEighths(PixelI* first, PixelI* second);
+Bool JxrInverseTransformMathShouldCompensateDc(
+    Int directCurrent,
+    Int highPassQuantizer,
+    Bool highPassAbsent);
 
 #endif
