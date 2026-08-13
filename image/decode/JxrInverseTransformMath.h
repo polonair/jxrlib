@@ -18,5 +18,13 @@ Void JxrInverseTransformMathApplyDcCompensation(
 Int JxrInverseTransformMathClipDcWithAlternate(
     Int directCurrent,
     Int alternateCurrent);
+Int JxrInverseTransformMathApplyConditionalDcCompensation(
+    PixelI* topLeft,
+    PixelI* topRight,
+    PixelI* bottomLeft,
+    PixelI* bottomRight,
+    Int directCurrent,
+    Int highPassQuantizer,
+    Bool highPassAbsent);
 
 #endif

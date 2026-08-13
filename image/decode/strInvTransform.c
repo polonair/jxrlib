@@ -279,7 +279,6 @@ Void strPost4_alternate(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
 *****************************************************************************************/
 Void strPost4x4Stage1Split(PixelI *p0, PixelI *p1, Int iOffset, Int iHPQP, Bool bHPAbsent)
 {
-    int iDCLAlt1, iDCLAlt2, iDCLAlt3, iDCLAlt0;
     int iDCL1, iDCL2, iDCL3, iDCL0;
     int iTmp1, iTmp2, iTmp3, iTmp0;
 
@@ -321,26 +320,14 @@ Void strPost4x4Stage1Split(PixelI *p0, PixelI *p1, Int iOffset, Int iHPQP, Bool 
     iDCL1 = (iTmp1 * 595 + 65536)>>17; 
     iDCL2 = (iTmp2 * 595 + 65536)>>17; 
     iDCL3 = (iTmp3 * 595 + 65536)>>17; 
-    if (JxrInverseTransformMathShouldCompensateDc(iDCL0, iHPQP, bHPAbsent)) {
-        iDCLAlt0 = (*(p0 +0) - *(p1 +0) - *(p2 +0) + *(p3 +0))>>1;
-        iDCL0 = JxrInverseTransformMathClipDcWithAlternate(iDCL0, iDCLAlt0);
-        JxrInverseTransformMathApplyDcCompensation(p0 + 0, p2 + 0, p1 + 0, p3 + 0, iDCL0);
-    }
-    if (JxrInverseTransformMathShouldCompensateDc(iDCL1, iHPQP, bHPAbsent)) {
-            iDCLAlt1 = (*(p0 +1) - *(p1 +1) - *(p2 +1) + *(p3 +1))>>1;
-            iDCL1 = JxrInverseTransformMathClipDcWithAlternate(iDCL1, iDCLAlt1);
-        JxrInverseTransformMathApplyDcCompensation(p0 + 1, p2 + 1, p1 + 1, p3 + 1, iDCL1);
-    }
-    if (JxrInverseTransformMathShouldCompensateDc(iDCL2, iHPQP, bHPAbsent)) {
-            iDCLAlt2 = (*(p0 +2) - *(p1 +2) - *(p2 +2) + *(p3 +2))>>1;
-            iDCL2 = JxrInverseTransformMathClipDcWithAlternate(iDCL2, iDCLAlt2);
-        JxrInverseTransformMathApplyDcCompensation(p0 + 2, p2 + 2, p1 + 2, p3 + 2, iDCL2);
-    }
-    if (JxrInverseTransformMathShouldCompensateDc(iDCL3, iHPQP, bHPAbsent)) {
-            iDCLAlt3 = (*(p0 +3) - *(p1 +3) - *(p2 +3) + *(p3 +3))>>1;
-            iDCL3 = JxrInverseTransformMathClipDcWithAlternate(iDCL3, iDCLAlt3);
-        JxrInverseTransformMathApplyDcCompensation(p0 + 3, p2 + 3, p1 + 3, p3 + 3, iDCL3);
-    }
+    iDCL0 = JxrInverseTransformMathApplyConditionalDcCompensation(
+        p0 + 0, p2 + 0, p1 + 0, p3 + 0, iDCL0, iHPQP, bHPAbsent);
+    iDCL1 = JxrInverseTransformMathApplyConditionalDcCompensation(
+        p0 + 1, p2 + 1, p1 + 1, p3 + 1, iDCL1, iHPQP, bHPAbsent);
+    iDCL2 = JxrInverseTransformMathApplyConditionalDcCompensation(
+        p0 + 2, p2 + 2, p1 + 2, p3 + 2, iDCL2, iHPQP, bHPAbsent);
+    iDCL3 = JxrInverseTransformMathApplyConditionalDcCompensation(
+        p0 + 3, p2 + 3, p1 + 3, p3 + 3, iDCL3, iHPQP, bHPAbsent);
 }
 
 Void strPost4x4Stage1(PixelI* p, Int iOffset, Int iHPQP, Bool bHPAbsent)

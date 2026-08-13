@@ -60,3 +60,34 @@ Int JxrInverseTransformMathClipDcWithAlternate(
 
     return 0;
 }
+
+Int JxrInverseTransformMathApplyConditionalDcCompensation(
+    PixelI* topLeft,
+    PixelI* topRight,
+    PixelI* bottomLeft,
+    PixelI* bottomRight,
+    Int directCurrent,
+    Int highPassQuantizer,
+    Bool highPassAbsent)
+{
+    Int alternateCurrent;
+
+    if (!JxrInverseTransformMathShouldCompensateDc(
+        directCurrent,
+        highPassQuantizer,
+        highPassAbsent)) {
+        return directCurrent;
+    }
+
+    alternateCurrent = (*topLeft - *bottomLeft - *topRight + *bottomRight) >> 1;
+    directCurrent = JxrInverseTransformMathClipDcWithAlternate(
+        directCurrent,
+        alternateCurrent);
+    JxrInverseTransformMathApplyDcCompensation(
+        topLeft,
+        topRight,
+        bottomLeft,
+        bottomRight,
+        directCurrent);
+    return directCurrent;
+}
