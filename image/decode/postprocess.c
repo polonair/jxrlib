@@ -33,6 +33,7 @@
 #include "JxrPostProcessBlockNeighborhood.h"
 #include "JxrPostProcessSmoothing.h"
 #include "JxrPostProcessMacroblockAnalyzer.h"
+#include "JxrPostProcessBlockDcCollector.h"
 
 Int initPostProc(struct tagPostProcInfo * strPostProcInfo[MAX_CHANNELS][2], size_t mbWidth, size_t iNumChannels)
 {
@@ -90,30 +91,7 @@ Void postProcMB(struct tagPostProcInfo * strPostProcInfo[MAX_CHANNELS][2], Pixel
         JxrPostProcessSmoothingApplyMacroblockEdge(p1 - 256 + 9 * 16, p1 - 256 + 13 * 16, p1 + 1 * 16, p1 + 5 * 16);
     }
 
-    /* update DCs of blocks */
-    // MB d 
-    pMBd->iBlockDC[0][0] = p1[0 * 16];
-    pMBd->iBlockDC[0][1] = p1[4 * 16];
-    pMBd->iBlockDC[1][0] = p1[1 * 16];
-    pMBd->iBlockDC[1][1] = p1[5 * 16];
-    
-    // MB b
-    pMBb->iBlockDC[2][0] = p0[2 * 16];
-    pMBb->iBlockDC[2][1] = p0[6 * 16];
-    pMBb->iBlockDC[3][0] = p0[3 * 16];
-    pMBb->iBlockDC[3][1] = p0[7 * 16];
-
-    // MB c
-    pMBc->iBlockDC[0][2] = p1[ 8 * 16 - 256];
-    pMBc->iBlockDC[0][3] = p1[12 * 16 - 256];
-    pMBc->iBlockDC[1][2] = p1[ 9 * 16 - 256];
-    pMBc->iBlockDC[1][3] = p1[13 * 16 - 256];
-
-    // MB a
-    pMBa->iBlockDC[2][2] = p0[10 * 16 - 256];
-    pMBa->iBlockDC[2][3] = p0[14 * 16 - 256];
-    pMBa->iBlockDC[3][2] = p0[11 * 16 - 256];
-    pMBa->iBlockDC[3][3] = p0[15 * 16 - 256];
+    JxrPostProcessBlockDcCollectorCollect(p0, p1, pMBa, pMBb, pMBc, pMBd);
 }
 
 /* deblock and destair blocks */

@@ -59,6 +59,7 @@
 #include "JxrPostProcessBlockNeighborhood.h"
 #include "JxrPostProcessSmoothing.h"
 #include "JxrPostProcessMacroblockAnalyzer.h"
+#include "JxrPostProcessBlockDcCollector.h"
 #include "JxrSecondaryPlaneInitializer.h"
 #include "JxrPredictionMath.h"
 #include "JxrInverseTransformMath.h"
@@ -1706,6 +1707,39 @@ static int test_postprocess_macroblock_analyzer_vectors(void)
         result.ucBlockTexture[2][3] == 3 && result.ucBlockTexture[2][2] == 0;
 }
 
+static int test_postprocess_block_dc_collector_vectors(void)
+{
+    PixelI previousBuffer[512];
+    PixelI currentBuffer[512];
+    PixelI* previousSamples = previousBuffer + 256;
+    PixelI* currentSamples = currentBuffer + 256;
+    struct tagPostProcInfo macroblockA;
+    struct tagPostProcInfo macroblockB;
+    struct tagPostProcInfo macroblockC;
+    struct tagPostProcInfo macroblockD;
+    Int index;
+
+    for (index = 0; index < 512; ++index) {
+        previousBuffer[index] = 1000 + index;
+        currentBuffer[index] = 2000 + index;
+    }
+    memset(&macroblockA, 0, sizeof(macroblockA));
+    memset(&macroblockB, 0, sizeof(macroblockB));
+    memset(&macroblockC, 0, sizeof(macroblockC));
+    memset(&macroblockD, 0, sizeof(macroblockD));
+
+    JxrPostProcessBlockDcCollectorCollect(previousSamples, currentSamples,
+        &macroblockA, &macroblockB, &macroblockC, &macroblockD);
+    return macroblockD.iBlockDC[0][0] == 2256 && macroblockD.iBlockDC[0][1] == 2320 &&
+        macroblockD.iBlockDC[1][0] == 2272 && macroblockD.iBlockDC[1][1] == 2336 &&
+        macroblockB.iBlockDC[2][0] == 1288 && macroblockB.iBlockDC[2][1] == 1352 &&
+        macroblockB.iBlockDC[3][0] == 1304 && macroblockB.iBlockDC[3][1] == 1368 &&
+        macroblockC.iBlockDC[0][2] == 2128 && macroblockC.iBlockDC[0][3] == 2192 &&
+        macroblockC.iBlockDC[1][2] == 2144 && macroblockC.iBlockDC[1][3] == 2208 &&
+        macroblockA.iBlockDC[2][2] == 1160 && macroblockA.iBlockDC[2][3] == 1224 &&
+        macroblockA.iBlockDC[3][2] == 1176 && macroblockA.iBlockDC[3][3] == 1240;
+}
+
 static int test_sample_clipping_vectors(void)
 {
     return JxrSampleClippingClamp(-2, 0, 31) == 0 &&
@@ -3145,6 +3179,7 @@ int main(int argc, char** argv)
         { "postprocess_block_neighborhood_vectors", test_postprocess_block_neighborhood_vectors },
         { "postprocess_smoothing_vectors", test_postprocess_smoothing_vectors },
         { "postprocess_macroblock_analyzer_vectors", test_postprocess_macroblock_analyzer_vectors },
+        { "postprocess_block_dc_collector_vectors", test_postprocess_block_dc_collector_vectors },
         { "sample_clipping_vectors", test_sample_clipping_vectors },
         { "float_sample_conversion_vectors", test_float_sample_conversion_vectors },
         { "monochrome_expansion_vectors", test_monochrome_expansion_vectors },
