@@ -29,6 +29,7 @@
 #include "windowsmediaphoto.h"
 #include "strcodec.h"
 #include "JxrPostProcessDecision.h"
+#include "JxrPostProcessRowState.h"
 
 Void smoothMB(PixelI * p1, PixelI * p0, PixelI * q0, PixelI * q1)
 {
@@ -53,76 +54,18 @@ Void smooth(PixelI * p2, PixelI * p1, PixelI * p0, PixelI * q0, PixelI * q1, Pix
 
 Int initPostProc(struct tagPostProcInfo * strPostProcInfo[MAX_CHANNELS][2], size_t mbWidth, size_t iNumChannels)
 {
-    size_t i, j, k, l;
-    Bool b32bit = sizeof(int) == 4;
-    
-    for(j = 0; j < iNumChannels; j ++){
-        for(i = 0; i < 2; i ++){
-            // 2 more are allocated to avoid boundary check
-            if(b32bit) // integer overlow/underflow check for 32-bit system
-                if((((mbWidth + 2) >> 16) * sizeof(struct tagPostProcInfo)) & 0xffff0000)
-                    return ICERR_ERROR;
-            strPostProcInfo[j][i] = (struct tagPostProcInfo *)malloc((mbWidth + 2) * sizeof(struct tagPostProcInfo));
-            assert(strPostProcInfo[j][i] != NULL);
-            if(strPostProcInfo[j][i] == NULL){
-                return ICERR_ERROR;
-            }
-            strPostProcInfo[j][i] ++;
-            
-            // initialize out-of-bound MBs as bumpy (no post at all) to avoid boundary check
-            // left boundary
-            strPostProcInfo[j][i][-1].ucMBTexture = 3;
-            for(l = 0; l < 4; l ++){
-                for(k = 0; k < 4; k ++){
-                    strPostProcInfo[j][i][-1].ucBlockTexture[l][k] = 3;
-                }
-            }
-            // right boundary
-            strPostProcInfo[j][i][mbWidth] = strPostProcInfo[j][i][-1];
-        }
-    }
-
-    return ICERR_OK;
+    return JxrPostProcessRowStateInitialize(strPostProcInfo, mbWidth, iNumChannels);
 }
 
 Void termPostProc(struct tagPostProcInfo * strPostProcInfo[MAX_CHANNELS][2], size_t iNumChannels)
 {
-    size_t i, j;
-
-    for(j = 0; j < iNumChannels; j ++){
-        for(i = 0; i < 2; i ++){
-            if(strPostProcInfo[j][i] != NULL){
-                free(strPostProcInfo[j][i] - 1);
-            }
-        }
-    }
+    JxrPostProcessRowStateRelease(strPostProcInfo, iNumChannels);
 }
 
 Void slideOneMBRow(struct tagPostProcInfo * strPostProcInfo[MAX_CHANNELS][2], size_t iNumChannels, size_t mbWidth, Bool top, Bool bottom)
 {
-    size_t i, j;
-    struct tagPostProcInfo * bar;
-
-    for(i = 0; i < iNumChannels; i ++){
-        // swap previous row and current row
-        bar = strPostProcInfo[i][0];
-        strPostProcInfo[i][0] = strPostProcInfo[i][1];
-        strPostProcInfo[i][1] = bar;
-
-        if(top){ // if top row, previous row is out of boundary
-            for(j = 0; j < mbWidth; j ++){
-                strPostProcInfo[i][0][j] = strPostProcInfo[i][0][-1]; // set as bumpy
-            }
-        }
-        
-        if(bottom){ // if bottom bottom row, set current row of MBs (out of boundary) as bumpy
-            for(j = 0; j < mbWidth; j ++){
-                strPostProcInfo[i][1][j] = strPostProcInfo[i][1][-1]; // set as bumpy
-            }
-        }
-    }
+    JxrPostProcessRowStateAdvance(strPostProcInfo, iNumChannels, mbWidth, top, bottom);
 }
-
 // get DC and texture infomation right before transform
 Void updatePostProcInfo(struct tagPostProcInfo * strPostProcInfo[MAX_CHANNELS][2], PixelI * pMB, size_t mbX, size_t cc)
 {

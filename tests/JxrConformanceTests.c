@@ -55,6 +55,7 @@
 #include "JxrHeaderDecodePipeline.h"
 #include "JxrDecoderInitializationPipeline.h"
 #include "JxrPostProcessDecision.h"
+#include "JxrPostProcessRowState.h"
 #include "JxrSecondaryPlaneInitializer.h"
 #include "JxrPredictionMath.h"
 #include "JxrInverseTransformMath.h"
@@ -1579,6 +1580,34 @@ static int test_postprocess_deblock_boundary_decision_vectors(void)
     return !JxrPostProcessShouldDeblockBoundary(0, 100, 0, 100, -1);
 }
 
+static int test_postprocess_row_state_vectors(void)
+{
+    struct tagPostProcInfo* rows[MAX_CHANNELS][2];
+    struct tagPostProcInfo* previousRow;
+    struct tagPostProcInfo* currentRow;
+    Bool isValid = TRUE;
+
+    memset(rows, 0, sizeof(rows));
+    if (JxrPostProcessRowStateInitialize(rows, 3, 2) != ICERR_OK) return 0;
+
+    if (rows[0][0][-1].ucMBTexture != 3 ||
+        rows[0][0][-1].ucBlockTexture[0][0] != 3 ||
+        rows[1][1][3].ucMBTexture != 3) isValid = FALSE;
+
+    previousRow = rows[0][0];
+    currentRow = rows[0][1];
+    rows[0][1][0].iMBDC = 71;
+    JxrPostProcessRowStateAdvance(rows, 2, 3, FALSE, FALSE);
+    if (rows[0][0] != currentRow || rows[0][1] != previousRow || rows[0][0][0].iMBDC != 71) isValid = FALSE;
+
+    rows[0][0][0].ucMBTexture = 0;
+    rows[0][1][0].ucMBTexture = 0;
+    JxrPostProcessRowStateAdvance(rows, 2, 3, TRUE, TRUE);
+    if (rows[0][0][0].ucMBTexture != 3 || rows[0][1][0].ucMBTexture != 3) isValid = FALSE;
+    JxrPostProcessRowStateRelease(rows, 2);
+    return isValid;
+}
+
 static int test_sample_clipping_vectors(void)
 {
     return JxrSampleClippingClamp(-2, 0, 31) == 0 &&
@@ -3003,6 +3032,7 @@ int main(int argc, char** argv)
         { "inverse_color_transform_vectors", test_inverse_color_transform_vectors },
         { "postprocess_demacroblock_decision_vectors", test_postprocess_demacroblock_decision_vectors },
         { "postprocess_deblock_boundary_decision_vectors", test_postprocess_deblock_boundary_decision_vectors },
+        { "postprocess_row_state_vectors", test_postprocess_row_state_vectors },
         { "sample_clipping_vectors", test_sample_clipping_vectors },
         { "float_sample_conversion_vectors", test_float_sample_conversion_vectors },
         { "monochrome_expansion_vectors", test_monochrome_expansion_vectors },
