@@ -2483,6 +2483,20 @@ static int test_inverse_transform_corner_prediction_vectors(void)
     return value == 4;
 }
 
+static int test_four_butterfly_vectors(void)
+{
+    PixelI actual[16];
+    PixelI expected[16];
+    const Int offsets[16] = { 0, 4, 8, 12, 1, 5, 9, 13,
+        2, 6, 10, 14, 3, 7, 11, 15 };
+    Int index;
+
+    for (index = 0; index < 16; ++index) actual[index] = expected[index] = index - 7;
+    strTransformApplyFourButterfly(actual, offsets);
+    FOURBUTTERFLY_HARDCODED1(expected);
+    return memcmp(actual, expected, sizeof(actual)) == 0;
+}
+
 static int test_inverse_transform_dc_clip_vectors(void)
 {
     return ClipDCL(0, 7) == 0 &&
@@ -2967,6 +2981,7 @@ int main(int argc, char** argv)
         { "prediction_math_vectors", test_prediction_math_vectors },
         { "inverse_transform_math_vectors", test_inverse_transform_math_vectors },
         { "inverse_transform_corner_prediction_vectors", test_inverse_transform_corner_prediction_vectors },
+        { "four_butterfly_vectors", test_four_butterfly_vectors },
         { "inverse_transform_dc_clip_vectors", test_inverse_transform_dc_clip_vectors },
         { "entropy_reader_signed_residual_vectors", test_entropy_reader_signed_residual_vectors },
         { "entropy_reader_state_vectors", test_entropy_reader_state_vectors },

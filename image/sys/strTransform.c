@@ -85,6 +85,18 @@ Void strTransformAddCornerPrediction(PixelI* target, PixelI prediction)
 {
     *target += prediction;
 }
+
+Void strTransformApplyFourButterfly(PixelI* buffer, const Int* offsets)
+{
+    Int group;
+
+    for (group = 0; group < 4; ++group) {
+        Int index = group * 4;
+        strDCT2x2dn(&buffer[offsets[index]], &buffer[offsets[index + 1]],
+            &buffer[offsets[index + 2]], &buffer[offsets[index + 3]]);
+    }
+}
+
 Void FOURBUTTERFLY_HARDCODED1(PixelI *p)
 {
     strDCT2x2dn(&p[0], &p[4], &p[8], &p[12]);

@@ -37,14 +37,8 @@ Void strDCT2x2up(PixelI *, PixelI *, PixelI *, PixelI *);
 Void FOURBUTTERFLY_HARDCODED1(PixelI *p);
 Void strTransformSubtractCornerPrediction(PixelI* target, PixelI prediction);
 Void strTransformAddCornerPrediction(PixelI* target, PixelI prediction);
+Void strTransformApplyFourButterfly(PixelI* buffer, const Int* offsets);
 int ClipDCL(int directCurrent, int alternateCurrent);
 
-/** 2x2 dct of a group of 4**/
-#define FOURBUTTERFLY(p, i00, i01, i02, i03, i10, i11, i12, i13,\
-    i20, i21, i22, i23, i30, i31, i32, i33)		                \
-    strDCT2x2dn(&p[i00], &p[i01], &p[i02], &p[i03]);			\
-    strDCT2x2dn(&p[i10], &p[i11], &p[i12], &p[i13]);			\
-    strDCT2x2dn(&p[i20], &p[i21], &p[i22], &p[i23]);			\
-    strDCT2x2dn(&p[i30], &p[i31], &p[i32], &p[i33])
 
 #endif // WMI_STRTRANSFORM_H

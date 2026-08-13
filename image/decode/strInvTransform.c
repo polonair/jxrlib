@@ -86,7 +86,11 @@ Void strIDCT4x4Stage2(PixelI* p)
     strDCT2x2up(p + 0, p + 64, p + 16, p + 80);
     
     /** butterfly **/
-    FOURBUTTERFLY(p, 0, 192, 48, 240, 64, 128, 112, 176, 16, 208, 32, 224, 80, 144, 96, 160);
+    {
+        static const Int offsets[16] = { 0, 192, 48, 240, 64, 128, 112, 176,
+            16, 208, 32, 224, 80, 144, 96, 160 };
+        strTransformApplyFourButterfly(p, offsets);
+    }
 }
 
 Void strNormalizeDec(PixelI* p, Bool bChroma)
