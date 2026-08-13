@@ -30,6 +30,7 @@
 #include "strcodec.h"
 #include "JxrPostProcessDecision.h"
 #include "JxrPostProcessRowState.h"
+#include "JxrPostProcessBlockNeighborhood.h"
 
 Void smoothMB(PixelI * p1, PixelI * p0, PixelI * q0, PixelI * q1)
 {
@@ -172,30 +173,11 @@ Void postProcMB(struct tagPostProcInfo * strPostProcInfo[MAX_CHANNELS][2], Pixel
 Void postProcBlock(struct tagPostProcInfo * strPostProcInfo[MAX_CHANNELS][2], PixelI * p0, PixelI * p1, size_t mbX, size_t cc, Int threshold)
 {
     size_t i, j, k;
-    Int dc[5][5];
-    U8 texture[5][5];
+    JxrPostProcessBlockNeighborhood neighborhood;
     struct tagPostProcInfo * pMBb = strPostProcInfo[cc][0] + mbX, * pMBa = pMBb - 1, * pMBd = strPostProcInfo[cc][1] + mbX, * pMBc = pMBd - 1;
     PixelI * pc, * pt;
 
-    /* copy DC and Texture info, can be optimized out */
-    for(j = 0; j < 4; j ++){
-        // from MB a
-        for(i = 0; i < 4; i ++){
-            dc[j][i] = pMBa->iBlockDC[j][i];
-            texture[j][i] = pMBa->ucBlockTexture[j][i];
-        }
-        
-        // 4 blocks from MB c
-        dc[4][j] = pMBc->iBlockDC[0][j];
-        texture[4][j] = pMBc->ucBlockTexture[0][j];
-
-        // 4 blocks from MB b
-        dc[j][4] = pMBb->iBlockDC[j][0];
-        texture[j][4] = pMBb->ucBlockTexture[j][0];
-    }
-    // 1 block from MB d
-    dc[4][4] = pMBd->iBlockDC[0][0];
-    texture[4][4] = pMBd->ucBlockTexture[0][0];
+    JxrPostProcessBlockNeighborhoodLoad(&neighborhood, pMBa, pMBb, pMBc, pMBd);
 
     /* block boundaries */
     /*     | */
@@ -207,7 +189,7 @@ Void postProcBlock(struct tagPostProcInfo * strPostProcInfo[MAX_CHANNELS][2], Pi
             pc = p0 - 256 + i * 64 + j * 16;
 
             // deblock
-            if(JxrPostProcessShouldDeblockBoundary(texture[j][i], dc[j][i], texture[j + 1][i], dc[j + 1][i], threshold)){
+            if(JxrPostProcessBlockNeighborhoodShouldSmoothHorizontal(&neighborhood, j, i, threshold)){
                 // smooth horizontal boundary ----
                 pt = (j < 3 ? pc + 16 : p1 - 256 + i * 64);
                 for(k = 0; k < 4; k ++){
@@ -216,7 +198,7 @@ Void postProcBlock(struct tagPostProcInfo * strPostProcInfo[MAX_CHANNELS][2], Pi
             }
 
             // two horizontally adjacent blocks have same texture and similiar DCs
-            if(JxrPostProcessShouldDeblockBoundary(texture[j][i], dc[j][i], texture[j][i + 1], dc[j][i + 1], threshold)){
+            if(JxrPostProcessBlockNeighborhoodShouldSmoothVertical(&neighborhood, j, i, threshold)){
                 // smooth vertical boundary |
                 pt = pc + 64;
                 for(k = 0; k < 4; k ++){

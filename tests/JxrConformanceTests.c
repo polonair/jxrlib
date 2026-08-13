@@ -56,6 +56,7 @@
 #include "JxrDecoderInitializationPipeline.h"
 #include "JxrPostProcessDecision.h"
 #include "JxrPostProcessRowState.h"
+#include "JxrPostProcessBlockNeighborhood.h"
 #include "JxrSecondaryPlaneInitializer.h"
 #include "JxrPredictionMath.h"
 #include "JxrInverseTransformMath.h"
@@ -1608,6 +1609,51 @@ static int test_postprocess_row_state_vectors(void)
     return isValid;
 }
 
+static int test_postprocess_block_neighborhood_vectors(void)
+{
+    struct tagPostProcInfo macroblockA;
+    struct tagPostProcInfo macroblockB;
+    struct tagPostProcInfo macroblockC;
+    struct tagPostProcInfo macroblockD;
+    JxrPostProcessBlockNeighborhood neighborhood;
+    size_t row;
+    size_t column;
+
+    memset(&macroblockA, 0, sizeof(macroblockA));
+    memset(&macroblockB, 0, sizeof(macroblockB));
+    memset(&macroblockC, 0, sizeof(macroblockC));
+    memset(&macroblockD, 0, sizeof(macroblockD));
+    for (row = 0; row < 4; ++row) {
+        for (column = 0; column < 4; ++column) {
+            macroblockA.iBlockDC[row][column] = (Int)(row * 10 + column);
+            macroblockA.ucBlockTexture[row][column] = 0;
+        }
+        macroblockB.iBlockDC[row][0] = (Int)(100 + row);
+        macroblockC.iBlockDC[0][row] = (Int)(200 + row);
+        macroblockB.ucBlockTexture[row][0] = 1;
+        macroblockC.ucBlockTexture[0][row] = 2;
+    }
+    macroblockD.iBlockDC[0][0] = 300;
+    macroblockD.ucBlockTexture[0][0] = 3;
+
+    JxrPostProcessBlockNeighborhoodLoad(&neighborhood, &macroblockA, &macroblockB, &macroblockC, &macroblockD);
+    if (neighborhood.dc[3][2] != 32 || neighborhood.texture[3][2] != 0 ||
+        neighborhood.dc[1][4] != 101 || neighborhood.texture[1][4] != 1 ||
+        neighborhood.dc[4][2] != 202 || neighborhood.texture[4][2] != 2 ||
+        neighborhood.dc[4][4] != 300 || neighborhood.texture[4][4] != 3) return 0;
+
+    neighborhood.dc[1][1] = 20;
+    neighborhood.dc[2][1] = 23;
+    if (!JxrPostProcessBlockNeighborhoodShouldSmoothHorizontal(&neighborhood, 1, 1, 3)) return 0;
+    neighborhood.texture[2][1] = 3;
+    if (JxrPostProcessBlockNeighborhoodShouldSmoothHorizontal(&neighborhood, 1, 1, 3)) return 0;
+    neighborhood.texture[2][1] = 0;
+    neighborhood.dc[1][2] = 17;
+    if (!JxrPostProcessBlockNeighborhoodShouldSmoothVertical(&neighborhood, 1, 1, 3)) return 0;
+    neighborhood.dc[1][2] = 24;
+    return !JxrPostProcessBlockNeighborhoodShouldSmoothVertical(&neighborhood, 1, 1, 3);
+}
+
 static int test_sample_clipping_vectors(void)
 {
     return JxrSampleClippingClamp(-2, 0, 31) == 0 &&
@@ -3044,6 +3090,7 @@ int main(int argc, char** argv)
         { "postprocess_demacroblock_decision_vectors", test_postprocess_demacroblock_decision_vectors },
         { "postprocess_deblock_boundary_decision_vectors", test_postprocess_deblock_boundary_decision_vectors },
         { "postprocess_row_state_vectors", test_postprocess_row_state_vectors },
+        { "postprocess_block_neighborhood_vectors", test_postprocess_block_neighborhood_vectors },
         { "sample_clipping_vectors", test_sample_clipping_vectors },
         { "float_sample_conversion_vectors", test_float_sample_conversion_vectors },
         { "monochrome_expansion_vectors", test_monochrome_expansion_vectors },
