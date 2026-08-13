@@ -26,5 +26,10 @@ Int JxrInverseTransformMathApplyConditionalDcCompensation(
     Int directCurrent,
     Int highPassQuantizer,
     Bool highPassAbsent);
+Void JxrInverseTransformMathApplyPost4(
+    PixelI* first,
+    PixelI* second,
+    PixelI* third,
+    PixelI* fourth);
 
 #endif

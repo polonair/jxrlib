@@ -224,28 +224,8 @@ Void strPost2x2_alternate(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
 /** 4-point post for boundaries **/
 Void strPost4(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
 {
-    PixelI a, b, c, d;
-    a = *pa;
-    b = *pb;
-    c = *pc;
-    d = *pd;
-
-    a += d, b += c;
-    d -= ((a + 1) >> 1), c -= ((b + 1) >> 1);
-    
-    JxrInverseTransformMathRotateHalf(&c, &d);
-
-    d += ((a + 1) >> 1), c += ((b + 1) >> 1);
-    a -= d - ((d * 3 + 16) >> 5), b -= c - ((c * 3 + 16) >> 5);
-    d += ((a * 3 + 8) >> 4), c += ((b * 3 + 8) >> 4);
-    a += ((d * 3 + 16) >> 5), b += ((c * 3 + 16) >> 5);
-
-    *pa = a;
-    *pb = b;
-    *pc = c;
-    *pd = d;
+    JxrInverseTransformMathApplyPost4(pa, pb, pc, pd);
 }
-
 Void strPost4_alternate(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
 {
     PixelI a, b, c, d;

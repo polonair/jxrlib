@@ -91,3 +91,36 @@ Int JxrInverseTransformMathApplyConditionalDcCompensation(
         directCurrent);
     return directCurrent;
 }
+
+Void JxrInverseTransformMathApplyPost4(
+    PixelI* first,
+    PixelI* second,
+    PixelI* third,
+    PixelI* fourth)
+{
+    PixelI firstValue = *first;
+    PixelI secondValue = *second;
+    PixelI thirdValue = *third;
+    PixelI fourthValue = *fourth;
+
+    firstValue += fourthValue;
+    secondValue += thirdValue;
+    fourthValue -= (firstValue + 1) >> 1;
+    thirdValue -= (secondValue + 1) >> 1;
+
+    JxrInverseTransformMathRotateHalf(&thirdValue, &fourthValue);
+
+    fourthValue += (firstValue + 1) >> 1;
+    thirdValue += (secondValue + 1) >> 1;
+    firstValue -= fourthValue - ((fourthValue * 3 + 16) >> 5);
+    secondValue -= thirdValue - ((thirdValue * 3 + 16) >> 5);
+    fourthValue += (firstValue * 3 + 8) >> 4;
+    thirdValue += (secondValue * 3 + 8) >> 4;
+    firstValue += (fourthValue * 3 + 16) >> 5;
+    secondValue += (thirdValue * 3 + 16) >> 5;
+
+    *first = firstValue;
+    *second = secondValue;
+    *third = thirdValue;
+    *fourth = fourthValue;
+}

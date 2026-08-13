@@ -2746,7 +2746,11 @@ static int test_inverse_transform_math_vectors(void)
     topLeft = 10; topRight = 20; bottomLeft = 30; bottomRight = 40;
     if (JxrInverseTransformMathApplyConditionalDcCompensation(
         &topLeft, &topRight, &bottomLeft, &bottomRight, 50, 21, FALSE) != 50) return 0;
-    return topLeft == 10 && topRight == 20 && bottomLeft == 30 && bottomRight == 40;
+    if (topLeft != 10 || topRight != 20 || bottomLeft != 30 || bottomRight != 40) return 0;
+
+    topLeft = 10; topRight = 20; bottomLeft = 30; bottomRight = 40;
+    JxrInverseTransformMathApplyPost4(&topLeft, &topRight, &bottomLeft, &bottomRight);
+    return topLeft == 19 && topRight == 33 && bottomLeft == 28 && bottomRight == 42;
 }
 
 static int test_forward_transform_math_vectors(void)
