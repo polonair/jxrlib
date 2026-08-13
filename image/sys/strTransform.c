@@ -35,6 +35,13 @@ const Int JxrTransformFirstStageFourButterflyOffsets[16] = {
     3, 7, 11, 15
 };
 
+const Int JxrTransformSecondStageFourButterflyOffsets[16] = {
+    0, 192, 48, 240,
+    64, 128, 112, 176,
+    16, 208, 32, 224,
+    80, 144, 96, 160
+};
+
 /** need to swap b and c **/
 /** rounding behavior: [0 0 0 0] <-> [+ - - -]
     [+ + + +] <-> [+3/4 - - -]

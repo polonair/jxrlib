@@ -2568,13 +2568,26 @@ static int test_inverse_transform_corner_prediction_vectors(void)
 static int test_four_butterfly_vectors(void)
 {
     PixelI actual[16];
+    PixelI secondStageActual[256];
     const PixelI expected[16] = { -2, 0, 2, 4, -8, -8, -8, -8,
         -4, -4, -4, -4, 0, 0, 0, 0 };
     Int index;
 
     for (index = 0; index < 16; ++index) actual[index] = index - 7;
     strTransformApplyFourButterfly(actual, JxrTransformFirstStageFourButterflyOffsets);
-    return memcmp(actual, expected, sizeof(actual)) == 0;
+    if (memcmp(actual, expected, sizeof(actual)) != 0) return 0;
+
+    for (index = 0; index < 256; ++index) secondStageActual[index] = index;
+    strTransformApplyFourButterfly(secondStageActual, JxrTransformSecondStageFourButterflyOffsets);
+    return secondStageActual[0] == 240 && secondStageActual[192] == -48 &&
+        secondStageActual[48] == -192 && secondStageActual[240] == 0 &&
+        secondStageActual[64] == 240 && secondStageActual[128] == -48 &&
+        secondStageActual[112] == -64 && secondStageActual[176] == 0 &&
+        secondStageActual[16] == 240 && secondStageActual[208] == -16 &&
+        secondStageActual[32] == -192 && secondStageActual[224] == 0 &&
+        secondStageActual[80] == 240 && secondStageActual[144] == -16 &&
+        secondStageActual[96] == -64 && secondStageActual[160] == 0 &&
+        secondStageActual[1] == 1;
 }
 
 static int test_inverse_transform_dc_clip_vectors(void)

@@ -88,11 +88,7 @@ Void strDCT4x4Stage1(PixelI * p)
 Void strDCT4x4SecondStage(PixelI * p)
 {
     /** butterfly **/
-    {
-        static const Int offsets[16] = { 0, 192, 48, 240, 64, 128, 112, 176,
-            16, 208, 32, 224, 80, 144, 96, 160 };
-        strTransformApplyFourButterfly(p, offsets);
-    }
+    strTransformApplyFourButterfly(p, JxrTransformSecondStageFourButterflyOffsets);
     
     /** top left corner, butterfly => butterfly **/
     strDCT2x2up(&p[0], &p[64], &p[16], &p[80]);
