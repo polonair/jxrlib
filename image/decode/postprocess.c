@@ -32,6 +32,7 @@
 #include "JxrPostProcessRowState.h"
 #include "JxrPostProcessBlockNeighborhood.h"
 #include "JxrPostProcessSmoothing.h"
+#include "JxrPostProcessMacroblockAnalyzer.h"
 
 Int initPostProc(struct tagPostProcInfo * strPostProcInfo[MAX_CHANNELS][2], size_t mbWidth, size_t iNumChannels)
 {
@@ -50,38 +51,10 @@ Void slideOneMBRow(struct tagPostProcInfo * strPostProcInfo[MAX_CHANNELS][2], si
 // get DC and texture infomation right before transform
 Void updatePostProcInfo(struct tagPostProcInfo * strPostProcInfo[MAX_CHANNELS][2], PixelI * pMB, size_t mbX, size_t cc)
 {
-    size_t i, j;
     struct tagPostProcInfo * pMBInfo = strPostProcInfo[cc][1] + mbX;
 
-    // DC of MB
-    pMBInfo->iMBDC = pMB[0];
-
-    // texture of MB
-    pMBInfo->ucMBTexture = 0; // smooth
-    for(i = 16; i < 256; i += 16){
-        if(pMB[i] != 0){
-            pMBInfo->ucMBTexture = 3; // bumpy
-            break;
-        }
-    }
-
-    // DCs of blocks not available yet, will collect after demacroblocking
-
-    // textures of blocks
-    for(j = 0; j < 4; j ++)
-        for(i = 0; i < 4; i ++){
-            PixelI * p = pMB + i * 64 + j * 16;
-            size_t k;
-
-            for(k = 1, pMBInfo->ucBlockTexture[j][i] = 0; k < 16; k ++){
-                if(p[k] != 0){
-                    pMBInfo->ucBlockTexture[j][i] = 3;
-                    break;
-                }
-            }
-        }
+    JxrPostProcessMacroblockAnalyzerAnalyze(pMB, pMBInfo);
 }
-
 // demacroblock and get DCs of blocks
 Void postProcMB(struct tagPostProcInfo * strPostProcInfo[MAX_CHANNELS][2], PixelI * p0, PixelI * p1, size_t mbX, size_t cc, Int threshold)
 {

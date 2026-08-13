@@ -58,6 +58,7 @@
 #include "JxrPostProcessRowState.h"
 #include "JxrPostProcessBlockNeighborhood.h"
 #include "JxrPostProcessSmoothing.h"
+#include "JxrPostProcessMacroblockAnalyzer.h"
 #include "JxrSecondaryPlaneInitializer.h"
 #include "JxrPredictionMath.h"
 #include "JxrInverseTransformMath.h"
@@ -1682,6 +1683,29 @@ static int test_postprocess_smoothing_vectors(void)
         rightInner == 25 && rightOuter == 11 && rightFar == 0;
 }
 
+static int test_postprocess_macroblock_analyzer_vectors(void)
+{
+    PixelI coefficients[256];
+    struct tagPostProcInfo result;
+
+    memset(coefficients, 0, sizeof(coefficients));
+    memset(&result, 0xff, sizeof(result));
+    coefficients[0] = 42;
+    JxrPostProcessMacroblockAnalyzerAnalyze(coefficients, &result);
+    if (result.iMBDC != 42 || result.ucMBTexture != 0 ||
+        result.ucBlockTexture[0][0] != 0 || result.ucBlockTexture[3][3] != 0) return 0;
+
+    coefficients[16] = 9;
+    JxrPostProcessMacroblockAnalyzerAnalyze(coefficients, &result);
+    if (result.iMBDC != 42 || result.ucMBTexture != 3 || result.ucBlockTexture[1][0] != 0) return 0;
+
+    coefficients[16] = 0;
+    coefficients[225] = -7;
+    JxrPostProcessMacroblockAnalyzerAnalyze(coefficients, &result);
+    return result.iMBDC == 42 && result.ucMBTexture == 0 &&
+        result.ucBlockTexture[2][3] == 3 && result.ucBlockTexture[2][2] == 0;
+}
+
 static int test_sample_clipping_vectors(void)
 {
     return JxrSampleClippingClamp(-2, 0, 31) == 0 &&
@@ -3120,6 +3144,7 @@ int main(int argc, char** argv)
         { "postprocess_row_state_vectors", test_postprocess_row_state_vectors },
         { "postprocess_block_neighborhood_vectors", test_postprocess_block_neighborhood_vectors },
         { "postprocess_smoothing_vectors", test_postprocess_smoothing_vectors },
+        { "postprocess_macroblock_analyzer_vectors", test_postprocess_macroblock_analyzer_vectors },
         { "sample_clipping_vectors", test_sample_clipping_vectors },
         { "float_sample_conversion_vectors", test_float_sample_conversion_vectors },
         { "monochrome_expansion_vectors", test_monochrome_expansion_vectors },
