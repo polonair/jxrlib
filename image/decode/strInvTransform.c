@@ -201,37 +201,35 @@ Void strPost4x4Stage1(PixelI* p, Int iOffset, Int iHPQP, Bool bHPAbsent)
 
 Void strPost4x4Stage1Split_alternate(PixelI *p0, PixelI *p1, Int iOffset)
 {
+    Int column;
     PixelI *p2 = p0 + 72 - iOffset;
     PixelI *p3 = p1 + 64 - iOffset;
+
     p0 += 12;
     p1 += 4;
 
-    /** buttefly **/
-    strDCT2x2dn(p0 + 0, p2 + 0, p1 + 0, p3 + 0);
-    strDCT2x2dn(p0 + 1, p2 + 1, p1 + 1, p3 + 1);
-    strDCT2x2dn(p0 + 2, p2 + 2, p1 + 2, p3 + 2);
-    strDCT2x2dn(p0 + 3, p2 + 3, p1 + 3, p3 + 3);
+    /* Apply the 2x2 DCT to each of the four aligned columns. */
+    for (column = 0; column < 4; ++column) {
+        strDCT2x2dn(p0 + column, p2 + column, p1 + column, p3 + column);
+    }
 
-    /** bottom right corner: -pi/8 rotation => -pi/8 rotation **/
+    /* Transform the bottom-right corner as one 4-point operation. */
     invOddOddPost(p3 + 0, p3 + 1, p3 + 2, p3 + 3);
-    
-    /** anti diagonal corners: rotation by -pi/8 **/
+
+    /* Rotate the two anti-diagonal corners. */
     JxrInverseTransformMathRotateHalf(&p1[2], &p1[3]);
     JxrInverseTransformMathRotateHalf(&p1[0], &p1[1]);
     JxrInverseTransformMathRotateHalf(&p2[1], &p2[3]);
     JxrInverseTransformMathRotateHalf(&p2[0], &p2[2]);
 
-    /** butterfly **/
-    strHSTdec1_alternate(p0 + 0, p3 + 0);
-    strHSTdec1_alternate(p0 + 1, p3 + 1);
-    strHSTdec1_alternate(p0 + 2, p3 + 2);
-    strHSTdec1_alternate(p0 + 3, p3 + 3);
-    strHSTdec(p0 + 0, p2 + 0, p1 + 0, p3 + 0);
-    strHSTdec(p0 + 1, p2 + 1, p1 + 1, p3 + 1);
-    strHSTdec(p0 + 2, p2 + 2, p1 + 2, p3 + 2);
-    strHSTdec(p0 + 3, p2 + 3, p1 + 3, p3 + 3);
+    /* Complete the alternate first and shared second Hadamard+scale passes. */
+    for (column = 0; column < 4; ++column) {
+        strHSTdec1_alternate(p0 + column, p3 + column);
+    }
+    for (column = 0; column < 4; ++column) {
+        strHSTdec(p0 + column, p2 + column, p1 + column, p3 + column);
+    }
 }
-
 Void strPost4x4Stage1_alternate(PixelI* p, Int iOffset)
 {
     strPost4x4Stage1Split_alternate(p, p + 16, iOffset);
