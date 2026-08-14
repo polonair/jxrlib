@@ -31,6 +31,10 @@
 #include "decode.h"
 #include "JxrInverseTransformMath.h"
 #include "JxrTransformMath.h"
+static const Int JxrInverseTransformStage2P0FirstOffsets[4] = { -96, -32, -80, -16 };
+static const Int JxrInverseTransformStage2P0SecondOffsets[4] = { 96, 32, 112, 48 };
+static const Int JxrInverseTransformStage2P1FirstOffsets[4] = { -112, -48, -128, -64 };
+static const Int JxrInverseTransformStage2P1SecondOffsets[4] = { 80, 16, 64, 0 };
 
 /** local functions **/
 
@@ -212,17 +216,13 @@ Void strPost4x4Stage1_alternate(PixelI* p, Int iOffset)
 *****************************************************************************************/
 Void strPost4x4Stage2Split(PixelI* p0, PixelI* p1)
 {
-    static const Int p0FirstOffsets[4] = { -96, -32, -80, -16 };
-    static const Int p0SecondOffsets[4] = { 96, 32, 112, 48 };
-    static const Int p1FirstOffsets[4] = { -112, -48, -128, -64 };
-    static const Int p1SecondOffsets[4] = { 80, 16, 64, 0 };
     Int column;
 
     /* Apply the 2x2 DCT to each logical column in its legacy scan order. */
     for (column = 0; column < 4; ++column) {
         JxrTransformMathApplyDct2x2Down(
-            p0 + p0FirstOffsets[column], p0 + p0SecondOffsets[column],
-            p1 + p1FirstOffsets[column], p1 + p1SecondOffsets[column]);
+            p0 + JxrInverseTransformStage2P0FirstOffsets[column], p0 + JxrInverseTransformStage2P0SecondOffsets[column],
+            p1 + JxrInverseTransformStage2P1FirstOffsets[column], p1 + JxrInverseTransformStage2P1SecondOffsets[column]);
     }
 
     /* Transform the bottom-right corner as one 4-point operation. */
@@ -236,27 +236,23 @@ Void strPost4x4Stage2Split(PixelI* p0, PixelI* p1)
 
     /* Complete the first and second Hadamard+scale passes in the same order. */
     for (column = 0; column < 4; ++column) {
-        JxrInverseTransformMathApplyHadamardScale2(p0 + p0FirstOffsets[column], p1 + p1SecondOffsets[column]);
+        JxrInverseTransformMathApplyHadamardScale2(p0 + JxrInverseTransformStage2P0FirstOffsets[column], p1 + JxrInverseTransformStage2P1SecondOffsets[column]);
     }
     for (column = 0; column < 4; ++column) {
         JxrInverseTransformMathApplyHadamardScale4(
-            p0 + p0FirstOffsets[column], p1 + p1FirstOffsets[column],
-            p0 + p0SecondOffsets[column], p1 + p1SecondOffsets[column]);
+            p0 + JxrInverseTransformStage2P0FirstOffsets[column], p1 + JxrInverseTransformStage2P1FirstOffsets[column],
+            p0 + JxrInverseTransformStage2P0SecondOffsets[column], p1 + JxrInverseTransformStage2P1SecondOffsets[column]);
     }
 }
 Void strPost4x4Stage2Split_alternate(PixelI* p0, PixelI* p1)
 {
-    static const Int p0FirstOffsets[4] = { -96, -32, -80, -16 };
-    static const Int p0SecondOffsets[4] = { 96, 32, 112, 48 };
-    static const Int p1FirstOffsets[4] = { -112, -48, -128, -64 };
-    static const Int p1SecondOffsets[4] = { 80, 16, 64, 0 };
     Int column;
 
     /* Apply the 2x2 DCT to each logical column in its legacy scan order. */
     for (column = 0; column < 4; ++column) {
         JxrTransformMathApplyDct2x2Down(
-            p0 + p0FirstOffsets[column], p0 + p0SecondOffsets[column],
-            p1 + p1FirstOffsets[column], p1 + p1SecondOffsets[column]);
+            p0 + JxrInverseTransformStage2P0FirstOffsets[column], p0 + JxrInverseTransformStage2P0SecondOffsets[column],
+            p1 + JxrInverseTransformStage2P1FirstOffsets[column], p1 + JxrInverseTransformStage2P1SecondOffsets[column]);
     }
 
     /* Transform the bottom-right corner as one 4-point operation. */
@@ -270,12 +266,12 @@ Void strPost4x4Stage2Split_alternate(PixelI* p0, PixelI* p1)
 
     /* Complete the alternate first and shared second Hadamard+scale passes. */
     for (column = 0; column < 4; ++column) {
-        JxrInverseTransformMathApplyAlternateHadamardScale2(p0 + p0FirstOffsets[column], p1 + p1SecondOffsets[column]);
+        JxrInverseTransformMathApplyAlternateHadamardScale2(p0 + JxrInverseTransformStage2P0FirstOffsets[column], p1 + JxrInverseTransformStage2P1SecondOffsets[column]);
     }
     for (column = 0; column < 4; ++column) {
         JxrInverseTransformMathApplyHadamardScale4(
-            p0 + p0FirstOffsets[column], p1 + p1FirstOffsets[column],
-            p0 + p0SecondOffsets[column], p1 + p1SecondOffsets[column]);
+            p0 + JxrInverseTransformStage2P0FirstOffsets[column], p1 + JxrInverseTransformStage2P1FirstOffsets[column],
+            p0 + JxrInverseTransformStage2P0SecondOffsets[column], p1 + JxrInverseTransformStage2P1SecondOffsets[column]);
     }
 }
 /*************************************************************************
