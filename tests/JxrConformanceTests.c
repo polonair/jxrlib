@@ -68,6 +68,7 @@
 #include "JxrInverseTransformMath.h"
 #include "JxrInverseTransformMacroblockGeometry.h"
 #include "JxrHardTileBoundaryState.h"
+#include "JxrInverseTransformBoundaryContext.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -2788,6 +2789,37 @@ static int test_hard_tile_boundary_state_vectors(void)
         result.tileY == 1 && result.tileX == 1;
 }
 
+static int test_inverse_transform_boundary_context_vectors(void)
+{
+    JxrInverseTransformMacroblockGeometry geometry;
+    JxrHardTileBoundaryState hardTileState;
+    JxrInverseTransformBoundaryContext context;
+
+    memset(&hardTileState, 0, sizeof(hardTileState));
+    JxrInverseTransformMacroblockGeometryInitialize(&geometry,
+        OL_NONE, YUV_444, 2, 3, 4, 7, 3, 1);
+    JxrInverseTransformBoundaryContextInitialize(&context, &geometry, &hardTileState);
+    if (context.isVerticalTileBoundary || context.isHorizontalTileBoundary ||
+        context.hasTopBoundary || context.hasBottomBoundary ||
+        context.hasLeftBoundary || context.hasRightBoundary ||
+        context.hasTopOrBottomBoundary || context.hasLeftOrRightBoundary ||
+        context.isLeftAdjacentToVerticalBoundary ||
+        context.isRightAdjacentToVerticalBoundary) return 0;
+
+    hardTileState.isVerticalBoundary = TRUE;
+    hardTileState.isHorizontalBoundary = TRUE;
+    hardTileState.isOneMacroblockRightOfVerticalBoundary = TRUE;
+    JxrInverseTransformMacroblockGeometryInitialize(&geometry,
+        OL_TWO, YUV_444, 3, 2, 4, 7, 3, 1);
+    JxrInverseTransformBoundaryContextInitialize(&context, &geometry, &hardTileState);
+    return context.isVerticalTileBoundary && context.isHorizontalTileBoundary &&
+        context.hasTopBoundary && context.hasBottomBoundary &&
+        context.hasLeftBoundary && context.hasRightBoundary &&
+        context.hasTopOrBottomBoundary && context.hasLeftOrRightBoundary &&
+        context.isLeftAdjacentToVerticalBoundary &&
+        context.isRightAdjacentToVerticalBoundary;
+}
+
 static int test_inverse_transform_math_vectors(void)
 {
     PixelI first, second;
@@ -3473,6 +3505,7 @@ int main(int argc, char** argv)
         { "prediction_math_vectors", test_prediction_math_vectors },
         { "inverse_transform_macroblock_geometry_vectors", test_inverse_transform_macroblock_geometry_vectors },
         { "hard_tile_boundary_state_vectors", test_hard_tile_boundary_state_vectors },
+        { "inverse_transform_boundary_context_vectors", test_inverse_transform_boundary_context_vectors },
         { "inverse_transform_math_vectors", test_inverse_transform_math_vectors },
         { "transform_math_dct2x2_vectors", test_transform_math_dct2x2_vectors },
         { "forward_transform_math_vectors", test_forward_transform_math_vectors },
