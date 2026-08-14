@@ -33,6 +33,7 @@
 #include "JxrInverseTransformMacroblockGeometry.h"
 #include "JxrHardTileBoundaryState.h"
 #include "JxrInverseTransformBoundaryContext.h"
+#include "JxrInversePostProcessParameters.h"
 #include "JxrTransformMath.h"
 static const Int JxrInverseTransformStage2P0FirstOffsets[4] = { -96, -32, -80, -16 };
 static const Int JxrInverseTransformStage2P0SecondOffsets[4] = { 96, 32, 112, 48 };
@@ -298,22 +299,20 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
     const size_t tScale = geometry.thumbnailScale;
     Int j = 0;
 
-    Int qp[MAX_CHANNELS], dcqp[MAX_CHANNELS], iStrength = (1 << pSC->WMII.cPostProcStrength);
+    JxrInversePostProcessParameters postProcessParameters;
     // ERR_CODE result = ICERR_OK;
 
     Bool bHPAbsent = (pSC->WMISCP.sbSubband == SB_NO_HIGHPASS || pSC->WMISCP.sbSubband == SB_DC_ONLY);
 
-    if(pSC->WMII.cPostProcStrength > 0){
-        // threshold for post processing
-        for(i = 0; i < iChannels; i ++){
-            qp[i] = pSC->pTile[pSC->cTileColumn].pQuantizerLP[i][pSC->MBInfo.iQIndexLP].iQP * iStrength * (olOverlap == OL_NONE ? 2 : 1);
-            dcqp[i] = pSC->pTile[pSC->cTileColumn].pQuantizerDC[i][0].iQP * iStrength;
-        }
-
-        if(left) // a new MB row
+    JxrInversePostProcessParametersInitialize(&postProcessParameters,
+        pSC->WMII.cPostProcStrength, olOverlap, iChannels,
+        pSC->pTile[pSC->cTileColumn].pQuantizerLP,
+        pSC->pTile[pSC->cTileColumn].pQuantizerDC,
+        pSC->MBInfo.iQIndexLP);
+    if (postProcessParameters.enabled) {
+        if (left) // a new MB row
             slideOneMBRow(pSC->pPostProcInfo, pSC->m_param.cNumChannels, mbWidth, top, bottom);  // previous current row becomes previous row
     }
-
     //================================================================
     // 400_Y, 444_YUV
     for (i = 0; i < iChannels && tScale < 16; ++i)
@@ -329,7 +328,7 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
         // second level inverse transform
         if (!bottomORright)
         {
-            if(pSC->WMII.cPostProcStrength > 0)
+            if(postProcessParameters.enabled)
                 updatePostProcInfo(pSC->pPostProcInfo, p1, mbX, i); // update postproc info before IDCT
 
             strIDCT4x4Stage2(p1);
@@ -365,8 +364,8 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
             }
         }
 
-        if(pSC->WMII.cPostProcStrength > 0)
-            postProcMB(pSC->pPostProcInfo, p0, p1, mbX, i, dcqp[i]); // second stage deblocking
+        if(postProcessParameters.enabled)
+            postProcMB(pSC->pPostProcInfo, p0, p1, mbX, i, postProcessParameters.directCurrentQuantizers[i]); // second stage deblocking
 
         //================================
         // first level inverse transform
@@ -458,8 +457,8 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
             }
         }
         
-        if(pSC->WMII.cPostProcStrength > 0 && (!topORleft))
-            postProcBlock(pSC->pPostProcInfo, p0, p1, mbX, i, qp[i]); // destairing and first stage deblocking
+        if(postProcessParameters.enabled && (!topORleft))
+            postProcBlock(pSC->pPostProcInfo, p0, p1, mbX, i, postProcessParameters.lowPassQuantizers[i]); // destairing and first stage deblocking
     }
 
     //================================================================
@@ -786,7 +785,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
     const size_t tScale = geometry.thumbnailScale;
     Int j = 0;
 
-    Int qp[MAX_CHANNELS], dcqp[MAX_CHANNELS], iStrength = (1 << pSC->WMII.cPostProcStrength);
+    JxrInversePostProcessParameters postProcessParameters;
     // ERR_CODE result = ICERR_OK;
 
     {
@@ -818,17 +817,15 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
         pSC->bOneMBLeftVertTB = hardTileState.isOneMacroblockLeftOfVerticalBoundary;
         pSC->bOneMBRightVertTB = hardTileState.isOneMacroblockRightOfVerticalBoundary;
     }
-    if(pSC->WMII.cPostProcStrength > 0){
-        // threshold for post processing
-        for(i = 0; i < iChannels; i ++){
-            qp[i] = pSC->pTile[pSC->cTileColumn].pQuantizerLP[i][pSC->MBInfo.iQIndexLP].iQP * iStrength * (olOverlap == OL_NONE ? 2 : 1);
-            dcqp[i] = pSC->pTile[pSC->cTileColumn].pQuantizerDC[i][0].iQP * iStrength;
-        }
-
-        if(left) // a new MB row
+    JxrInversePostProcessParametersInitialize(&postProcessParameters,
+        pSC->WMII.cPostProcStrength, olOverlap, iChannels,
+        pSC->pTile[pSC->cTileColumn].pQuantizerLP,
+        pSC->pTile[pSC->cTileColumn].pQuantizerDC,
+        pSC->MBInfo.iQIndexLP);
+    if (postProcessParameters.enabled) {
+        if (left) // a new MB row
             slideOneMBRow(pSC->pPostProcInfo, pSC->m_param.cNumChannels, mbWidth, top, bottom);  // previous current row becomes previous row
     }
-
     //================================================================
     // 400_Y, 444_YUV
     for (i = 0; i < iChannels && tScale < 16; ++i)
@@ -840,7 +837,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
         // second level inverse transform
         if (!bottomORright)
         {
-            if(pSC->WMII.cPostProcStrength > 0)
+            if(postProcessParameters.enabled)
                 updatePostProcInfo(pSC->pPostProcInfo, p1, hardTileState.previousMacroblockX, i); // update postproc info before IDCT
 
             strIDCT4x4Stage2(p1);
@@ -899,8 +896,8 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
             }
         }
 
-        if(pSC->WMII.cPostProcStrength > 0)
-            postProcMB(pSC->pPostProcInfo, p0, p1, hardTileState.previousMacroblockX, i, dcqp[i]); // second stage deblocking
+        if(postProcessParameters.enabled)
+            postProcMB(pSC->pPostProcInfo, p0, p1, hardTileState.previousMacroblockX, i, postProcessParameters.directCurrentQuantizers[i]); // second stage deblocking
 
         //================================
         // first level inverse transform
@@ -1039,8 +1036,8 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
             }
         }
         
-        if(pSC->WMII.cPostProcStrength > 0 && (!topORleft))
-            postProcBlock(pSC->pPostProcInfo, p0, p1, hardTileState.previousMacroblockX, i, qp[i]); // destairing and first stage deblocking
+        if(postProcessParameters.enabled && (!topORleft))
+            postProcBlock(pSC->pPostProcInfo, p0, p1, hardTileState.previousMacroblockX, i, postProcessParameters.lowPassQuantizers[i]); // destairing and first stage deblocking
     }
 
     //================================================================

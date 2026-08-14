@@ -219,6 +219,7 @@
     <ClCompile Include="..\decode\JxrInverseTransformMacroblockGeometry.c" />
     <ClCompile Include="..\decode\JxrHardTileBoundaryState.c" />
     <ClCompile Include="..\decode\JxrInverseTransformBoundaryContext.c" />
+    <ClCompile Include="..\decode\JxrInversePostProcessParameters.c" />
     <ClCompile Include="..\decode\JxrInverseColorTransform.c" />
     <ClCompile Include="..\decode\JxrSampleClipping.c" />
     <ClCompile Include="..\decode\JxrFloatSampleConversion.c" />

@@ -69,6 +69,7 @@
 #include "JxrInverseTransformMacroblockGeometry.h"
 #include "JxrHardTileBoundaryState.h"
 #include "JxrInverseTransformBoundaryContext.h"
+#include "JxrInversePostProcessParameters.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -2820,6 +2821,49 @@ static int test_inverse_transform_boundary_context_vectors(void)
         context.isRightAdjacentToVerticalBoundary;
 }
 
+static int test_inverse_postprocess_parameters_vectors(void)
+{
+    CWMIQuantizer lowPassChannel0[2];
+    CWMIQuantizer lowPassChannel1[2];
+    CWMIQuantizer directCurrentChannel0[1];
+    CWMIQuantizer directCurrentChannel1[1];
+    CWMIQuantizer* lowPassQuantizers[2];
+    CWMIQuantizer* directCurrentQuantizers[2];
+    JxrInversePostProcessParameters parameters;
+
+    memset(lowPassChannel0, 0, sizeof(lowPassChannel0));
+    memset(lowPassChannel1, 0, sizeof(lowPassChannel1));
+    memset(directCurrentChannel0, 0, sizeof(directCurrentChannel0));
+    memset(directCurrentChannel1, 0, sizeof(directCurrentChannel1));
+    lowPassChannel0[1].iQP = 5;
+    lowPassChannel1[1].iQP = 7;
+    directCurrentChannel0[0].iQP = 3;
+    directCurrentChannel1[0].iQP = 11;
+    lowPassQuantizers[0] = lowPassChannel0;
+    lowPassQuantizers[1] = lowPassChannel1;
+    directCurrentQuantizers[0] = directCurrentChannel0;
+    directCurrentQuantizers[1] = directCurrentChannel1;
+
+    JxrInversePostProcessParametersInitialize(&parameters,
+        0, OL_NONE, 2, lowPassQuantizers, directCurrentQuantizers, 1);
+    if (parameters.enabled || parameters.lowPassQuantizers[0] != 0 ||
+        parameters.directCurrentQuantizers[1] != 0) return 0;
+
+    JxrInversePostProcessParametersInitialize(&parameters,
+        2, OL_NONE, 2, lowPassQuantizers, directCurrentQuantizers, 1);
+    if (!parameters.enabled || parameters.lowPassQuantizers[0] != 40 ||
+        parameters.lowPassQuantizers[1] != 56 ||
+        parameters.directCurrentQuantizers[0] != 12 ||
+        parameters.directCurrentQuantizers[1] != 44) return 0;
+
+    JxrInversePostProcessParametersInitialize(&parameters,
+        1, OL_ONE, 2, lowPassQuantizers, directCurrentQuantizers, 1);
+    return parameters.enabled && parameters.lowPassQuantizers[0] == 10 &&
+        parameters.lowPassQuantizers[1] == 14 &&
+        parameters.directCurrentQuantizers[0] == 6 &&
+        parameters.directCurrentQuantizers[1] == 22;
+}
+
 static int test_inverse_transform_math_vectors(void)
 {
     PixelI first, second;
@@ -3506,6 +3550,7 @@ int main(int argc, char** argv)
         { "inverse_transform_macroblock_geometry_vectors", test_inverse_transform_macroblock_geometry_vectors },
         { "hard_tile_boundary_state_vectors", test_hard_tile_boundary_state_vectors },
         { "inverse_transform_boundary_context_vectors", test_inverse_transform_boundary_context_vectors },
+        { "inverse_postprocess_parameters_vectors", test_inverse_postprocess_parameters_vectors },
         { "inverse_transform_math_vectors", test_inverse_transform_math_vectors },
         { "transform_math_dct2x2_vectors", test_transform_math_dct2x2_vectors },
         { "forward_transform_math_vectors", test_forward_transform_math_vectors },
