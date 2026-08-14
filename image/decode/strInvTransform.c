@@ -30,6 +30,7 @@
 #include "strcodec.h"
 #include "decode.h"
 #include "JxrInverseTransformMath.h"
+#include "JxrInverseTransformStages.h"
 #include "JxrInverseTransformMacroblockGeometry.h"
 #include "JxrHardTileBoundaryState.h"
 #include "JxrInverseTransformBoundaryContext.h"
@@ -71,21 +72,7 @@ static const Int JxrInverseTransformStage2P1SecondOffsets[4] = { 80, 16, 64, 0 }
 /** 12 13 14 15 **/
 Void strIDCT4x4Stage1(PixelI* p)
 {
-    /** top left corner, butterfly => butterfly **/
-    JxrTransformMathApplyDct2x2Up(p + 0, p + 1, p + 2, p + 3);
-
-    /** top right corner, -pi/8 rotation => butterfly **/
-    JxrInverseTransformMathApplyOdd(p + 5, p + 4, p + 7, p + 6);
-
-    /** bottom left corner, butterfly => -pi/8 rotation **/
-    JxrInverseTransformMathApplyOdd(p + 10, p + 8, p + 11, p + 9);
-
-    /** bottom right corner, -pi/8 rotation => -pi/8 rotation **/
-    JxrInverseTransformMathApplyOddOdd(p + 15, p + 14, p + 13, p + 12);
-    
-    /** butterfly **/
-    //FOURBUTTERFLY(p, 0, 4, 8, 12, 1, 5, 9, 13, 2, 6, 10, 14, 3, 7, 11, 15);
-    JxrTransformMathApplyFourButterfly(p, JxrTransformFirstStageFourButterflyOffsets);
+    JxrInverseTransformStagesApplyStage1Idct(p);
 }
 
 Void strIDCT4x4Stage2(PixelI* p)
@@ -129,79 +116,9 @@ Void strNormalizeDec(PixelI* p, Bool bChroma)
   ( 5)( 4)|( 0+64) (1+64) p1 ( 5)( 4)|(64)(65)
   ( 7)( 6)|( 2+64) (3+64)    ( 7)( 6)|(66)(67)
 *****************************************************************************************/
-typedef enum JxrInverseTransformOverlapMode {
-    JxrInverseTransformOverlapNormal,
-    JxrInverseTransformOverlapAlternate
-} JxrInverseTransformOverlapMode;
-
-static Void JxrInverseTransformApplyStage1Split(
-    PixelI *p0,
-    PixelI *p1,
-    Int iOffset,
-    Int iHPQP,
-    Bool bHPAbsent,
-    JxrInverseTransformOverlapMode mode)
-{
-    Int column;
-    Int directCurrent[4];
-    Int temporaryCurrent;
-    PixelI *p2 = p0 + 72 - iOffset;
-    PixelI *p3 = p1 + 64 - iOffset;
-
-    p0 += 12;
-    p1 += 4;
-
-    /* Apply the 2x2 DCT to each of the four aligned columns. */
-    for (column = 0; column < 4; ++column) {
-        JxrTransformMathApplyDct2x2Down(p0 + column, p2 + column, p1 + column, p3 + column);
-    }
-
-    /* Transform the bottom-right corner as one 4-point operation. */
-    JxrInverseTransformMathApplyOddOddPost(p3 + 0, p3 + 1, p3 + 2, p3 + 3);
-
-    /* Rotate the two anti-diagonal corners. */
-    JxrInverseTransformMathRotateHalf(&p1[2], &p1[3]);
-    JxrInverseTransformMathRotateHalf(&p1[0], &p1[1]);
-    JxrInverseTransformMathRotateHalf(&p2[1], &p2[3]);
-    JxrInverseTransformMathRotateHalf(&p2[0], &p2[2]);
-
-    /* The first Hadamard+scale pass is the only transform difference by mode. */
-    for (column = 0; column < 4; ++column) {
-        if (mode == JxrInverseTransformOverlapAlternate) {
-            JxrInverseTransformMathApplyAlternateHadamardScale2(p0 + column, p3 + column);
-        }
-        else {
-            JxrInverseTransformMathApplyHadamardScale2(p0 + column, p3 + column);
-        }
-    }
-
-    /* The second Hadamard+scale pass is shared by both modes. */
-    for (column = 0; column < 4; ++column) {
-        JxrInverseTransformMathApplyHadamardScale4(p0 + column, p2 + column, p1 + column, p3 + column);
-    }
-
-    if (mode == JxrInverseTransformOverlapAlternate) {
-        return;
-    }
-
-    /* Compute all direct-current values before any compensation changes samples. */
-    for (column = 0; column < 4; ++column) {
-        temporaryCurrent = (p0[column] + p1[column] + p2[column] + p3[column]) >> 1;
-        directCurrent[column] = (temporaryCurrent * 595 + 65536) >> 17;
-    }
-
-    /* Apply the optional direct-current compensation to each column. */
-    for (column = 0; column < 4; ++column) {
-        JxrInverseTransformMathApplyConditionalDcCompensation(
-            p0 + column, p2 + column, p1 + column, p3 + column,
-            directCurrent[column], iHPQP, bHPAbsent);
-    }
-}
-
 Void strPost4x4Stage1Split(PixelI *p0, PixelI *p1, Int iOffset, Int iHPQP, Bool bHPAbsent)
 {
-    JxrInverseTransformApplyStage1Split(
-        p0, p1, iOffset, iHPQP, bHPAbsent, JxrInverseTransformOverlapNormal);
+    JxrInverseTransformStagesApplyStage1SplitNormal(p0, p1, iOffset, iHPQP, bHPAbsent);
 }
 
 Void strPost4x4Stage1(PixelI* p, Int iOffset, Int iHPQP, Bool bHPAbsent)
@@ -211,8 +128,7 @@ Void strPost4x4Stage1(PixelI* p, Int iOffset, Int iHPQP, Bool bHPAbsent)
 
 Void strPost4x4Stage1Split_alternate(PixelI *p0, PixelI *p1, Int iOffset)
 {
-    JxrInverseTransformApplyStage1Split(
-        p0, p1, iOffset, 0, FALSE, JxrInverseTransformOverlapAlternate);
+    JxrInverseTransformStagesApplyStage1SplitAlternate(p0, p1, iOffset);
 }
 
 Void strPost4x4Stage1_alternate(PixelI* p, Int iOffset)
@@ -236,6 +152,8 @@ Void strPost4x4Stage1_alternate(PixelI* p, Int iOffset)
   (-128)(-64)|( 0)( 64) p1
   (-112)(-48)|(16)( 80)
 *****************************************************************************************/
+typedef enum JxrInverseTransformOverlapMode { JxrInverseTransformOverlapNormal, JxrInverseTransformOverlapAlternate } JxrInverseTransformOverlapMode;
+
 static Void JxrInverseTransformApplyStage2Split(
     PixelI* p0,
     PixelI* p1,
@@ -388,7 +306,6 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
     const COLORFORMAT cfColorFormat = geometry.colorFormat;
     const Bool left = geometry.isLeft;
     const Bool top = geometry.isTop, bottom = geometry.isBottom;
-    const Bool leftORright = geometry.isLeftOrRight;
     // Bool topAdjacentRow =  (pSC->cRow == 1), bottomAdjacentRow = (pSC->cRow == pSC->cmbHeight - 1);
     const size_t mbWidth = geometry.macroblockWidth;
     const size_t iChannels = geometry.channelCount;
