@@ -197,3 +197,28 @@ Void JxrInverseTransformMathApplyHadamardScale4(
     *first = firstValue - thirdValue;
     *second = secondValue + fourthValue;
 }
+
+Void JxrInverseTransformMathApplyHadamardScale2(
+    PixelI* first,
+    PixelI* second)
+{
+    PixelI firstValue = *first;
+    PixelI secondValue = *second;
+
+    firstValue += secondValue;
+    secondValue = (firstValue >> 1) - secondValue;
+    firstValue += (secondValue * 3) >> 3;
+    secondValue += (firstValue * 3) >> 4;
+
+    *first = firstValue;
+    *second = secondValue;
+}
+
+Void JxrInverseTransformMathApplyAlternateHadamardScale2(
+    PixelI* first,
+    PixelI* second)
+{
+    JxrInverseTransformMathApplyHadamardScale2(first, second);
+    *second += *first >> 7;
+    *second -= *first >> 10;
+}

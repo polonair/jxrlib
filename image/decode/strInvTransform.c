@@ -415,41 +415,12 @@ Void strPost4x4Stage2Split_alternate(PixelI* p0, PixelI* p1)
 **/
 static Void strHSTdec1(PixelI *pa, PixelI *pd)
 {
-    /** different realization : does rescaling as well! **/
-    PixelI a, d;
-    a = *pa;
-    d = *pd;
-
-    a += d;
-    d = (a >> 1) - d;
-    a += (d * 3 + 0) >> 3;
-    d += (a * 3 + 0) >> 4;
-    //a += (d * 3 + 4) >> 3;
-
-    *pa = a;
-    *pd = d;
+    JxrInverseTransformMathApplyHadamardScale2(pa, pd);
 }
-
 static Void strHSTdec1_alternate(PixelI *pa, PixelI *pd)
 {
-    /** different realization : does rescaling as well! **/
-    PixelI a, d;
-    a = *pa;
-    d = *pd;
-
-    a += d;
-    d = (a >> 1) - d;
-    a += (d * 3 + 0) >> 3;
-    d += (a * 3 + 0) >> 4;
-    //a += (d * 3 + 4) >> 3;
-
-    d += (a >> 7);
-    d -= (a >> 10);
-
-    *pa = a;
-    *pd = d;
+    JxrInverseTransformMathApplyAlternateHadamardScale2(pa, pd);
 }
-
 static Void strHSTdec(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
 {
     JxrInverseTransformMathApplyHadamardScale4(pa, pb, pc, pd);
