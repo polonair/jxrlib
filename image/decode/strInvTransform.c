@@ -34,6 +34,7 @@
 #include "JxrHardTileBoundaryState.h"
 #include "JxrInverseTransformBoundaryContext.h"
 #include "JxrInversePostProcessParameters.h"
+#include "JxrInverseHighPassParameters.h"
 #include "JxrTransformMath.h"
 static const Int JxrInverseTransformStage2P0FirstOffsets[4] = { -96, -32, -80, -16 };
 static const Int JxrInverseTransformStage2P0SecondOffsets[4] = { 96, 32, 112, 48 };
@@ -302,13 +303,17 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
     JxrInversePostProcessParameters postProcessParameters;
     // ERR_CODE result = ICERR_OK;
 
-    Bool bHPAbsent = (pSC->WMISCP.sbSubband == SB_NO_HIGHPASS || pSC->WMISCP.sbSubband == SB_DC_ONLY);
+    JxrInverseHighPassParameters highPassParameters;
 
     JxrInversePostProcessParametersInitialize(&postProcessParameters,
         pSC->WMII.cPostProcStrength, olOverlap, iChannels,
         pSC->pTile[pSC->cTileColumn].pQuantizerLP,
         pSC->pTile[pSC->cTileColumn].pQuantizerDC,
         pSC->MBInfo.iQIndexLP);
+    JxrInverseHighPassParametersInitialize(&highPassParameters,
+        pSC->WMISCP.sbSubband, pSC->m_param.cNumChannels,
+        pSC->pTile[pSC->cTileColumn].pQuantizerHP,
+        pSC->MBInfo.iQIndexHP);
     if (postProcessParameters.enabled) {
         if (left) // a new MB row
             slideOneMBRow(pSC->pPostProcInfo, pSC->m_param.cNumChannels, mbWidth, top, bottom);  // previous current row becomes previous row
@@ -320,9 +325,8 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
         PixelI* const p0 = pSC->p0MBbuffer[i];
         PixelI* const p1 = pSC->p1MBbuffer[i];
 
-        Int iHPQP = 255;
-        if (!bHPAbsent)
-            iHPQP = pSC->pTile[pSC->cTileColumn].pQuantizerHP[i][pSC->MBInfo.iQIndexHP].iQP;
+        const Int iHPQP = highPassParameters.quantizers[i];
+
 
         //================================
         // second level inverse transform
@@ -429,15 +433,15 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
                     JxrInverseTransformMathApplyPost4(p + 7, p + 6, p + 66, p + 67);
                     p = NULL;
 
-                    strPost4x4Stage1(p1 + j, 0, iHPQP, bHPAbsent);
+                    strPost4x4Stage1(p1 + j, 0, iHPQP, highPassParameters.isAbsent);
                 }
             }
             else if (bottom)
             {
                 for (j = (left ? 0 : -192); j < (right ? -64 : 64); j += 64)
                 {
-                    strPost4x4Stage1(p0 + 16 + j, 0, iHPQP, bHPAbsent);
-                    strPost4x4Stage1(p0 + 32 + j, 0, iHPQP, bHPAbsent);
+                    strPost4x4Stage1(p0 + 16 + j, 0, iHPQP, highPassParameters.isAbsent);
+                    strPost4x4Stage1(p0 + 32 + j, 0, iHPQP, highPassParameters.isAbsent);
 
                     p = p0 + 48 + j;
                     JxrInverseTransformMathApplyPost4(p + 15, p + 14, p + 74, p + 75);
@@ -449,10 +453,10 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
             {
                 for (j = (left ? 0 : -192); j < (right ? -64 : 64); j += 64)
                 {
-                    strPost4x4Stage1(p0 + 16 + j, 0, iHPQP, bHPAbsent);
-                    strPost4x4Stage1(p0 + 32 + j, 0, iHPQP, bHPAbsent);
-                    strPost4x4Stage1Split(p0 + 48 + j, p1 + j, 0, iHPQP, bHPAbsent);
-                    strPost4x4Stage1(p1 + j, 0, iHPQP, bHPAbsent);
+                    strPost4x4Stage1(p0 + 16 + j, 0, iHPQP, highPassParameters.isAbsent);
+                    strPost4x4Stage1(p0 + 32 + j, 0, iHPQP, highPassParameters.isAbsent);
+                    strPost4x4Stage1Split(p0 + 48 + j, p1 + j, 0, iHPQP, highPassParameters.isAbsent);
+                    strPost4x4Stage1(p1 + j, 0, iHPQP, highPassParameters.isAbsent);
                 }
             }
         }
@@ -468,9 +472,8 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
         PixelI* const p0 = pSC->p0MBbuffer[1 + i];//(0 == i ? pSC->pU0 : pSC->pV0);
         PixelI* const p1 = pSC->p1MBbuffer[1 + i];//(0 == i ? pSC->pU1 : pSC->pV1);
 
-        Int iHPQP = 255;
-        if (!bHPAbsent)
-            iHPQP = pSC->pTile[pSC->cTileColumn].pQuantizerHP[i][pSC->MBInfo.iQIndexHP].iQP;
+        const Int iHPQP = highPassParameters.quantizers[i];
+
 
         //========================================
         // second level inverse transform (420_UV)
@@ -549,7 +552,7 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
                 {
                     for (j = -48; j < (right ? -16 : 16); j += 32)
                     {
-                        strPost4x4Stage1Split(p0 + j, p1 - 16 + j, 32, iHPQP, bHPAbsent);
+                        strPost4x4Stage1Split(p0 + j, p1 - 16 + j, 32, iHPQP, highPassParameters.isAbsent);
                     }
                 }
 
@@ -566,10 +569,10 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
                 }
                 else
                 {
-                    strPost4x4Stage1(p0 - 32, 32, iHPQP, bHPAbsent);
+                    strPost4x4Stage1(p0 - 32, 32, iHPQP, highPassParameters.isAbsent);
                 }
 
-                strPost4x4Stage1(p0 - 64, 32, iHPQP, bHPAbsent);
+                strPost4x4Stage1(p0 - 64, 32, iHPQP, highPassParameters.isAbsent);
             }
             else if (top)
             {
@@ -602,9 +605,8 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
         PixelI* const p0 = pSC->p0MBbuffer[1 + i];//(0 == i ? pSC->pU0 : pSC->pV0);
         PixelI* const p1 = pSC->p1MBbuffer[1 + i];//(0 == i ? pSC->pU1 : pSC->pV1);
 
-        Int iHPQP = 255;
-        if (!bHPAbsent)
-            iHPQP = pSC->pTile[pSC->cTileColumn].pQuantizerHP[i][pSC->MBInfo.iQIndexHP].iQP;
+        const Int iHPQP = highPassParameters.quantizers[i];
+
 
         //========================================
         // second level inverse transform (422_UV)
@@ -703,7 +705,7 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
 
                 for (j = (left ? 0 : -128); j < (right ? -64 : 0); j += 64)
                 {
-                    strPost4x4Stage1(p0 + j + 32, 0, iHPQP, bHPAbsent);
+                    strPost4x4Stage1(p0 + j + 32, 0, iHPQP, highPassParameters.isAbsent);
                 }
             }
 
@@ -726,8 +728,8 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
 
                 for (j = (left ? 0 : -128); j < (right ? -64 : 0); j += 64)
                 {
-                    strPost4x4Stage1(p1 + j +  0, 0, iHPQP, bHPAbsent);
-                    strPost4x4Stage1(p1 + j + 16, 0, iHPQP, bHPAbsent);
+                    strPost4x4Stage1(p1 + j +  0, 0, iHPQP, highPassParameters.isAbsent);
+                    strPost4x4Stage1(p1 + j + 16, 0, iHPQP, highPassParameters.isAbsent);
                 }
             }
 
@@ -752,7 +754,7 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
 
                 for (j = (left ? 0 : -128); j < (right ? -64 : 0); j += 64)
                 {
-                    strPost4x4Stage1Split(p0 + j + 48, p1 + j + 0, 0, iHPQP, bHPAbsent);
+                    strPost4x4Stage1Split(p0 + j + 48, p1 + j + 0, 0, iHPQP, highPassParameters.isAbsent);
                 }
             }
         }

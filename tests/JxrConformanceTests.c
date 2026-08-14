@@ -70,6 +70,7 @@
 #include "JxrHardTileBoundaryState.h"
 #include "JxrInverseTransformBoundaryContext.h"
 #include "JxrInversePostProcessParameters.h"
+#include "JxrInverseHighPassParameters.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -2864,6 +2865,38 @@ static int test_inverse_postprocess_parameters_vectors(void)
         parameters.directCurrentQuantizers[1] == 22;
 }
 
+static int test_inverse_highpass_parameters_vectors(void)
+{
+    CWMIQuantizer channel0[2];
+    CWMIQuantizer channel1[2];
+    CWMIQuantizer* quantizers[2];
+    JxrInverseHighPassParameters parameters;
+
+    memset(channel0, 0, sizeof(channel0));
+    memset(channel1, 0, sizeof(channel1));
+    channel0[1].iQP = 19;
+    channel1[1].iQP = 37;
+    quantizers[0] = channel0;
+    quantizers[1] = channel1;
+
+    JxrInverseHighPassParametersInitialize(&parameters,
+        SB_NO_HIGHPASS, 2, quantizers, 1);
+    if (!parameters.isAbsent ||
+        parameters.quantizers[0] != JXR_INVERSE_DEFAULT_HIGH_PASS_QUANTIZER ||
+        parameters.quantizers[1] != JXR_INVERSE_DEFAULT_HIGH_PASS_QUANTIZER) return 0;
+
+    JxrInverseHighPassParametersInitialize(&parameters,
+        SB_DC_ONLY, 2, quantizers, 1);
+    if (!parameters.isAbsent ||
+        parameters.quantizers[0] != JXR_INVERSE_DEFAULT_HIGH_PASS_QUANTIZER) return 0;
+
+    JxrInverseHighPassParametersInitialize(&parameters,
+        SB_ALL, 2, quantizers, 1);
+    return !parameters.isAbsent && parameters.quantizers[0] == 19 &&
+        parameters.quantizers[1] == 37 &&
+        parameters.quantizers[2] == JXR_INVERSE_DEFAULT_HIGH_PASS_QUANTIZER;
+}
+
 static int test_inverse_transform_math_vectors(void)
 {
     PixelI first, second;
@@ -3551,6 +3584,7 @@ int main(int argc, char** argv)
         { "hard_tile_boundary_state_vectors", test_hard_tile_boundary_state_vectors },
         { "inverse_transform_boundary_context_vectors", test_inverse_transform_boundary_context_vectors },
         { "inverse_postprocess_parameters_vectors", test_inverse_postprocess_parameters_vectors },
+        { "inverse_highpass_parameters_vectors", test_inverse_highpass_parameters_vectors },
         { "inverse_transform_math_vectors", test_inverse_transform_math_vectors },
         { "transform_math_dct2x2_vectors", test_transform_math_dct2x2_vectors },
         { "forward_transform_math_vectors", test_forward_transform_math_vectors },
