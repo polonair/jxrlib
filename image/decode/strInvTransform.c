@@ -1070,13 +1070,13 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
             if ((leftAdjacentColumn || pSC->bOneMBRightVertTB) && (top || pSC->bHoriTileBoundary))
                 JxrInverseTransformMathSubtractCornerPredictionAt(p1, -64, p1[-32]);
             if ((rightAdjacentColumn || pSC->bOneMBLeftVertTB) && (top || pSC->bHoriTileBoundary))
-                pSC->iPredBefore[i][0] = *(p1 + 0);
+                pSC->iPredBefore[i][0] = p1[0];
             if ((right || pSC->bVertTileBoundary) && (top || pSC->bHoriTileBoundary))
                 JxrInverseTransformMathSubtractCornerPredictionAt(p1, -32, pSC->iPredBefore[i][0]);
             if ((leftAdjacentColumn || pSC->bOneMBRightVertTB) && (bottom || pSC->bHoriTileBoundary))
                 JxrInverseTransformMathSubtractCornerPredictionAt(p0, -48, p0[-16]);
             if ((rightAdjacentColumn || pSC->bOneMBLeftVertTB) && (bottom || pSC->bHoriTileBoundary))
-                pSC->iPredBefore[i][1] = *(p0 + 16);
+                pSC->iPredBefore[i][1] = p0[16];
             if ((right || pSC->bVertTileBoundary) && (bottom || pSC->bHoriTileBoundary))
                 JxrInverseTransformMathSubtractCornerPredictionAt(p0, -16, pSC->iPredBefore[i][1]);
 
@@ -1104,13 +1104,13 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
             if ((leftAdjacentColumn || pSC->bOneMBRightVertTB) && (top || pSC->bHoriTileBoundary))
                 JxrInverseTransformMathAddCornerPredictionAt(p1, -64, p1[-32]);
             if ((rightAdjacentColumn || pSC->bOneMBLeftVertTB) && (top || pSC->bHoriTileBoundary))
-                pSC->iPredAfter[i][0] = *(p1 + 0);
+                pSC->iPredAfter[i][0] = p1[0];
             if ((right || pSC->bVertTileBoundary) && (top || pSC->bHoriTileBoundary))
                 JxrInverseTransformMathAddCornerPredictionAt(p1, -32, pSC->iPredAfter[i][0]);
             if ((leftAdjacentColumn || pSC->bOneMBRightVertTB) && (bottom || pSC->bHoriTileBoundary))
                 JxrInverseTransformMathAddCornerPredictionAt(p0, -48, p0[-16]);
             if ((rightAdjacentColumn || pSC->bOneMBLeftVertTB) && (bottom || pSC->bHoriTileBoundary))
-                pSC->iPredAfter[i][1] = *(p0 + 16);
+                pSC->iPredAfter[i][1] = p0[16];
             if ((right || pSC->bVertTileBoundary) && (bottom || pSC->bHoriTileBoundary))
                 JxrInverseTransformMathAddCornerPredictionAt(p0, -16, pSC->iPredAfter[i][1]);
         }
@@ -1267,7 +1267,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                 JxrInverseTransformMathSubtractCornerPredictionAt(p1, -128, p1[-64]);
 
             if ((rightAdjacentColumn || pSC->bOneMBLeftVertTB) && (top || pSC->bHoriTileBoundary))
-                pSC->iPredBefore[i][0] = *(p1 + 0);
+                pSC->iPredBefore[i][0] = p1[0];
             if ((right || pSC->bVertTileBoundary) && (top || pSC->bHoriTileBoundary))
                 JxrInverseTransformMathSubtractCornerPredictionAt(p1, -64, pSC->iPredBefore[i][0]);
 
@@ -1275,7 +1275,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                 JxrInverseTransformMathSubtractCornerPredictionAt(p0, -80, p0[-16]);
 
             if ((rightAdjacentColumn || pSC->bOneMBLeftVertTB) && (bottom || pSC->bHoriTileBoundary))
-                pSC->iPredBefore[i][1] = *(p0 + 48);
+                pSC->iPredBefore[i][1] = p0[48];
             if ((right || pSC->bVertTileBoundary) && (bottom || pSC->bHoriTileBoundary))
                 JxrInverseTransformMathSubtractCornerPredictionAt(p0, -16, pSC->iPredBefore[i][1]);
 
@@ -1317,7 +1317,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                 JxrInverseTransformMathAddCornerPredictionAt(p1, -128, p1[-64]);
 
             if ((rightAdjacentColumn || pSC->bOneMBLeftVertTB) && (top || pSC->bHoriTileBoundary))
-                pSC->iPredAfter[i][0] = *(p1 + 0);
+                pSC->iPredAfter[i][0] = p1[0];
             if ((right || pSC->bVertTileBoundary) && (top || pSC->bHoriTileBoundary))
                 JxrInverseTransformMathAddCornerPredictionAt(p1, -64, pSC->iPredAfter[i][0]);
 
@@ -1325,7 +1325,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                 JxrInverseTransformMathAddCornerPredictionAt(p0, -80, p0[-16]);
 
             if ((rightAdjacentColumn || pSC->bOneMBLeftVertTB) && (bottom || pSC->bHoriTileBoundary))
-                pSC->iPredAfter[i][1] = *(p0 + 48);
+                pSC->iPredAfter[i][1] = p0[48];
             if ((right || pSC->bVertTileBoundary) && (bottom || pSC->bHoriTileBoundary))
                 JxrInverseTransformMathAddCornerPredictionAt(p0, -16, pSC->iPredAfter[i][1]);
         }
