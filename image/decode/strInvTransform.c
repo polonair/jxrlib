@@ -381,8 +381,8 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
             if (leftORright && (!topORbottom))
             {
                 j = left ? 0 : -128;
-                strPost4(p0 + j + 32, p0 + j +  48, p1 + j +  0, p1 + j + 16);
-                strPost4(p0 + j + 96, p0 + j + 112, p1 + j + 64, p1 + j + 80);
+                JxrInverseTransformMathApplyPost4(p0 + j + 32, p0 + j +  48, p1 + j +  0, p1 + j + 16);
+                JxrInverseTransformMathApplyPost4(p0 + j + 96, p0 + j + 112, p1 + j + 64, p1 + j + 80);
             }
 
             if (!leftORright)
@@ -390,8 +390,8 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
                 if (topORbottom)
                 {
                     p = top ? p1 : p0 + 32;
-                    strPost4(p - 128, p - 64, p +  0, p + 64);
-                    strPost4(p - 112, p - 48, p + 16, p + 80);
+                    JxrInverseTransformMathApplyPost4(p - 128, p - 64, p +  0, p + 64);
+                    JxrInverseTransformMathApplyPost4(p - 112, p - 48, p + 16, p + 80);
                     p = NULL;
                 }
                 else
@@ -437,23 +437,23 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
                 if (!top)
                 {
                     p = p0 + 16 + j;
-                    strPost4(p +  0, p -  2, p +  6, p +  8);
-                    strPost4(p +  1, p -  1, p +  7, p +  9);
-                    strPost4(p + 16, p + 14, p + 22, p + 24);
-                    strPost4(p + 17, p + 15, p + 23, p + 25);
+                    JxrInverseTransformMathApplyPost4(p +  0, p -  2, p +  6, p +  8);
+                    JxrInverseTransformMathApplyPost4(p +  1, p -  1, p +  7, p +  9);
+                    JxrInverseTransformMathApplyPost4(p + 16, p + 14, p + 22, p + 24);
+                    JxrInverseTransformMathApplyPost4(p + 17, p + 15, p + 23, p + 25);
                     p = NULL;
                 }
                 if (!bottom)
                 {
                     p = p1 + j;
-                    strPost4(p + 0, p - 2, p + 6, p + 8);
-                    strPost4(p + 1, p - 1, p + 7, p + 9);
+                    JxrInverseTransformMathApplyPost4(p + 0, p - 2, p + 6, p + 8);
+                    JxrInverseTransformMathApplyPost4(p + 1, p - 1, p + 7, p + 9);
                     p = NULL;
                 }
                 if (!topORbottom)
                 {
-                    strPost4(p0 + 48 + j + 0, p0 + 48 + j - 2, p1 - 10 + j, p1 - 8 + j);
-                    strPost4(p0 + 48 + j + 1, p0 + 48 + j - 1, p1 -  9 + j, p1 - 7 + j);
+                    JxrInverseTransformMathApplyPost4(p0 + 48 + j + 0, p0 + 48 + j - 2, p1 - 10 + j, p1 - 8 + j);
+                    JxrInverseTransformMathApplyPost4(p0 + 48 + j + 1, p0 + 48 + j - 1, p1 -  9 + j, p1 - 7 + j);
                 }
             }
 
@@ -462,8 +462,8 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
                 for (j = (left ? 0 : -192); j < (right ? -64 : 64); j += 64)
                 {
                     p = p1 + j;
-                    strPost4(p + 5, p + 4, p + 64, p + 65);
-                    strPost4(p + 7, p + 6, p + 66, p + 67);
+                    JxrInverseTransformMathApplyPost4(p + 5, p + 4, p + 64, p + 65);
+                    JxrInverseTransformMathApplyPost4(p + 7, p + 6, p + 66, p + 67);
                     p = NULL;
 
                     strPost4x4Stage1(p1 + j, 0, iHPQP, bHPAbsent);
@@ -477,8 +477,8 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
                     strPost4x4Stage1(p0 + 32 + j, 0, iHPQP, bHPAbsent);
 
                     p = p0 + 48 + j;
-                    strPost4(p + 15, p + 14, p + 74, p + 75);
-                    strPost4(p + 13, p + 12, p + 72, p + 73);
+                    JxrInverseTransformMathApplyPost4(p + 15, p + 14, p + 74, p + 75);
+                    JxrInverseTransformMathApplyPost4(p + 13, p + 12, p + 72, p + 73);
                     p = NULL;
                 }
             }
@@ -577,8 +577,8 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
                     for (j = -48; j < (right ? -16 : 16); j += 32)
                     {
                         p = p0 + j;
-                        strPost4(p + 15, p + 14, p + 42, p + 43);
-                        strPost4(p + 13, p + 12, p + 40, p + 41);
+                        JxrInverseTransformMathApplyPost4(p + 15, p + 14, p + 42, p + 43);
+                        JxrInverseTransformMathApplyPost4(p + 13, p + 12, p + 40, p + 41);
                         p = NULL;
                     }
                 }
@@ -594,12 +594,12 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
                 {
                     if (!bottom)
                     {
-                        strPost4(p0 - 2 , p0 - 4 , p1 - 28, p1 - 26);
-                        strPost4(p0 - 1 , p0 - 3 , p1 - 27, p1 - 25);
+                        JxrInverseTransformMathApplyPost4(p0 - 2 , p0 - 4 , p1 - 28, p1 - 26);
+                        JxrInverseTransformMathApplyPost4(p0 - 1 , p0 - 3 , p1 - 27, p1 - 25);
                     }
 
-                    strPost4(p0 - 18, p0 - 20, p0 - 12, p0 - 10);
-                    strPost4(p0 - 17, p0 - 19, p0 - 11, p0 -  9);
+                    JxrInverseTransformMathApplyPost4(p0 - 18, p0 - 20, p0 - 12, p0 - 10);
+                    JxrInverseTransformMathApplyPost4(p0 - 17, p0 - 19, p0 - 11, p0 -  9);
                 }
                 else
                 {
@@ -613,8 +613,8 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
                 for (j = (left ? 0: -64); j < (right ? -32: 0); j += 32)
                 {
                     p = p1 + j + 4;
-                    strPost4(p + 1, p + 0, p + 28, p + 29);
-                    strPost4(p + 3, p + 2, p + 30, p + 31);
+                    JxrInverseTransformMathApplyPost4(p + 1, p + 0, p + 28, p + 29);
+                    JxrInverseTransformMathApplyPost4(p + 3, p + 2, p + 30, p + 31);
                     p = NULL;
                 }
             }
@@ -622,12 +622,12 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
             {
                 if (!bottom)
                 {
-                    strPost4(p0 + 26, p0 + 24, p1 + 0, p1 + 2);
-                    strPost4(p0 + 27, p0 + 25, p1 + 1, p1 + 3);
+                    JxrInverseTransformMathApplyPost4(p0 + 26, p0 + 24, p1 + 0, p1 + 2);
+                    JxrInverseTransformMathApplyPost4(p0 + 27, p0 + 25, p1 + 1, p1 + 3);
                 }
 
-                strPost4(p0 + 10, p0 + 8, p0 + 16, p0 + 18);
-                strPost4(p0 + 11, p0 + 9, p0 + 17, p0 + 19);
+                JxrInverseTransformMathApplyPost4(p0 + 10, p0 + 8, p0 + 16, p0 + 18);
+                JxrInverseTransformMathApplyPost4(p0 + 11, p0 + 9, p0 + 17, p0 + 19);
             }
         }
     }
@@ -732,8 +732,8 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
                     j = (left ? 32 + 10 : -32 + 14);
 
                     p = p0 + j;
-                    strPost4(p + 0, p - 2, p + 6, p + 8);
-                    strPost4(p + 1, p - 1, p + 7, p + 9);
+                    JxrInverseTransformMathApplyPost4(p + 0, p - 2, p + 6, p + 8);
+                    JxrInverseTransformMathApplyPost4(p + 1, p - 1, p + 7, p + 9);
 
                     p = NULL;
                 }
@@ -751,12 +751,12 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
                     j = (left ? 0 + 10 : -64 + 14);
 
                     p = p1 + j;
-                    strPost4(p + 0, p - 2, p + 6, p + 8);
-                    strPost4(p + 1, p - 1, p + 7, p + 9);
+                    JxrInverseTransformMathApplyPost4(p + 0, p - 2, p + 6, p + 8);
+                    JxrInverseTransformMathApplyPost4(p + 1, p - 1, p + 7, p + 9);
 
                     p += 16;
-                    strPost4(p + 0, p - 2, p + 6, p + 8);
-                    strPost4(p + 1, p - 1, p + 7, p + 9);
+                    JxrInverseTransformMathApplyPost4(p + 0, p - 2, p + 6, p + 8);
+                    JxrInverseTransformMathApplyPost4(p + 1, p - 1, p + 7, p + 9);
 
                     p = NULL;
                 }
@@ -773,8 +773,8 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
                 p = (top ? p1 + 5 : p0 + 48 + 13);
                 for (j = (left ? 0 : -128); j < (right ? -64 : 0); j += 64)
                 {
-                    strPost4(p + j + 0, p + j - 1, p + j + 59, p + j + 60);
-                    strPost4(p + j + 2, p + j + 1, p + j + 61, p + j + 62);
+                    JxrInverseTransformMathApplyPost4(p + j + 0, p + j - 1, p + j + 59, p + j + 60);
+                    JxrInverseTransformMathApplyPost4(p + j + 2, p + j + 1, p + j + 61, p + j + 62);
                 }
                 p = NULL;
             }
@@ -783,8 +783,8 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
                 if (leftORright)
                 {
                     j = (left ? 0 + 0 : -64 + 4);
-                    strPost4(p0 + j + 48 + 10 + 0, p0 + j + 48 + 10 - 2, p1 + j + 0, p1 + j + 2);
-                    strPost4(p0 + j + 48 + 10 + 1, p0 + j + 48 + 10 - 1, p1 + j + 1, p1 + j + 3);
+                    JxrInverseTransformMathApplyPost4(p0 + j + 48 + 10 + 0, p0 + j + 48 + 10 - 2, p1 + j + 0, p1 + j + 2);
+                    JxrInverseTransformMathApplyPost4(p0 + j + 48 + 10 + 1, p0 + j + 48 + 10 - 1, p1 + j + 1, p1 + j + 3);
                 }
 
                 for (j = (left ? 0 : -128); j < (right ? -64 : 0); j += 64)
