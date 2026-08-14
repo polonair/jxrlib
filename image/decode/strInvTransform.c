@@ -893,24 +893,24 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
         {
             /* Corner operations */
             if ((top || pSC->bHoriTileBoundary) && (left || pSC->bVertTileBoundary))
-                strPost4_alternate(p1 + 0, p1 + 64, p1 + 0 + 16, p1 + 64 + 16);
+                JxrInverseTransformMathApplyAlternatePost4(p1 + 0, p1 + 64, p1 + 0 + 16, p1 + 64 + 16);
             if ((top || pSC->bHoriTileBoundary) && (right || pSC->bVertTileBoundary))
-                strPost4_alternate(p1 - 128, p1 - 64, p1 - 128 + 16, p1 - 64 + 16); 
+                JxrInverseTransformMathApplyAlternatePost4(p1 - 128, p1 - 64, p1 - 128 + 16, p1 - 64 + 16);
             if ((bottom || pSC->bHoriTileBoundary) && (left || pSC->bVertTileBoundary))
-                strPost4_alternate(p0 + 32, p0 + 96, p0 + 32 + 16, p0 + 96 + 16);
+                JxrInverseTransformMathApplyAlternatePost4(p0 + 32, p0 + 96, p0 + 32 + 16, p0 + 96 + 16);
             if ((bottom || pSC->bHoriTileBoundary) && (right || pSC->bVertTileBoundary))
-                strPost4_alternate(p0 - 96, p0 - 32, p0 - 96 + 16, p0 - 32 + 16);
+                JxrInverseTransformMathApplyAlternatePost4(p0 - 96, p0 - 32, p0 - 96 + 16, p0 - 32 + 16);
             if ((leftORright || pSC->bVertTileBoundary) && (!topORbottom  && !pSC->bHoriTileBoundary))
             {
                 if (left || pSC->bVertTileBoundary) {
                     j = 0;
-                    strPost4_alternate(p0 + j + 32, p0 + j +  48, p1 + j +  0, p1 + j + 16);
-                    strPost4_alternate(p0 + j + 96, p0 + j + 112, p1 + j + 64, p1 + j + 80);
+                    JxrInverseTransformMathApplyAlternatePost4(p0 + j + 32, p0 + j +  48, p1 + j +  0, p1 + j + 16);
+                    JxrInverseTransformMathApplyAlternatePost4(p0 + j + 96, p0 + j + 112, p1 + j + 64, p1 + j + 80);
                 }
                 if (right || pSC->bVertTileBoundary) {
                     j = -128;
-                    strPost4_alternate(p0 + j + 32, p0 + j +  48, p1 + j +  0, p1 + j + 16);
-                    strPost4_alternate(p0 + j + 96, p0 + j + 112, p1 + j + 64, p1 + j + 80);
+                    JxrInverseTransformMathApplyAlternatePost4(p0 + j + 32, p0 + j +  48, p1 + j +  0, p1 + j + 16);
+                    JxrInverseTransformMathApplyAlternatePost4(p0 + j + 96, p0 + j + 112, p1 + j + 64, p1 + j + 80);
                 }
             }
 
@@ -920,14 +920,14 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                 {
                     if (top || pSC->bHoriTileBoundary) {
                         p = p1;
-                        strPost4_alternate(p - 128, p - 64, p +  0, p + 64);
-                        strPost4_alternate(p - 112, p - 48, p + 16, p + 80);
+                        JxrInverseTransformMathApplyAlternatePost4(p - 128, p - 64, p +  0, p + 64);
+                        JxrInverseTransformMathApplyAlternatePost4(p - 112, p - 48, p + 16, p + 80);
                         p = NULL;
                     }
                     if (bottom || pSC->bHoriTileBoundary) {
                         p = p0 + 32;
-                        strPost4_alternate(p - 128, p - 64, p +  0, p + 64);
-                        strPost4_alternate(p - 112, p - 48, p + 16, p + 80);
+                        JxrInverseTransformMathApplyAlternatePost4(p - 128, p - 64, p +  0, p + 64);
+                        JxrInverseTransformMathApplyAlternatePost4(p - 112, p - 48, p + 16, p + 80);
                         p = NULL;
                     }
                 }
@@ -975,35 +975,35 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
             {
                 /* Corner operations */
                 if ((top || pSC->bHoriTileBoundary) && (left || pSC->bVertTileBoundary))
-                    strPost4_alternate(p1 + 0, p1 + 1, p1 + 2, p1 + 3);
+                    JxrInverseTransformMathApplyAlternatePost4(p1 + 0, p1 + 1, p1 + 2, p1 + 3);
                 if ((top || pSC->bHoriTileBoundary) && (right || pSC->bVertTileBoundary))
-                    strPost4_alternate(p1 - 59, p1 - 60, p1 - 57, p1 - 58); 
+                    JxrInverseTransformMathApplyAlternatePost4(p1 - 59, p1 - 60, p1 - 57, p1 - 58);
                 if ((bottom || pSC->bHoriTileBoundary) && (left || pSC->bVertTileBoundary))
-                    strPost4_alternate(p0 + 48 + 10, p0 + 48 + 11, p0 + 48 + 8, p0 + 48 + 9);
+                    JxrInverseTransformMathApplyAlternatePost4(p0 + 48 + 10, p0 + 48 + 11, p0 + 48 + 8, p0 + 48 + 9);
                 if ((bottom || pSC->bHoriTileBoundary) && (right || pSC->bVertTileBoundary))
-                    strPost4_alternate(p0 - 1, p0 - 2, p0 - 3, p0 - 4);
+                    JxrInverseTransformMathApplyAlternatePost4(p0 - 1, p0 - 2, p0 - 3, p0 - 4);
                 if (left || pSC->bVertTileBoundary) {
                     j = 0 + 10;
                     if (!top)
                     {
                         p = p0 + 16 + j;
-                        strPost4_alternate(p +  0, p -  2, p +  6, p +  8);
-                        strPost4_alternate(p +  1, p -  1, p +  7, p +  9);
-                        strPost4_alternate(p + 16, p + 14, p + 22, p + 24);
-                        strPost4_alternate(p + 17, p + 15, p + 23, p + 25);
+                        JxrInverseTransformMathApplyAlternatePost4(p +  0, p -  2, p +  6, p +  8);
+                        JxrInverseTransformMathApplyAlternatePost4(p +  1, p -  1, p +  7, p +  9);
+                        JxrInverseTransformMathApplyAlternatePost4(p + 16, p + 14, p + 22, p + 24);
+                        JxrInverseTransformMathApplyAlternatePost4(p + 17, p + 15, p + 23, p + 25);
                         p = NULL;
                     }
                     if (!bottom)
                     {
                         p = p1 + j;
-                        strPost4_alternate(p + 0, p - 2, p + 6, p + 8);
-                        strPost4_alternate(p + 1, p - 1, p + 7, p + 9);
+                        JxrInverseTransformMathApplyAlternatePost4(p + 0, p - 2, p + 6, p + 8);
+                        JxrInverseTransformMathApplyAlternatePost4(p + 1, p - 1, p + 7, p + 9);
                         p = NULL;
                     }
                     if (!topORbottom && !pSC->bHoriTileBoundary)
                     {
-                        strPost4_alternate(p0 + 48 + j + 0, p0 + 48 + j - 2, p1 - 10 + j, p1 - 8 + j);
-                        strPost4_alternate(p0 + 48 + j + 1, p0 + 48 + j - 1, p1 -  9 + j, p1 - 7 + j);
+                        JxrInverseTransformMathApplyAlternatePost4(p0 + 48 + j + 0, p0 + 48 + j - 2, p1 - 10 + j, p1 - 8 + j);
+                        JxrInverseTransformMathApplyAlternatePost4(p0 + 48 + j + 1, p0 + 48 + j - 1, p1 -  9 + j, p1 - 7 + j);
                     }
                 }
                 if (right || pSC->bVertTileBoundary) {
@@ -1011,23 +1011,23 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                     if (!top)
                     {
                         p = p0 + 16 + j;
-                        strPost4_alternate(p +  0, p -  2, p +  6, p +  8);
-                        strPost4_alternate(p +  1, p -  1, p +  7, p +  9);
-                        strPost4_alternate(p + 16, p + 14, p + 22, p + 24);
-                        strPost4_alternate(p + 17, p + 15, p + 23, p + 25);
+                        JxrInverseTransformMathApplyAlternatePost4(p +  0, p -  2, p +  6, p +  8);
+                        JxrInverseTransformMathApplyAlternatePost4(p +  1, p -  1, p +  7, p +  9);
+                        JxrInverseTransformMathApplyAlternatePost4(p + 16, p + 14, p + 22, p + 24);
+                        JxrInverseTransformMathApplyAlternatePost4(p + 17, p + 15, p + 23, p + 25);
                         p = NULL;
                     }
                     if (!bottom)
                     {
                         p = p1 + j;
-                        strPost4_alternate(p + 0, p - 2, p + 6, p + 8);
-                        strPost4_alternate(p + 1, p - 1, p + 7, p + 9);
+                        JxrInverseTransformMathApplyAlternatePost4(p + 0, p - 2, p + 6, p + 8);
+                        JxrInverseTransformMathApplyAlternatePost4(p + 1, p - 1, p + 7, p + 9);
                         p = NULL;
                     }
                     if (!topORbottom && !pSC->bHoriTileBoundary)
                     {
-                        strPost4_alternate(p0 + 48 + j + 0, p0 + 48 + j - 2, p1 - 10 + j, p1 - 8 + j);
-                        strPost4_alternate(p0 + 48 + j + 1, p0 + 48 + j - 1, p1 -  9 + j, p1 - 7 + j);
+                        JxrInverseTransformMathApplyAlternatePost4(p0 + 48 + j + 0, p0 + 48 + j - 2, p1 - 10 + j, p1 - 8 + j);
+                        JxrInverseTransformMathApplyAlternatePost4(p0 + 48 + j + 1, p0 + 48 + j - 1, p1 -  9 + j, p1 - 7 + j);
                     }
                 }
             }
@@ -1038,8 +1038,8 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                 {
                     if (!pSC->bVertTileBoundary || j != -64) {
                         p = p1 + j;
-                        strPost4_alternate(p + 5, p + 4, p + 64, p + 65);
-                        strPost4_alternate(p + 7, p + 6, p + 66, p + 67);
+                        JxrInverseTransformMathApplyAlternatePost4(p + 5, p + 4, p + 64, p + 65);
+                        JxrInverseTransformMathApplyAlternatePost4(p + 7, p + 6, p + 66, p + 67);
                         p = NULL;
 
                         strPost4x4Stage1_alternate(p1 + j, 0);
@@ -1056,8 +1056,8 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                         strPost4x4Stage1_alternate(p0 + 32 + j, 0);
 
                         p = p0 + 48 + j;
-                        strPost4_alternate(p + 15, p + 14, p + 74, p + 75);
-                        strPost4_alternate(p + 13, p + 12, p + 72, p + 73);
+                        JxrInverseTransformMathApplyAlternatePost4(p + 15, p + 14, p + 74, p + 75);
+                        JxrInverseTransformMathApplyAlternatePost4(p + 13, p + 12, p + 72, p + 73);
                         p = NULL;
                     }
                 }
@@ -1186,14 +1186,14 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
             /* Corner operations */
             /* Change because the top-left corner ICT will not have happened until leftAdjacentColumn ==1 */
             if ((top || pSC->bHoriTileBoundary) && (leftAdjacentColumn || pSC->bOneMBRightVertTB))
-                strPost4_alternate(p1 - 64 + 0, p1 - 64 + 1, p1 - 64 + 2, p1 - 64 + 3);
+                JxrInverseTransformMathApplyAlternatePost4(p1 - 64 + 0, p1 - 64 + 1, p1 - 64 + 2, p1 - 64 + 3);
             if ((top || pSC->bHoriTileBoundary) && (right || pSC->bVertTileBoundary))
-                strPost4_alternate(p1 - 27, p1 - 28, p1 - 25, p1 - 26);
+                JxrInverseTransformMathApplyAlternatePost4(p1 - 27, p1 - 28, p1 - 25, p1 - 26);
             /* Change because the bottom-left corner ICT will not have happened until leftAdjacentColumn ==1 */
             if ((bottom || pSC->bHoriTileBoundary) && (leftAdjacentColumn || pSC->bOneMBRightVertTB))
-                strPost4_alternate(p0 - 64 + 16 + 10, p0 - 64 + 16 + 11, p0 - 64 + 16 + 8, p0 - 64 + 16 + 9);
+                JxrInverseTransformMathApplyAlternatePost4(p0 - 64 + 16 + 10, p0 - 64 + 16 + 11, p0 - 64 + 16 + 8, p0 - 64 + 16 + 9);
             if ((bottom || pSC->bHoriTileBoundary) && (right || pSC->bVertTileBoundary))
-                strPost4_alternate(p0 - 1, p0 - 2, p0 - 3, p0 - 4);
+                JxrInverseTransformMathApplyAlternatePost4(p0 - 1, p0 - 2, p0 - 3, p0 - 4);
             if(!left && !top)
             {
                 /* Change because the vertical 1-D overlap operations of the left edge pixels cannot be performed until leftAdjacentColumn ==1 */
@@ -1201,25 +1201,25 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                 {
                     if (!bottom && !pSC->bHoriTileBoundary)
                     {
-                        strPost4_alternate(p0 - 64 + 26, p0 - 64 + 24, p1 - 64 + 0, p1 - 64 + 2);
-                        strPost4_alternate(p0 - 64 + 27, p0 - 64 + 25, p1 - 64 + 1, p1 - 64 + 3);
+                        JxrInverseTransformMathApplyAlternatePost4(p0 - 64 + 26, p0 - 64 + 24, p1 - 64 + 0, p1 - 64 + 2);
+                        JxrInverseTransformMathApplyAlternatePost4(p0 - 64 + 27, p0 - 64 + 25, p1 - 64 + 1, p1 - 64 + 3);
                     }
 
-                    strPost4_alternate(p0 - 64 + 10, p0 - 64 + 8, p0 - 64 + 16, p0 - 64 + 18);
-                    strPost4_alternate(p0 - 64 + 11, p0 - 64 + 9, p0 - 64 + 17, p0 - 64 + 19);
+                    JxrInverseTransformMathApplyAlternatePost4(p0 - 64 + 10, p0 - 64 + 8, p0 - 64 + 16, p0 - 64 + 18);
+                    JxrInverseTransformMathApplyAlternatePost4(p0 - 64 + 11, p0 - 64 + 9, p0 - 64 + 17, p0 - 64 + 19);
                 }
                 if (bottom || pSC->bHoriTileBoundary)
                 {
                     p = p0 + -48;
-                    strPost4_alternate(p + 15, p + 14, p + 42, p + 43);
-                    strPost4_alternate(p + 13, p + 12, p + 40, p + 41);
+                    JxrInverseTransformMathApplyAlternatePost4(p + 15, p + 14, p + 42, p + 43);
+                    JxrInverseTransformMathApplyAlternatePost4(p + 13, p + 12, p + 40, p + 41);
                     p = NULL;
 
                     if (!right && !pSC->bVertTileBoundary)
                     {
                         p = p0 + -16;
-                        strPost4_alternate(p + 15, p + 14, p + 42, p + 43);
-                        strPost4_alternate(p + 13, p + 12, p + 40, p + 41);
+                        JxrInverseTransformMathApplyAlternatePost4(p + 15, p + 14, p + 42, p + 43);
+                        JxrInverseTransformMathApplyAlternatePost4(p + 13, p + 12, p + 40, p + 41);
                         p = NULL;
                     }
                 }
@@ -1235,12 +1235,12 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                 {
                     if (!bottom && !pSC->bHoriTileBoundary)
                     {
-                        strPost4_alternate(p0 - 2 , p0 - 4 , p1 - 28, p1 - 26);
-                        strPost4_alternate(p0 - 1 , p0 - 3 , p1 - 27, p1 - 25);
+                        JxrInverseTransformMathApplyAlternatePost4(p0 - 2 , p0 - 4 , p1 - 28, p1 - 26);
+                        JxrInverseTransformMathApplyAlternatePost4(p0 - 1 , p0 - 3 , p1 - 27, p1 - 25);
                     }
 
-                    strPost4_alternate(p0 - 18, p0 - 20, p0 - 12, p0 - 10);
-                    strPost4_alternate(p0 - 17, p0 - 19, p0 - 11, p0 -  9);
+                    JxrInverseTransformMathApplyAlternatePost4(p0 - 18, p0 - 20, p0 - 12, p0 - 10);
+                    JxrInverseTransformMathApplyAlternatePost4(p0 - 17, p0 - 19, p0 - 11, p0 -  9);
                 }
                 else
                 {
@@ -1255,16 +1255,16 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                 if (!left)
                 {
                     p = p1 + -64 + 4;
-                    strPost4_alternate(p + 1, p + 0, p + 28, p + 29);
-                    strPost4_alternate(p + 3, p + 2, p + 30, p + 31);
+                    JxrInverseTransformMathApplyAlternatePost4(p + 1, p + 0, p + 28, p + 29);
+                    JxrInverseTransformMathApplyAlternatePost4(p + 3, p + 2, p + 30, p + 31);
                     p = NULL;
                 }
 
                 if (!left && !right && !pSC->bVertTileBoundary)
                 {
                     p = p1 + -32 + 4;
-                    strPost4_alternate(p + 1, p + 0, p + 28, p + 29);
-                    strPost4_alternate(p + 3, p + 2, p + 30, p + 31);
+                    JxrInverseTransformMathApplyAlternatePost4(p + 1, p + 0, p + 28, p + 29);
+                    JxrInverseTransformMathApplyAlternatePost4(p + 3, p + 2, p + 30, p + 31);
                     p = NULL;
                 }
             }
@@ -1400,27 +1400,27 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
         {
             /* Corner operations */
             if ((top || pSC->bHoriTileBoundary) && (leftAdjacentColumn || pSC->bOneMBRightVertTB))
-                strPost4_alternate(p1 - 128 + 0, p1 - 128 + 1, p1 - 128 + 2, p1 - 128 + 3);
+                JxrInverseTransformMathApplyAlternatePost4(p1 - 128 + 0, p1 - 128 + 1, p1 - 128 + 2, p1 - 128 + 3);
             if ((top || pSC->bHoriTileBoundary) && (right || pSC->bVertTileBoundary))
-                strPost4_alternate(p1 - 59, p1 - 60, p1 - 57, p1 - 58);
+                JxrInverseTransformMathApplyAlternatePost4(p1 - 59, p1 - 60, p1 - 57, p1 - 58);
             if ((bottom || pSC->bHoriTileBoundary) && (leftAdjacentColumn || pSC->bOneMBRightVertTB))
-                strPost4_alternate(p0 - 128 + 48 + 10, p0 - 128 + 48 + 11, p0 - 128 + 48 + 8, p0 - 128 + 48 + 9);
+                JxrInverseTransformMathApplyAlternatePost4(p0 - 128 + 48 + 10, p0 - 128 + 48 + 11, p0 - 128 + 48 + 8, p0 - 128 + 48 + 9);
             if ((bottom || pSC->bHoriTileBoundary) && (right || pSC->bVertTileBoundary))
-                strPost4_alternate(p0 - 1, p0 - 2, p0 - 3, p0 - 4);
+                JxrInverseTransformMathApplyAlternatePost4(p0 - 1, p0 - 2, p0 - 3, p0 - 4);
             if (!top)
             {
                 // Need to delay processing of left column until leftAdjacentColumn = 1 for corner overlap operators
                 if (leftAdjacentColumn || pSC->bOneMBRightVertTB) {
                     p = p0 + 32 + 10 - 128;
-                    strPost4_alternate(p + 0, p - 2, p + 6, p + 8);
-                    strPost4_alternate(p + 1, p - 1, p + 7, p + 9);
+                    JxrInverseTransformMathApplyAlternatePost4(p + 0, p - 2, p + 6, p + 8);
+                    JxrInverseTransformMathApplyAlternatePost4(p + 1, p - 1, p + 7, p + 9);
                     p = NULL;
                 }
 
                 if (right || pSC->bVertTileBoundary) {
                     p = p0 + -32 + 14;
-                    strPost4_alternate(p + 0, p - 2, p + 6, p + 8);
-                    strPost4_alternate(p + 1, p - 1, p + 7, p + 9);
+                    JxrInverseTransformMathApplyAlternatePost4(p + 0, p - 2, p + 6, p + 8);
+                    JxrInverseTransformMathApplyAlternatePost4(p + 1, p - 1, p + 7, p + 9);
                     p = NULL;
                 }
 
@@ -1434,22 +1434,22 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                 if (leftAdjacentColumn || pSC->bOneMBRightVertTB)
                 {
                     p = p1 + 0 + 10 - 128;
-                    strPost4_alternate(p + 0, p - 2, p + 6, p + 8);
-                    strPost4_alternate(p + 1, p - 1, p + 7, p + 9);
+                    JxrInverseTransformMathApplyAlternatePost4(p + 0, p - 2, p + 6, p + 8);
+                    JxrInverseTransformMathApplyAlternatePost4(p + 1, p - 1, p + 7, p + 9);
                     p += 16;
-                    strPost4_alternate(p + 0, p - 2, p + 6, p + 8);
-                    strPost4_alternate(p + 1, p - 1, p + 7, p + 9);
+                    JxrInverseTransformMathApplyAlternatePost4(p + 0, p - 2, p + 6, p + 8);
+                    JxrInverseTransformMathApplyAlternatePost4(p + 1, p - 1, p + 7, p + 9);
                     p = NULL;
                 }
 
                 if (right || pSC->bVertTileBoundary)
                 {
                     p = p1 + -64 + 14;
-                    strPost4_alternate(p + 0, p - 2, p + 6, p + 8);
-                    strPost4_alternate(p + 1, p - 1, p + 7, p + 9);
+                    JxrInverseTransformMathApplyAlternatePost4(p + 0, p - 2, p + 6, p + 8);
+                    JxrInverseTransformMathApplyAlternatePost4(p + 1, p - 1, p + 7, p + 9);
                     p += 16;
-                    strPost4_alternate(p + 0, p - 2, p + 6, p + 8);
-                    strPost4_alternate(p + 1, p - 1, p + 7, p + 9);
+                    JxrInverseTransformMathApplyAlternatePost4(p + 0, p - 2, p + 6, p + 8);
+                    JxrInverseTransformMathApplyAlternatePost4(p + 1, p - 1, p + 7, p + 9);
                     p = NULL;
                 }
 
@@ -1466,8 +1466,8 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                     p = p1 + 5;
                     for (j = (left ? 0 : -128); j < ((right || pSC->bVertTileBoundary) ? -64 : 0); j += 64)
                     {
-                        strPost4_alternate(p + j + 0, p + j - 1, p + j + 59, p + j + 60);
-                        strPost4_alternate(p + j + 2, p + j + 1, p + j + 61, p + j + 62);
+                        JxrInverseTransformMathApplyAlternatePost4(p + j + 0, p + j - 1, p + j + 59, p + j + 60);
+                        JxrInverseTransformMathApplyAlternatePost4(p + j + 2, p + j + 1, p + j + 61, p + j + 62);
                     }
                     p = NULL;
                 }
@@ -1476,8 +1476,8 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                     p = p0 + 48 + 13;
                     for (j = (left ? 0 : -128); j < ((right || pSC->bVertTileBoundary) ? -64 : 0); j += 64)
                     {
-                        strPost4_alternate(p + j + 0, p + j - 1, p + j + 59, p + j + 60);
-                        strPost4_alternate(p + j + 2, p + j + 1, p + j + 61, p + j + 62);
+                        JxrInverseTransformMathApplyAlternatePost4(p + j + 0, p + j - 1, p + j + 59, p + j + 60);
+                        JxrInverseTransformMathApplyAlternatePost4(p + j + 2, p + j + 1, p + j + 61, p + j + 62);
                     }
                     p = NULL;
                 }
@@ -1488,15 +1488,15 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                 if (leftAdjacentColumn || pSC->bOneMBRightVertTB)
                 {
                     j = 0 + 0 - 128;
-                    strPost4_alternate(p0 + j + 48 + 10 + 0, p0 + j + 48 + 10 - 2, p1 + j + 0, p1 + j + 2);
-                    strPost4_alternate(p0 + j + 48 + 10 + 1, p0 + j + 48 + 10 - 1, p1 + j + 1, p1 + j + 3);
+                    JxrInverseTransformMathApplyAlternatePost4(p0 + j + 48 + 10 + 0, p0 + j + 48 + 10 - 2, p1 + j + 0, p1 + j + 2);
+                    JxrInverseTransformMathApplyAlternatePost4(p0 + j + 48 + 10 + 1, p0 + j + 48 + 10 - 1, p1 + j + 1, p1 + j + 3);
                 }
 
                 if (right || pSC->bVertTileBoundary)
                 {
                     j = -64 + 4;
-                    strPost4_alternate(p0 + j + 48 + 10 + 0, p0 + j + 48 + 10 - 2, p1 + j + 0, p1 + j + 2);
-                    strPost4_alternate(p0 + j + 48 + 10 + 1, p0 + j + 48 + 10 - 1, p1 + j + 1, p1 + j + 3);
+                    JxrInverseTransformMathApplyAlternatePost4(p0 + j + 48 + 10 + 0, p0 + j + 48 + 10 - 2, p1 + j + 0, p1 + j + 2);
+                    JxrInverseTransformMathApplyAlternatePost4(p0 + j + 48 + 10 + 1, p0 + j + 48 + 10 - 1, p1 + j + 1, p1 + j + 3);
                 }
 
                 for (j = (left ? 0 : -128); j < ((right || pSC->bVertTileBoundary) ? -64 : 0); j += 64)
