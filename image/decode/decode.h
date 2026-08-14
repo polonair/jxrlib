@@ -72,13 +72,10 @@ Void FreeCodingContextDec(struct CWMImageStrCodec *pSC);
 /*************************************************************************/
 // Inverse transform functions
 // 2-point post filter for boundaries (only used in 420 UV DC subband)
-Void strPost2(PixelI *, PixelI *);
 
 // 2x2 post filter (only used in 420 UV DC subband)
-Void strPost2x2(PixelI *, PixelI *, PixelI *, PixelI *);
 
 /** 4-point post filter for boundaries **/
-Void strPost4(PixelI *, PixelI *, PixelI *, PixelI *);
 
 /** data allocation in working buffer (first stage) **/
 
@@ -126,7 +123,6 @@ Void strPost4x4FirstStage420UV(PixelI *);
 //Void strIDCT4x4SecondStage(PixelI *);
 Void strIDCT4x4Stage2(PixelI*);
 Void strNormalizeDec(PixelI*, Bool);
-Void strDCT2x2dnDec(PixelI *, PixelI *, PixelI *, PixelI *);
 
 /** 4x4 post filter for second stage **/
 Void strPost4x4SecondStage(PixelI *);

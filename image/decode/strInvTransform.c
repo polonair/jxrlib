@@ -98,43 +98,6 @@ Void strNormalizeDec(PixelI* p, Bool bChroma)
     }
 }
 
-/** 2x2 DCT with post-scaling - for use on decoder side **/
-Void strDCT2x2dnDec(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
-{
-    JxrInverseTransformMathApplyScaledDct2x2Down(pa, pb, pc, pd);
-}
-
-/** post filter stuff **/
-/** 2-point post for boundaries **/
-Void strPost2(PixelI * a, PixelI * b)
-{
-    JxrInverseTransformMathApplyPost2(a, b);
-}
-
-Void strPost2_alternate(PixelI * pa, PixelI * pb)
-{
-    JxrInverseTransformMathApplyAlternatePost2(pa, pb);
-}
-
-Void strPost2x2(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
-{
-    JxrInverseTransformMathApplyPost2x2(pa, pb, pc, pd);
-}
-
-Void strPost2x2_alternate(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
-{
-    JxrInverseTransformMathApplyAlternatePost2x2(pa, pb, pc, pd);
-}
-
-/** 4-point post for boundaries **/
-Void strPost4(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
-{
-    JxrInverseTransformMathApplyPost4(pa, pb, pc, pd);
-}
-Void strPost4_alternate(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
-{
-    JxrInverseTransformMathApplyAlternatePost4(pa, pb, pc, pd);
-}
 /*****************************************************************************************
   Input data offsets:
   (15)(14)|(10+64)(11+64) p0 (15)(14)|(74)(75)
