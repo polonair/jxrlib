@@ -22,6 +22,23 @@ Void JxrInverseTransformMathSubtractCornerPrediction(PixelI* target, PixelI pred
     *target -= prediction;
 }
 
+Void JxrInverseTransformMathNormalizeBlock(
+    PixelI* samples,
+    Bool chroma,
+    Int sampleCount,
+    Int sampleStride)
+{
+    Int sampleIndex;
+
+    if (!chroma) {
+        return;
+    }
+
+    for (sampleIndex = 0; sampleIndex < sampleCount; sampleIndex += sampleStride) {
+        samples[sampleIndex] += samples[sampleIndex];
+    }
+}
+
 Bool JxrInverseTransformMathShouldCompensateDc(
     Int directCurrent,
     Int highPassQuantizer,

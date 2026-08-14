@@ -333,7 +333,7 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
 
             strIDCT4x4Stage2(p1);
             if (pSC->m_param.bScaledArith) {
-                strNormalizeDec(p1, (i != 0));
+                JxrInverseTransformMathNormalizeBlock(p1, (i != 0), 256, 16);
             }
         }
 
@@ -846,7 +846,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
 
             strIDCT4x4Stage2(p1);
             if (pSC->m_param.bScaledArith) {
-                strNormalizeDec(p1, (i != 0));
+                JxrInverseTransformMathNormalizeBlock(p1, (i != 0), 256, 16);
             }
         }
 

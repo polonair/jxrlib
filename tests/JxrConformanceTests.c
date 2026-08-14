@@ -2722,6 +2722,18 @@ static int test_inverse_transform_math_vectors(void)
     if (first != 16) return 0;
     JxrInverseTransformMathSubtractCornerPrediction(&first, 9);
     if (first != 7) return 0;
+    {
+        PixelI samples[256];
+        Int sampleIndex;
+
+        for (sampleIndex = 0; sampleIndex < 256; ++sampleIndex) {
+            samples[sampleIndex] = sampleIndex;
+        }
+        JxrInverseTransformMathNormalizeBlock(samples, FALSE, 256, 16);
+        if (samples[0] != 0 || samples[16] != 16 || samples[17] != 17 || samples[240] != 240) return 0;
+        JxrInverseTransformMathNormalizeBlock(samples, TRUE, 256, 16);
+        if (samples[0] != 0 || samples[16] != 32 || samples[17] != 17 || samples[240] != 480) return 0;
+    }
     if (!(!JxrInverseTransformMathShouldCompensateDc(0, 20, FALSE) &&
         JxrInverseTransformMathShouldCompensateDc(0, 21, FALSE) &&
         JxrInverseTransformMathShouldCompensateDc(-20, 21, FALSE) &&
