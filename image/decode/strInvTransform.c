@@ -43,6 +43,7 @@
 #include "JxrInverseTransformPlaneStage1Normal.h"
 #include "JxrInverseTransformPlaneStage1Alternate.h"
 #include "JxrInverseTransformChroma420Plane.h"
+#include "JxrInverseTransformChroma422Plane.h"
 #include "JxrTransformMath.h"
 static const Int JxrInverseTransformStage2P0FirstOffsets[4] = { -96, -32, -80, -16 };
 static const Int JxrInverseTransformStage2P0SecondOffsets[4] = { 96, 32, 112, 48 };
@@ -414,164 +415,9 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
         JxrInverseTransformPlaneContextInitialize(&planeContext,
             pSC->p0MBbuffer, pSC->p1MBbuffer, TRUE, i,
             &postProcessParameters, &highPassParameters);
-        PixelI* const p0 = planeContext.buffers.firstStage;
-        PixelI* const p1 = planeContext.buffers.secondStage;
-
-
-        const Int iHPQP = planeContext.highPassQuantizer;
-
-
-        //========================================
-        // second level inverse transform (422_UV)
-        if ((!bottomORright) && pSC->m_Dparam->cThumbnailScale < 16)
-        {
-            // 1D lossless HT
-            p1[0]  -= ((p1[32] + 1) >> 1);
-            p1[32] += p1[0];
-
-            if (!pSC->m_param.bScaledArith) {
-                JxrTransformMathApplyDct2x2Down(p1 +  0, p1 + 64, p1 + 16, p1 +  80);
-                JxrTransformMathApplyDct2x2Down(p1 + 32, p1 + 96, p1 + 48, p1 + 112);
-            }
-            else {
-                JxrInverseTransformMathApplyScaledDct2x2Down(p1 +  0, p1 + 64, p1 + 16, p1 +  80);
-                JxrInverseTransformMathApplyScaledDct2x2Down(p1 + 32, p1 + 96, p1 + 48, p1 + 112);
-            }
-        }
-        
-        //========================================
-        // second level inverse overlap (422_UV)
-        if (OL_TWO == olOverlap)
-        {
-            if (!bottom)
-            {
-                if (leftORright)
-                {
-                    if (!top)
-                    {
-                        j = (left ? 0 : -64);
-                        JxrInverseTransformMathApplyPost2(p0 + 48 + j, p1 + j);
-                    }
-
-                    j = (left ? 16 : -48);
-                    JxrInverseTransformMathApplyPost2(p1 + j, p1 + j + 16);
-                }
-                else
-                {
-                    if (top)
-                    {
-                        JxrInverseTransformMathApplyPost2(p1 - 64, p1);
-                    }
-                    else
-                    {
-                        JxrInverseTransformMathApplyPost2x2(p0 - 16, p0 + 48, p1 - 64, p1);
-                    }
-
-                    JxrInverseTransformMathApplyPost2x2(p1 - 48, p1 + 16, p1 - 32, p1 + 32);
-                }
-            }
-            else if (!leftORright)
-            {
-                JxrInverseTransformMathApplyPost2(p0 - 16, p0 + 48);
-            }
-        }
-
-        //========================================
-        // first level inverse transform (422_UV)
-        if(tScale >= 4) // bypass first level transform for 4:1 and smaller thumbnail
-            continue;
-
-        if (!top)
-        {
-            for (j = (left ? 48 : -16); j < (right ? 48 : 112); j += 64)
-            {
-                strIDCT4x4Stage1(p0 + j);
-            }
-        }
-
-        if (!bottom)
-        {
-            for (j = (left ? 0 : -64); j < (right ? 0 : 64); j += 64)
-            {
-                strIDCT4x4Stage1(p1 + j + 0);
-                strIDCT4x4Stage1(p1 + j + 16);
-                strIDCT4x4Stage1(p1 + j + 32);
-            }
-        }
-        
-        //========================================
-        // first level inverse overlap (422_UV)
-        if (OL_NONE != olOverlap)
-        {
-            if (!top)
-            {
-                if (leftORright)
-                {
-                    j = (left ? 32 + 10 : -32 + 14);
-
-                    p = p0 + j;
-                    JxrInverseTransformMathApplyPost4(p + 0, p - 2, p + 6, p + 8);
-                    JxrInverseTransformMathApplyPost4(p + 1, p - 1, p + 7, p + 9);
-
-                    p = NULL;
-                }
-
-                for (j = (left ? 0 : -128); j < (right ? -64 : 0); j += 64)
-                {
-                    strPost4x4Stage1(p0 + j + 32, 0, iHPQP, planeContext.isHighPassAbsent);
-                }
-            }
-
-            if (!bottom)
-            {
-                if (leftORright)
-                {
-                    j = (left ? 0 + 10 : -64 + 14);
-
-                    p = p1 + j;
-                    JxrInverseTransformMathApplyPost4(p + 0, p - 2, p + 6, p + 8);
-                    JxrInverseTransformMathApplyPost4(p + 1, p - 1, p + 7, p + 9);
-
-                    p += 16;
-                    JxrInverseTransformMathApplyPost4(p + 0, p - 2, p + 6, p + 8);
-                    JxrInverseTransformMathApplyPost4(p + 1, p - 1, p + 7, p + 9);
-
-                    p = NULL;
-                }
-
-                for (j = (left ? 0 : -128); j < (right ? -64 : 0); j += 64)
-                {
-                    strPost4x4Stage1(p1 + j +  0, 0, iHPQP, planeContext.isHighPassAbsent);
-                    strPost4x4Stage1(p1 + j + 16, 0, iHPQP, planeContext.isHighPassAbsent);
-                }
-            }
-
-            if (topORbottom)
-            {
-                p = (top ? p1 + 5 : p0 + 48 + 13);
-                for (j = (left ? 0 : -128); j < (right ? -64 : 0); j += 64)
-                {
-                    JxrInverseTransformMathApplyPost4(p + j + 0, p + j - 1, p + j + 59, p + j + 60);
-                    JxrInverseTransformMathApplyPost4(p + j + 2, p + j + 1, p + j + 61, p + j + 62);
-                }
-                p = NULL;
-            }
-            else
-            {
-                if (leftORright)
-                {
-                    j = (left ? 0 + 0 : -64 + 4);
-                    JxrInverseTransformMathApplyPost4(p0 + j + 48 + 10 + 0, p0 + j + 48 + 10 - 2, p1 + j + 0, p1 + j + 2);
-                    JxrInverseTransformMathApplyPost4(p0 + j + 48 + 10 + 1, p0 + j + 48 + 10 - 1, p1 + j + 1, p1 + j + 3);
-                }
-
-                for (j = (left ? 0 : -128); j < (right ? -64 : 0); j += 64)
-                {
-                    strPost4x4Stage1Split(p0 + j + 48, p1 + j + 0, 0, iHPQP, planeContext.isHighPassAbsent);
-                }
-            }
-        }
-    }    
+        JxrInverseTransformChroma422PlaneApply(&planeContext, &geometry,
+            pSC->m_param.bScaledArith);
+    }
 
     return ICERR_OK;
 }
