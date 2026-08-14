@@ -38,6 +38,7 @@
 #include "JxrInverseTransformPlanePlan.h"
 #include "JxrInverseTransformPlaneBuffers.h"
 #include "JxrInverseTransformPlaneContext.h"
+#include "JxrInverseTransformPlaneStage2.h"
 #include "JxrTransformMath.h"
 static const Int JxrInverseTransformStage2P0FirstOffsets[4] = { -96, -32, -80, -16 };
 static const Int JxrInverseTransformStage2P0SecondOffsets[4] = { 96, 32, 112, 48 };
@@ -347,10 +348,8 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
             if(postProcessParameters.enabled)
                 updatePostProcInfo(pSC->pPostProcInfo, p1, mbX, i); // update postproc info before IDCT
 
-            strIDCT4x4Stage2(p1);
-            if (pSC->m_param.bScaledArith) {
-                JxrInverseTransformMathNormalizeBlock(p1, (i != 0), 256, 16);
-            }
+            JxrInverseTransformPlaneStage2Apply(p1, (i != 0), pSC->m_param.bScaledArith);
+
         }
 
         //================================
@@ -873,10 +872,8 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
             if(postProcessParameters.enabled)
                 updatePostProcInfo(pSC->pPostProcInfo, p1, hardTileState.previousMacroblockX, i); // update postproc info before IDCT
 
-            strIDCT4x4Stage2(p1);
-            if (pSC->m_param.bScaledArith) {
-                JxrInverseTransformMathNormalizeBlock(p1, (i != 0), 256, 16);
-            }
+            JxrInverseTransformPlaneStage2Apply(p1, (i != 0), pSC->m_param.bScaledArith);
+
         }
 
         //================================

@@ -74,6 +74,7 @@
 #include "JxrInverseTransformPlanePlan.h"
 #include "JxrInverseTransformPlaneBuffers.h"
 #include "JxrInverseTransformPlaneContext.h"
+#include "JxrInverseTransformPlaneStage2.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -2968,6 +2969,30 @@ static int test_inverse_transform_plane_context_vectors(void)
         context.isHighPassAbsent;
 }
 
+static int test_inverse_transform_plane_stage2_vectors(void)
+{
+    PixelI expected[256];
+    PixelI actual[256];
+    size_t index;
+
+    for (index = 0; index < 256; ++index) {
+        expected[index] = (PixelI)(index - 128);
+        actual[index] = expected[index];
+    }
+    strIDCT4x4Stage2(expected);
+    JxrInverseTransformMathNormalizeBlock(expected, TRUE, 256, 16);
+    JxrInverseTransformPlaneStage2Apply(actual, TRUE, TRUE);
+    if (memcmp(expected, actual, sizeof(expected)) != 0) return 0;
+
+    for (index = 0; index < 256; ++index) {
+        expected[index] = (PixelI)(index - 128);
+        actual[index] = expected[index];
+    }
+    strIDCT4x4Stage2(expected);
+    JxrInverseTransformPlaneStage2Apply(actual, FALSE, FALSE);
+    return memcmp(expected, actual, sizeof(expected)) == 0;
+}
+
 static int test_inverse_transform_math_vectors(void)
 {
     PixelI first, second;
@@ -3659,6 +3684,7 @@ int main(int argc, char** argv)
         { "inverse_transform_plane_plan_vectors", test_inverse_transform_plane_plan_vectors },
         { "inverse_transform_plane_buffers_vectors", test_inverse_transform_plane_buffers_vectors },
         { "inverse_transform_plane_context_vectors", test_inverse_transform_plane_context_vectors },
+        { "inverse_transform_plane_stage2_vectors", test_inverse_transform_plane_stage2_vectors },
         { "inverse_transform_math_vectors", test_inverse_transform_math_vectors },
         { "transform_math_dct2x2_vectors", test_transform_math_dct2x2_vectors },
         { "forward_transform_math_vectors", test_forward_transform_math_vectors },
