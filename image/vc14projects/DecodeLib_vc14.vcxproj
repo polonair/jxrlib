@@ -231,6 +231,7 @@
     <ClCompile Include="..\decode\JxrInverseTransformChroma420Plane.c" />
     <ClCompile Include="..\decode\JxrInverseTransformChroma422Plane.c" />
     <ClCompile Include="..\decode\JxrInverseTransformChroma420AlternatePlane.c" />
+    <ClCompile Include="..\decode\JxrInverseTransformChroma422AlternatePlane.c" />
     <ClCompile Include="..\decode\JxrInverseColorTransform.c" />
     <ClCompile Include="..\decode\JxrSampleClipping.c" />
     <ClCompile Include="..\decode\JxrFloatSampleConversion.c" />

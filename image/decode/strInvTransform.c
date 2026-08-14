@@ -45,6 +45,7 @@
 #include "JxrInverseTransformChroma420Plane.h"
 #include "JxrInverseTransformChroma422Plane.h"
 #include "JxrInverseTransformChroma420AlternatePlane.h"
+#include "JxrInverseTransformChroma422AlternatePlane.h"
 #include "JxrTransformMath.h"
 static const Int JxrInverseTransformStage2P0FirstOffsets[4] = { -96, -32, -80, -16 };
 static const Int JxrInverseTransformStage2P0SecondOffsets[4] = { 96, 32, 112, 48 };
@@ -430,7 +431,6 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
     JxrHardTileBoundaryState hardTileState;
     JxrInverseTransformBoundaryContext boundaryContext;
     // const BITDEPTH_BITS bdBitDepth = pSC->WMII.bdBitDepth;
-    PixelI * p = NULL;// * pt = NULL;
     size_t i;
     JxrInverseTransformMacroblockGeometryInitialize(&geometry,
         pSC->WMISCP.olOverlap, pSC->m_param.cfColorFormat,
@@ -449,7 +449,6 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
     JxrInverseTransformPlanePlanInitialize(&planePlan,
         cfColorFormat, iChannels,
         tScale);
-    Int j = 0;
 
     JxrInversePostProcessParameters postProcessParameters;
     // ERR_CODE result = ICERR_OK;
@@ -551,236 +550,10 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
         JxrInverseTransformPlaneContextInitialize(&planeContext,
             pSC->p0MBbuffer, pSC->p1MBbuffer, TRUE, i,
             &postProcessParameters, NULL);
-        PixelI* const p0 = planeContext.buffers.firstStage;
-        PixelI* const p1 = planeContext.buffers.secondStage;
-
-
-        //========================================
-        // second level inverse transform (422_UV)
-        if ((!bottomORright) && pSC->m_Dparam->cThumbnailScale < 16)
-        {
-            // 1D lossless HT
-            p1[0]  -= ((p1[32] + 1) >> 1);
-            p1[32] += p1[0];
-
-            if (!pSC->m_param.bScaledArith) {
-                JxrTransformMathApplyDct2x2Down(p1 +  0, p1 + 64, p1 + 16, p1 +  80);
-                JxrTransformMathApplyDct2x2Down(p1 + 32, p1 + 96, p1 + 48, p1 + 112);
-            }
-            else {
-                JxrInverseTransformMathApplyScaledDct2x2Down(p1 +  0, p1 + 64, p1 + 16, p1 +  80);
-                JxrInverseTransformMathApplyScaledDct2x2Down(p1 + 32, p1 + 96, p1 + 48, p1 + 112);
-            }
-        }
-        
-        //========================================
-        // second level inverse overlap (422_UV)
-        if (OL_TWO == olOverlap)
-        {
-            if ((boundaryContext.isLeftAdjacentToVerticalBoundary) && (boundaryContext.hasTopBoundary))
-                JxrInverseTransformMathSubtractCornerPredictionAt(p1, -128, p1[-64]);
-
-            if ((boundaryContext.isRightAdjacentToVerticalBoundary) && (boundaryContext.hasTopBoundary))
-                pSC->iPredBefore[i][0] = p1[0];
-            if ((boundaryContext.hasRightBoundary) && (boundaryContext.hasTopBoundary))
-                JxrInverseTransformMathSubtractCornerPredictionAt(p1, -64, pSC->iPredBefore[i][0]);
-
-            if ((boundaryContext.isLeftAdjacentToVerticalBoundary) && (boundaryContext.hasBottomBoundary))
-                JxrInverseTransformMathSubtractCornerPredictionAt(p0, -80, p0[-16]);
-
-            if ((boundaryContext.isRightAdjacentToVerticalBoundary) && (boundaryContext.hasBottomBoundary))
-                pSC->iPredBefore[i][1] = p0[48];
-            if ((boundaryContext.hasRightBoundary) && (boundaryContext.hasBottomBoundary))
-                JxrInverseTransformMathSubtractCornerPredictionAt(p0, -16, pSC->iPredBefore[i][1]);
-
-            if (!bottom)
-            {
-                if (boundaryContext.hasLeftOrRightBoundary)
-                {
-                    if (!top && !boundaryContext.isHorizontalTileBoundary)
-                    {
-                        if (boundaryContext.hasLeftBoundary)
-                            JxrInverseTransformMathApplyAlternatePost2(p0 + 48 + 0, p1 + 0);
-
-                        if (boundaryContext.hasRightBoundary)
-                            JxrInverseTransformMathApplyAlternatePost2(p0 + 48 + -64, p1 + -64);
-                    }
-
-                    if (boundaryContext.hasLeftBoundary)
-                        JxrInverseTransformMathApplyAlternatePost2(p1 + 16, p1 + 16 + 16);
-
-                    if (boundaryContext.hasRightBoundary)
-                        JxrInverseTransformMathApplyAlternatePost2(p1 + -48, p1 + -48 + 16);
-                }
-
-                if (!boundaryContext.hasLeftOrRightBoundary)
-                {
-                    if (boundaryContext.hasTopBoundary)
-                        JxrInverseTransformMathApplyAlternatePost2(p1 - 64, p1);
-                    else
-                        JxrInverseTransformMathApplyAlternatePost2x2(p0 - 16, p0 + 48, p1 - 64, p1);
-
-                    JxrInverseTransformMathApplyAlternatePost2x2(p1 - 48, p1 + 16, p1 - 32, p1 + 32);
-                }
-            }
-            
-            if ((boundaryContext.hasBottomBoundary) && (!boundaryContext.hasLeftOrRightBoundary))
-                JxrInverseTransformMathApplyAlternatePost2(p0 - 16, p0 + 48);
-
-            if ((boundaryContext.isLeftAdjacentToVerticalBoundary) && (boundaryContext.hasTopBoundary))
-                JxrInverseTransformMathAddCornerPredictionAt(p1, -128, p1[-64]);
-
-            if ((boundaryContext.isRightAdjacentToVerticalBoundary) && (boundaryContext.hasTopBoundary))
-                pSC->iPredAfter[i][0] = p1[0];
-            if ((boundaryContext.hasRightBoundary) && (boundaryContext.hasTopBoundary))
-                JxrInverseTransformMathAddCornerPredictionAt(p1, -64, pSC->iPredAfter[i][0]);
-
-            if ((boundaryContext.isLeftAdjacentToVerticalBoundary) && (boundaryContext.hasBottomBoundary))
-                JxrInverseTransformMathAddCornerPredictionAt(p0, -80, p0[-16]);
-
-            if ((boundaryContext.isRightAdjacentToVerticalBoundary) && (boundaryContext.hasBottomBoundary))
-                pSC->iPredAfter[i][1] = p0[48];
-            if ((boundaryContext.hasRightBoundary) && (boundaryContext.hasBottomBoundary))
-                JxrInverseTransformMathAddCornerPredictionAt(p0, -16, pSC->iPredAfter[i][1]);
-        }
-
-        //========================================
-        // first level inverse transform (422_UV)
-        if(tScale >= 4) // bypass first level transform for 4:1 and smaller thumbnail
-            continue;
-
-        if (!top)
-        {
-            // Need to delay processing of left column until leftAdjacentColumn = 1 for corner overlap operators
-            // Since 422 has no vertical downsampling, no top MB delay of processing is necessary
-            for (j = (left ? 112 : ((boundaryContext.isLeftAdjacentToVerticalBoundary) ? -80 : -16)); j < ((boundaryContext.hasRightBoundary) ? 48 : 112); j += 64)
-            {
-                strIDCT4x4Stage1(p0 + j);
-            }
-        }
-
-        if (!bottom)
-        {
-            // Need to delay processing of left column until leftAdjacentColumn = 1 for corner overlap operators
-            // Since 422 has no vertical downsampling, no top MB delay of processing is necessary
-            for (j = (left ? 64 : ((boundaryContext.isLeftAdjacentToVerticalBoundary) ? -128 : -64)); j < ((boundaryContext.hasRightBoundary) ? 0 : 64); j += 64)
-            {
-                strIDCT4x4Stage1(p1 + j + 0);
-                strIDCT4x4Stage1(p1 + j + 16);
-                strIDCT4x4Stage1(p1 + j + 32);
-            }
-        }
-        
-        //========================================
-        // first level inverse overlap (422_UV)
-        if (OL_NONE != olOverlap)
-        {
-            /* Corner operations */
-            if ((boundaryContext.hasTopBoundary) && (boundaryContext.isLeftAdjacentToVerticalBoundary))
-                JxrInverseTransformMathApplyAlternatePost4(p1 - 128 + 0, p1 - 128 + 1, p1 - 128 + 2, p1 - 128 + 3);
-            if ((boundaryContext.hasTopBoundary) && (boundaryContext.hasRightBoundary))
-                JxrInverseTransformMathApplyAlternatePost4(p1 - 59, p1 - 60, p1 - 57, p1 - 58);
-            if ((boundaryContext.hasBottomBoundary) && (boundaryContext.isLeftAdjacentToVerticalBoundary))
-                JxrInverseTransformMathApplyAlternatePost4(p0 - 128 + 48 + 10, p0 - 128 + 48 + 11, p0 - 128 + 48 + 8, p0 - 128 + 48 + 9);
-            if ((boundaryContext.hasBottomBoundary) && (boundaryContext.hasRightBoundary))
-                JxrInverseTransformMathApplyAlternatePost4(p0 - 1, p0 - 2, p0 - 3, p0 - 4);
-            if (!top)
-            {
-                // Need to delay processing of left column until leftAdjacentColumn = 1 for corner overlap operators
-                if (boundaryContext.isLeftAdjacentToVerticalBoundary) {
-                    p = p0 + 32 + 10 - 128;
-                    JxrInverseTransformMathApplyAlternatePost4(p + 0, p - 2, p + 6, p + 8);
-                    JxrInverseTransformMathApplyAlternatePost4(p + 1, p - 1, p + 7, p + 9);
-                    p = NULL;
-                }
-
-                if (boundaryContext.hasRightBoundary) {
-                    p = p0 + -32 + 14;
-                    JxrInverseTransformMathApplyAlternatePost4(p + 0, p - 2, p + 6, p + 8);
-                    JxrInverseTransformMathApplyAlternatePost4(p + 1, p - 1, p + 7, p + 9);
-                    p = NULL;
-                }
-
-                for (j = (left ? 0 : -128); j < ((boundaryContext.hasRightBoundary) ? -64 : 0); j += 64)
-                    strPost4x4Stage1_alternate(p0 + j + 32, 0);
-            }
-
-            if (!bottom)
-            {
-                // Need to delay processing of left column until leftAdjacentColumn = 1 for corner overlap operators
-                if (boundaryContext.isLeftAdjacentToVerticalBoundary)
-                {
-                    p = p1 + 0 + 10 - 128;
-                    JxrInverseTransformMathApplyAlternatePost4(p + 0, p - 2, p + 6, p + 8);
-                    JxrInverseTransformMathApplyAlternatePost4(p + 1, p - 1, p + 7, p + 9);
-                    p += 16;
-                    JxrInverseTransformMathApplyAlternatePost4(p + 0, p - 2, p + 6, p + 8);
-                    JxrInverseTransformMathApplyAlternatePost4(p + 1, p - 1, p + 7, p + 9);
-                    p = NULL;
-                }
-
-                if (boundaryContext.hasRightBoundary)
-                {
-                    p = p1 + -64 + 14;
-                    JxrInverseTransformMathApplyAlternatePost4(p + 0, p - 2, p + 6, p + 8);
-                    JxrInverseTransformMathApplyAlternatePost4(p + 1, p - 1, p + 7, p + 9);
-                    p += 16;
-                    JxrInverseTransformMathApplyAlternatePost4(p + 0, p - 2, p + 6, p + 8);
-                    JxrInverseTransformMathApplyAlternatePost4(p + 1, p - 1, p + 7, p + 9);
-                    p = NULL;
-                }
-
-                for (j = (left ? 0 : -128); j < ((boundaryContext.hasRightBoundary) ? -64 : 0); j += 64)
-                {
-                    strPost4x4Stage1_alternate(p1 + j +  0, 0);
-                    strPost4x4Stage1_alternate(p1 + j + 16, 0);
-                }
-            }
-
-            if (boundaryContext.hasTopOrBottomBoundary)
-            {
-                if (boundaryContext.hasTopBoundary) {
-                    p = p1 + 5;
-                    for (j = (left ? 0 : -128); j < ((boundaryContext.hasRightBoundary) ? -64 : 0); j += 64)
-                    {
-                        JxrInverseTransformMathApplyAlternatePost4(p + j + 0, p + j - 1, p + j + 59, p + j + 60);
-                        JxrInverseTransformMathApplyAlternatePost4(p + j + 2, p + j + 1, p + j + 61, p + j + 62);
-                    }
-                    p = NULL;
-                }
-
-                if (boundaryContext.hasBottomBoundary) {
-                    p = p0 + 48 + 13;
-                    for (j = (left ? 0 : -128); j < ((boundaryContext.hasRightBoundary) ? -64 : 0); j += 64)
-                    {
-                        JxrInverseTransformMathApplyAlternatePost4(p + j + 0, p + j - 1, p + j + 59, p + j + 60);
-                        JxrInverseTransformMathApplyAlternatePost4(p + j + 2, p + j + 1, p + j + 61, p + j + 62);
-                    }
-                    p = NULL;
-                }
-            }
-            else
-            {
-                // Need to delay processing of left column until leftAdjacentColumn = 1 for corner overlap operators
-                if (boundaryContext.isLeftAdjacentToVerticalBoundary)
-                {
-                    j = 0 + 0 - 128;
-                    JxrInverseTransformMathApplyAlternatePost4(p0 + j + 48 + 10 + 0, p0 + j + 48 + 10 - 2, p1 + j + 0, p1 + j + 2);
-                    JxrInverseTransformMathApplyAlternatePost4(p0 + j + 48 + 10 + 1, p0 + j + 48 + 10 - 1, p1 + j + 1, p1 + j + 3);
-                }
-
-                if (boundaryContext.hasRightBoundary)
-                {
-                    j = -64 + 4;
-                    JxrInverseTransformMathApplyAlternatePost4(p0 + j + 48 + 10 + 0, p0 + j + 48 + 10 - 2, p1 + j + 0, p1 + j + 2);
-                    JxrInverseTransformMathApplyAlternatePost4(p0 + j + 48 + 10 + 1, p0 + j + 48 + 10 - 1, p1 + j + 1, p1 + j + 3);
-                }
-
-                for (j = (left ? 0 : -128); j < ((boundaryContext.hasRightBoundary) ? -64 : 0); j += 64)
-                    strPost4x4Stage1Split_alternate(p0 + j + 48, p1 + j + 0, 0);
-            }
-        }
-    }    
+        JxrInverseTransformChroma422AlternatePlaneApply(&planeContext, &geometry,
+            &boundaryContext, pSC->m_param.bScaledArith,
+            pSC->iPredBefore[i], pSC->iPredAfter[i]);
+    }
 
     return ICERR_OK;
 }
