@@ -62,5 +62,10 @@ Void JxrInverseTransformMathApplyOdd(
     PixelI* second,
     PixelI* third,
     PixelI* fourth);
+Void JxrInverseTransformMathApplyScaledDct2x2Down(
+    PixelI* first,
+    PixelI* second,
+    PixelI* third,
+    PixelI* fourth);
 
 #endif

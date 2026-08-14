@@ -2779,7 +2779,11 @@ static int test_inverse_transform_math_vectors(void)
 
     topLeft = 10; topRight = 20; bottomLeft = 30; bottomRight = 40;
     JxrInverseTransformMathApplyOdd(&topLeft, &topRight, &bottomLeft, &bottomRight);
-    return topLeft == -6 && topRight == 38 && bottomLeft == -6 && bottomRight == -37;
+    if (topLeft != -6 || topRight != 38 || bottomLeft != -6 || bottomRight != -37) return 0;
+
+    topLeft = 10; topRight = 20; bottomLeft = 30; bottomRight = 40;
+    JxrInverseTransformMathApplyScaledDct2x2Down(&topLeft, &topRight, &bottomLeft, &bottomRight);
+    return topLeft == 100 && topRight == -40 && bottomLeft == -20 && bottomRight == 0;
 }
 
 static int test_transform_math_dct2x2_vectors(void)

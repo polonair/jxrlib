@@ -1,4 +1,5 @@
 #include "JxrInverseTransformMath.h"
+#include "JxrTransformMath.h"
 
 Void JxrInverseTransformMathRotateHalf(PixelI* first, PixelI* second)
 {
@@ -309,4 +310,17 @@ Void JxrInverseTransformMathApplyOdd(
     *second = secondValue;
     *third = thirdValue;
     *fourth = fourthValue;
+}
+
+Void JxrInverseTransformMathApplyScaledDct2x2Down(
+    PixelI* first,
+    PixelI* second,
+    PixelI* third,
+    PixelI* fourth)
+{
+    JxrTransformMathApplyDct2x2Down(first, second, third, fourth);
+    *first *= 2;
+    *second *= 2;
+    *third *= 2;
+    *fourth *= 2;
 }

@@ -106,26 +106,8 @@ Void strNormalizeDec(PixelI* p, Bool bChroma)
 /** 2x2 DCT with post-scaling - for use on decoder side **/
 Void strDCT2x2dnDec(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
 {
-    PixelI a, b, c, d, C, t;
-    a = *pa;
-    b = *pb;
-    C = *pc;
-    d = *pd;
-  
-    a += d;
-    b -= C;
-    t = ((a - b) >> 1);
-    c = t - d;
-    d = t - C;
-    a -= d;
-    b += c;
-
-    *pa = a * 2;
-    *pb = b * 2;
-    *pc = c * 2;
-    *pd = d * 2;
+    JxrInverseTransformMathApplyScaledDct2x2Down(pa, pb, pc, pd);
 }
-
 
 /** post filter stuff **/
 /** 2-point post for boundaries **/
