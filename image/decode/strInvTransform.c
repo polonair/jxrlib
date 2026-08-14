@@ -150,57 +150,50 @@ Void strPost4_alternate(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
 *****************************************************************************************/
 Void strPost4x4Stage1Split(PixelI *p0, PixelI *p1, Int iOffset, Int iHPQP, Bool bHPAbsent)
 {
-    int iDCL1, iDCL2, iDCL3, iDCL0;
-    int iTmp1, iTmp2, iTmp3, iTmp0;
-
+    Int column;
+    Int directCurrent[4];
+    Int temporaryCurrent;
     PixelI *p2 = p0 + 72 - iOffset;
     PixelI *p3 = p1 + 64 - iOffset;
+
     p0 += 12;
     p1 += 4;
 
-    /** buttefly **/
-    strDCT2x2dn(p0 + 0, p2 + 0, p1 + 0, p3 + 0);
-    strDCT2x2dn(p0 + 1, p2 + 1, p1 + 1, p3 + 1);
-    strDCT2x2dn(p0 + 2, p2 + 2, p1 + 2, p3 + 2);
-    strDCT2x2dn(p0 + 3, p2 + 3, p1 + 3, p3 + 3);
+    /* Apply the 2x2 DCT to each of the four aligned columns. */
+    for (column = 0; column < 4; ++column) {
+        strDCT2x2dn(p0 + column, p2 + column, p1 + column, p3 + column);
+    }
 
-    /** bottom right corner: -pi/8 rotation => -pi/8 rotation **/
+    /* Transform the bottom-right corner as one 4-point operation. */
     invOddOddPost(p3 + 0, p3 + 1, p3 + 2, p3 + 3);
-    
-    /** anti diagonal corners: rotation by -pi/8 **/
+
+    /* Rotate the two anti-diagonal corners. */
     JxrInverseTransformMathRotateHalf(&p1[2], &p1[3]);
     JxrInverseTransformMathRotateHalf(&p1[0], &p1[1]);
     JxrInverseTransformMathRotateHalf(&p2[1], &p2[3]);
     JxrInverseTransformMathRotateHalf(&p2[0], &p2[2]);
 
-    /** butterfly **/
-    strHSTdec1(p0 + 0, p3 + 0);
-    strHSTdec1(p0 + 1, p3 + 1);
-    strHSTdec1(p0 + 2, p3 + 2);
-    strHSTdec1(p0 + 3, p3 + 3);
-    strHSTdec(p0 + 0, p2 + 0, p1 + 0, p3 + 0);
-    strHSTdec(p0 + 1, p2 + 1, p1 + 1, p3 + 1);
-    strHSTdec(p0 + 2, p2 + 2, p1 + 2, p3 + 2);
-    strHSTdec(p0 + 3, p2 + 3, p1 + 3, p3 + 3);
+    /* Complete the first and second Hadamard+scale passes for each column. */
+    for (column = 0; column < 4; ++column) {
+        strHSTdec1(p0 + column, p3 + column);
+    }
+    for (column = 0; column < 4; ++column) {
+        strHSTdec(p0 + column, p2 + column, p1 + column, p3 + column);
+    }
 
-    iTmp0 = (*(p0 +0) + *(p1 +0) + *(p2 +0) + *(p3 +0))>>1;
-    iTmp1 = (*(p0 +1) + *(p1 +1) + *(p2 +1) + *(p3 +1))>>1;
-    iTmp2 = (*(p0 +2) + *(p1 +2) + *(p2 +2) + *(p3 +2))>>1;
-    iTmp3 = (*(p0 +3) + *(p1 +3) + *(p2 +3) + *(p3 +3))>>1;
-    iDCL0 = (iTmp0 * 595 + 65536)>>17; //Approximating 27/5947
-    iDCL1 = (iTmp1 * 595 + 65536)>>17; 
-    iDCL2 = (iTmp2 * 595 + 65536)>>17; 
-    iDCL3 = (iTmp3 * 595 + 65536)>>17; 
-    iDCL0 = JxrInverseTransformMathApplyConditionalDcCompensation(
-        p0 + 0, p2 + 0, p1 + 0, p3 + 0, iDCL0, iHPQP, bHPAbsent);
-    iDCL1 = JxrInverseTransformMathApplyConditionalDcCompensation(
-        p0 + 1, p2 + 1, p1 + 1, p3 + 1, iDCL1, iHPQP, bHPAbsent);
-    iDCL2 = JxrInverseTransformMathApplyConditionalDcCompensation(
-        p0 + 2, p2 + 2, p1 + 2, p3 + 2, iDCL2, iHPQP, bHPAbsent);
-    iDCL3 = JxrInverseTransformMathApplyConditionalDcCompensation(
-        p0 + 3, p2 + 3, p1 + 3, p3 + 3, iDCL3, iHPQP, bHPAbsent);
+    /* Compute all direct-current values before any compensation changes samples. */
+    for (column = 0; column < 4; ++column) {
+        temporaryCurrent = (p0[column] + p1[column] + p2[column] + p3[column]) >> 1;
+        directCurrent[column] = (temporaryCurrent * 595 + 65536) >> 17;
+    }
+
+    /* Apply the optional direct-current compensation to each column. */
+    for (column = 0; column < 4; ++column) {
+        JxrInverseTransformMathApplyConditionalDcCompensation(
+            p0 + column, p2 + column, p1 + column, p3 + column,
+            directCurrent[column], iHPQP, bHPAbsent);
+    }
 }
-
 Void strPost4x4Stage1(PixelI* p, Int iOffset, Int iHPQP, Bool bHPAbsent)
 {
     strPost4x4Stage1Split(p, p + 16, iOffset, iHPQP, bHPAbsent);
