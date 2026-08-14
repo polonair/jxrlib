@@ -254,33 +254,38 @@ Void strPost4x4Stage1_alternate(PixelI* p, Int iOffset)
 *****************************************************************************************/
 Void strPost4x4Stage2Split(PixelI* p0, PixelI* p1)
 {
-    /** buttefly **/
-    strDCT2x2dn(p0 - 96, p0 +  96, p1 - 112, p1 + 80);
-    strDCT2x2dn(p0 - 32, p0 +  32, p1 -  48, p1 + 16);
-    strDCT2x2dn(p0 - 80, p0 + 112, p1 - 128, p1 + 64);
-    strDCT2x2dn(p0 - 16, p0 +  48, p1 -  64, p1 +  0);
+    static const Int p0FirstOffsets[4] = { -96, -32, -80, -16 };
+    static const Int p0SecondOffsets[4] = { 96, 32, 112, 48 };
+    static const Int p1FirstOffsets[4] = { -112, -48, -128, -64 };
+    static const Int p1SecondOffsets[4] = { 80, 16, 64, 0 };
+    Int column;
 
-    /** bottom right corner: -pi/8 rotation => -pi/8 rotation **/
+    /* Apply the 2x2 DCT to each logical column in its legacy scan order. */
+    for (column = 0; column < 4; ++column) {
+        strDCT2x2dn(
+            p0 + p0FirstOffsets[column], p0 + p0SecondOffsets[column],
+            p1 + p1FirstOffsets[column], p1 + p1SecondOffsets[column]);
+    }
+
+    /* Transform the bottom-right corner as one 4-point operation. */
     invOddOddPost(p1 + 0, p1 + 64, p1 + 16, p1 + 80);
-    
-    /** anti diagonal corners: rotation by -pi/8 **/
-    JxrInverseTransformMathRotateHalf(&p0[ 48], &p0[  32]);
-    JxrInverseTransformMathRotateHalf(&p0[112], &p0[  96]);
+
+    /* Rotate the two anti-diagonal corners. */
+    JxrInverseTransformMathRotateHalf(&p0[48], &p0[32]);
+    JxrInverseTransformMathRotateHalf(&p0[112], &p0[96]);
     JxrInverseTransformMathRotateHalf(&p1[-64], &p1[-128]);
     JxrInverseTransformMathRotateHalf(&p1[-48], &p1[-112]);
-    
-    /** butterfly **/
-    strHSTdec1(p0 - 96, p1 + 80);
-    strHSTdec1(p0 - 32, p1 + 16);
-    strHSTdec1(p0 - 80, p1 + 64);
-    strHSTdec1(p0 - 16, p1 +  0);
 
-    strHSTdec(p0 - 96, p1 - 112, p0 +  96, p1 + 80);
-    strHSTdec(p0 - 32, p1 -  48, p0 +  32, p1 + 16);
-    strHSTdec(p0 - 80, p1 - 128, p0 + 112, p1 + 64);
-    strHSTdec(p0 - 16, p1 -  64, p0 +  48, p1 +  0);
+    /* Complete the first and second Hadamard+scale passes in the same order. */
+    for (column = 0; column < 4; ++column) {
+        strHSTdec1(p0 + p0FirstOffsets[column], p1 + p1SecondOffsets[column]);
+    }
+    for (column = 0; column < 4; ++column) {
+        strHSTdec(
+            p0 + p0FirstOffsets[column], p1 + p1FirstOffsets[column],
+            p0 + p0SecondOffsets[column], p1 + p1SecondOffsets[column]);
+    }
 }
-
 Void strPost4x4Stage2Split_alternate(PixelI* p0, PixelI* p1)
 {
     /** buttefly **/
