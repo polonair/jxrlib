@@ -324,3 +324,36 @@ Void JxrInverseTransformMathApplyScaledDct2x2Down(
     *third *= 2;
     *fourth *= 2;
 }
+
+Void JxrInverseTransformMathApplyPost2(
+    PixelI* first,
+    PixelI* second)
+{
+    PixelI firstValue = *first;
+    PixelI secondValue = *second;
+
+    secondValue += (firstValue + 4) >> 3;
+    firstValue += (secondValue + 2) >> 2;
+    secondValue += (firstValue + 4) >> 3;
+
+    *first = firstValue;
+    *second = secondValue;
+}
+
+Void JxrInverseTransformMathApplyAlternatePost2(
+    PixelI* first,
+    PixelI* second)
+{
+    PixelI firstValue = *first;
+    PixelI secondValue = *second;
+
+    secondValue += (firstValue + 2) >> 2;
+    firstValue += (secondValue + 1) >> 1;
+    firstValue += secondValue >> 5;
+    firstValue += secondValue >> 9;
+    firstValue += secondValue >> 13;
+    secondValue += (firstValue + 2) >> 2;
+
+    *first = firstValue;
+    *second = secondValue;
+}

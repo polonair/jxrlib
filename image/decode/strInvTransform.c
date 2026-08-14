@@ -113,28 +113,12 @@ Void strDCT2x2dnDec(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
 /** 2-point post for boundaries **/
 Void strPost2(PixelI * a, PixelI * b)
 {
-    *b += ((*a + 4) >> 3);
-    *a += ((*b + 2) >> 2);
-    *b += ((*a + 4) >> 3);
+    JxrInverseTransformMathApplyPost2(a, b);
 }
 
 Void strPost2_alternate(PixelI * pa, PixelI * pb)
 {
-    PixelI a, b;
-    a = *pa;
-    b = *pb;
-
-    /** rotate **/
-    b += ((a + 2) >> 2);
-    a += ((b + 1) >> 1);
-    a += (b >> 5);
-    a += (b >> 9);
-    a += (b >> 13);
-
-    b += ((a + 2) >> 2);
-
-    *pa = a;
-    *pb = b;
+    JxrInverseTransformMathApplyAlternatePost2(pa, pb);
 }
 
 Void strPost2x2(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
