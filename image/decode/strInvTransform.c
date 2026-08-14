@@ -517,7 +517,7 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
                 JxrTransformMathApplyDct2x2Down(p1, p1 + 32, p1 + 16, p1 + 48);
             }
             else {
-                strDCT2x2dnDec(p1, p1 + 32, p1 + 16, p1 + 48);
+                JxrInverseTransformMathApplyScaledDct2x2Down(p1, p1 + 32, p1 + 16, p1 + 48);
             }
         }
         
@@ -528,7 +528,7 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
             if (leftORright && !topORbottom)
             {
                 j = (left ? 0 : -32);
-                strPost2(p0 + j + 16, p1 + j);
+                JxrInverseTransformMathApplyPost2(p0 + j + 16, p1 + j);
             }
 
             if (!leftORright)
@@ -536,11 +536,11 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
                 if (topORbottom)
                 {
                     p = (top ? p1 : p0 + 16);
-                    strPost2(p - 32, p);
+                    JxrInverseTransformMathApplyPost2(p - 32, p);
                     p = NULL;
                 }
                 else{
-                    strPost2x2(p0 - 16, p0 + 16, p1 - 32, p1);
+                    JxrInverseTransformMathApplyPost2x2(p0 - 16, p0 + 16, p1 - 32, p1);
                 }
             }
         }
@@ -656,8 +656,8 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
                 JxrTransformMathApplyDct2x2Down(p1 + 32, p1 + 96, p1 + 48, p1 + 112);
             }
             else {
-                strDCT2x2dnDec(p1 +  0, p1 + 64, p1 + 16, p1 +  80);
-                strDCT2x2dnDec(p1 + 32, p1 + 96, p1 + 48, p1 + 112);
+                JxrInverseTransformMathApplyScaledDct2x2Down(p1 +  0, p1 + 64, p1 + 16, p1 +  80);
+                JxrInverseTransformMathApplyScaledDct2x2Down(p1 + 32, p1 + 96, p1 + 48, p1 + 112);
             }
         }
         
@@ -672,29 +672,29 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
                     if (!top)
                     {
                         j = (left ? 0 : -64);
-                        strPost2(p0 + 48 + j, p1 + j);
+                        JxrInverseTransformMathApplyPost2(p0 + 48 + j, p1 + j);
                     }
 
                     j = (left ? 16 : -48);
-                    strPost2(p1 + j, p1 + j + 16);
+                    JxrInverseTransformMathApplyPost2(p1 + j, p1 + j + 16);
                 }
                 else
                 {
                     if (top)
                     {
-                        strPost2(p1 - 64, p1);
+                        JxrInverseTransformMathApplyPost2(p1 - 64, p1);
                     }
                     else
                     {
-                        strPost2x2(p0 - 16, p0 + 48, p1 - 64, p1);
+                        JxrInverseTransformMathApplyPost2x2(p0 - 16, p0 + 48, p1 - 64, p1);
                     }
 
-                    strPost2x2(p1 - 48, p1 + 16, p1 - 32, p1 + 32);
+                    JxrInverseTransformMathApplyPost2x2(p1 - 48, p1 + 16, p1 - 32, p1 + 32);
                 }
             }
             else if (!leftORright)
             {
-                strPost2(p0 - 16, p0 + 48);
+                JxrInverseTransformMathApplyPost2(p0 - 16, p0 + 48);
             }
         }
 
@@ -1096,7 +1096,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                 JxrTransformMathApplyDct2x2Down(p1, p1 + 32, p1 + 16, p1 + 48);
             }
             else {
-                strDCT2x2dnDec(p1, p1 + 32, p1 + 16, p1 + 48);
+                JxrInverseTransformMathApplyScaledDct2x2Down(p1, p1 + 32, p1 + 16, p1 + 48);
             }
         }
         
@@ -1120,9 +1120,9 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
             if ((leftORright || pSC->bVertTileBoundary) && !topORbottom && !pSC->bHoriTileBoundary)
             {
                 if (left || pSC->bVertTileBoundary)
-                    strPost2_alternate(p0 +   0 + 16, p1 +   0);
+                    JxrInverseTransformMathApplyAlternatePost2(p0 +   0 + 16, p1 +   0);
                 if (right || pSC->bVertTileBoundary)
-                    strPost2_alternate(p0 + -32 + 16, p1 + -32);
+                    JxrInverseTransformMathApplyAlternatePost2(p0 + -32 + 16, p1 + -32);
             }
 
             if (!leftORright)
@@ -1130,12 +1130,12 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                 if ((topORbottom || pSC->bHoriTileBoundary) && !pSC->bVertTileBoundary)
                 {
                     if (top || pSC->bHoriTileBoundary)
-                        strPost2_alternate(p1 - 32, p1);
+                        JxrInverseTransformMathApplyAlternatePost2(p1 - 32, p1);
                     if (bottom || pSC->bHoriTileBoundary)
-                        strPost2_alternate(p0 + 16 - 32, p0 + 16);
+                        JxrInverseTransformMathApplyAlternatePost2(p0 + 16 - 32, p0 + 16);
                 }
                 else if (!topORbottom && !pSC->bHoriTileBoundary && !pSC->bVertTileBoundary) {
-                    strPost2x2_alternate(p0 - 16, p0 + 16, p1 - 32, p1);
+                    JxrInverseTransformMathApplyAlternatePost2x2(p0 - 16, p0 + 16, p1 - 32, p1);
                 }
             }
             if ((leftAdjacentColumn || pSC->bOneMBRightVertTB) && (top || pSC->bHoriTileBoundary))
@@ -1291,8 +1291,8 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                 JxrTransformMathApplyDct2x2Down(p1 + 32, p1 + 96, p1 + 48, p1 + 112);
             }
             else {
-                strDCT2x2dnDec(p1 +  0, p1 + 64, p1 + 16, p1 +  80);
-                strDCT2x2dnDec(p1 + 32, p1 + 96, p1 + 48, p1 + 112);
+                JxrInverseTransformMathApplyScaledDct2x2Down(p1 +  0, p1 + 64, p1 + 16, p1 +  80);
+                JxrInverseTransformMathApplyScaledDct2x2Down(p1 + 32, p1 + 96, p1 + 48, p1 + 112);
             }
         }
         
@@ -1323,32 +1323,32 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                     if (!top && !pSC->bHoriTileBoundary)
                     {
                         if (left || pSC->bVertTileBoundary)
-                            strPost2_alternate(p0 + 48 + 0, p1 + 0);
+                            JxrInverseTransformMathApplyAlternatePost2(p0 + 48 + 0, p1 + 0);
 
                         if (right || pSC->bVertTileBoundary)
-                            strPost2_alternate(p0 + 48 + -64, p1 + -64);
+                            JxrInverseTransformMathApplyAlternatePost2(p0 + 48 + -64, p1 + -64);
                     }
 
                     if (left || pSC->bVertTileBoundary)
-                        strPost2_alternate(p1 + 16, p1 + 16 + 16);
+                        JxrInverseTransformMathApplyAlternatePost2(p1 + 16, p1 + 16 + 16);
 
                     if (right || pSC->bVertTileBoundary)
-                        strPost2_alternate(p1 + -48, p1 + -48 + 16);
+                        JxrInverseTransformMathApplyAlternatePost2(p1 + -48, p1 + -48 + 16);
                 }
 
                 if (!leftORright && !pSC->bVertTileBoundary)
                 {
                     if (top || pSC->bHoriTileBoundary)
-                        strPost2_alternate(p1 - 64, p1);
+                        JxrInverseTransformMathApplyAlternatePost2(p1 - 64, p1);
                     else
-                        strPost2x2_alternate(p0 - 16, p0 + 48, p1 - 64, p1);
+                        JxrInverseTransformMathApplyAlternatePost2x2(p0 - 16, p0 + 48, p1 - 64, p1);
 
-                    strPost2x2_alternate(p1 - 48, p1 + 16, p1 - 32, p1 + 32);
+                    JxrInverseTransformMathApplyAlternatePost2x2(p1 - 48, p1 + 16, p1 - 32, p1 + 32);
                 }
             }
             
             if ((bottom || pSC->bHoriTileBoundary) && (!leftORright && !pSC->bVertTileBoundary))
-                strPost2_alternate(p0 - 16, p0 + 48);
+                JxrInverseTransformMathApplyAlternatePost2(p0 - 16, p0 + 48);
 
             if ((leftAdjacentColumn || pSC->bOneMBRightVertTB) && (top || pSC->bHoriTileBoundary))
                 strTransformAddCornerPrediction(p1 - 128 + 0, *(p1 - 128 + 64));
