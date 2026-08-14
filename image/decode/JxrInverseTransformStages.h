@@ -8,5 +8,8 @@ Void JxrInverseTransformStagesApplyStage1SplitNormal(PixelI* first, PixelI* seco
     Int offset, Int highPassQuantizer, Bool highPassAbsent);
 Void JxrInverseTransformStagesApplyStage1SplitAlternate(PixelI* first, PixelI* second,
     Int offset);
+Void JxrInverseTransformStagesApplyStage2Idct(PixelI* samples);
+Void JxrInverseTransformStagesApplyStage2SplitNormal(PixelI* first, PixelI* second);
+Void JxrInverseTransformStagesApplyStage2SplitAlternate(PixelI* first, PixelI* second);
 
 #endif

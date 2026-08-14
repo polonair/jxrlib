@@ -39,3 +39,39 @@ Void JxrInverseTransformStagesApplyStage1SplitNormal(PixelI* first, PixelI* seco
 { JxrInverseTransformStagesApplyStage1Split(first, second, offset, highPassQuantizer, highPassAbsent, JxrInverseTransformStage1Normal); }
 Void JxrInverseTransformStagesApplyStage1SplitAlternate(PixelI* first, PixelI* second, Int offset)
 { JxrInverseTransformStagesApplyStage1Split(first, second, offset, 0, FALSE, JxrInverseTransformStage1Alternate); }
+
+static const Int JxrInverseTransformStage2FirstOffsets[4] = { -96, -32, -80, -16 };
+static const Int JxrInverseTransformStage2SecondOffsets[4] = { 96, 32, 112, 48 };
+static const Int JxrInverseTransformStage2ThirdOffsets[4] = { -112, -48, -128, -64 };
+static const Int JxrInverseTransformStage2FourthOffsets[4] = { 80, 16, 64, 0 };
+
+Void JxrInverseTransformStagesApplyStage2Idct(PixelI* p)
+{
+    JxrInverseTransformMathApplyOdd(p + 32, p + 48, p + 96, p + 112);
+    JxrInverseTransformMathApplyOdd(p + 128, p + 192, p + 144, p + 208);
+    JxrInverseTransformMathApplyOddOdd(p + 160, p + 224, p + 176, p + 240);
+    JxrTransformMathApplyDct2x2Up(p, p + 64, p + 16, p + 80);
+    JxrTransformMathApplyFourButterfly(p, JxrTransformSecondStageFourButterflyOffsets);
+}
+
+static Void JxrInverseTransformStagesApplyStage2Split(PixelI* first, PixelI* second, Bool alternate)
+{
+    Int column;
+    for (column = 0; column < 4; ++column) JxrTransformMathApplyDct2x2Down(
+        first + JxrInverseTransformStage2FirstOffsets[column], first + JxrInverseTransformStage2SecondOffsets[column],
+        second + JxrInverseTransformStage2ThirdOffsets[column], second + JxrInverseTransformStage2FourthOffsets[column]);
+    JxrInverseTransformMathApplyOddOddPost(second, second + 64, second + 16, second + 80);
+    JxrInverseTransformMathRotateHalf(&first[48], &first[32]); JxrInverseTransformMathRotateHalf(&first[112], &first[96]);
+    JxrInverseTransformMathRotateHalf(&second[-64], &second[-128]); JxrInverseTransformMathRotateHalf(&second[-48], &second[-112]);
+    for (column = 0; column < 4; ++column) {
+        if (alternate) JxrInverseTransformMathApplyAlternateHadamardScale2(first + JxrInverseTransformStage2FirstOffsets[column], second + JxrInverseTransformStage2FourthOffsets[column]);
+        else JxrInverseTransformMathApplyHadamardScale2(first + JxrInverseTransformStage2FirstOffsets[column], second + JxrInverseTransformStage2FourthOffsets[column]);
+    }
+    for (column = 0; column < 4; ++column) JxrInverseTransformMathApplyHadamardScale4(
+        first + JxrInverseTransformStage2FirstOffsets[column], second + JxrInverseTransformStage2ThirdOffsets[column],
+        first + JxrInverseTransformStage2SecondOffsets[column], second + JxrInverseTransformStage2FourthOffsets[column]);
+}
+Void JxrInverseTransformStagesApplyStage2SplitNormal(PixelI* first, PixelI* second)
+{ JxrInverseTransformStagesApplyStage2Split(first, second, FALSE); }
+Void JxrInverseTransformStagesApplyStage2SplitAlternate(PixelI* first, PixelI* second)
+{ JxrInverseTransformStagesApplyStage2Split(first, second, TRUE); }

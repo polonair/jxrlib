@@ -51,10 +51,6 @@
 #include "JxrInverseTransformChroma420AlternatePlane.h"
 #include "JxrInverseTransformChroma422AlternatePlane.h"
 #include "JxrTransformMath.h"
-static const Int JxrInverseTransformStage2P0FirstOffsets[4] = { -96, -32, -80, -16 };
-static const Int JxrInverseTransformStage2P0SecondOffsets[4] = { 96, 32, 112, 48 };
-static const Int JxrInverseTransformStage2P1FirstOffsets[4] = { -112, -48, -128, -64 };
-static const Int JxrInverseTransformStage2P1SecondOffsets[4] = { 80, 16, 64, 0 };
 
 /** local functions **/
 
@@ -77,20 +73,7 @@ Void strIDCT4x4Stage1(PixelI* p)
 
 Void strIDCT4x4Stage2(PixelI* p)
 {
-    /** bottom left corner, butterfly => -pi/8 rotation **/
-    JxrInverseTransformMathApplyOdd(p + 32, p + 48, p + 96, p + 112);
-    
-    /** top right corner, -pi/8 rotation => butterfly **/
-    JxrInverseTransformMathApplyOdd(p + 128, p + 192, p + 144, p + 208);
-    
-    /** bottom right corner, -pi/8 rotation => -pi/8 rotation **/
-    JxrInverseTransformMathApplyOddOdd(p + 160, p + 224, p + 176, p + 240);
-
-    /** top left corner, butterfly => butterfly **/
-    JxrTransformMathApplyDct2x2Up(p + 0, p + 64, p + 16, p + 80);
-    
-    /** butterfly **/
-    JxrTransformMathApplyFourButterfly(p, JxrTransformSecondStageFourButterflyOffsets);
+    JxrInverseTransformStagesApplyStage2Idct(p);
 }
 
 Void strNormalizeDec(PixelI* p, Bool bChroma)
@@ -152,61 +135,14 @@ Void strPost4x4Stage1_alternate(PixelI* p, Int iOffset)
   (-128)(-64)|( 0)( 64) p1
   (-112)(-48)|(16)( 80)
 *****************************************************************************************/
-typedef enum JxrInverseTransformOverlapMode { JxrInverseTransformOverlapNormal, JxrInverseTransformOverlapAlternate } JxrInverseTransformOverlapMode;
-
-static Void JxrInverseTransformApplyStage2Split(
-    PixelI* p0,
-    PixelI* p1,
-    JxrInverseTransformOverlapMode mode)
-{
-    Int column;
-
-    /* Apply the 2x2 DCT to each logical column in its legacy scan order. */
-    for (column = 0; column < 4; ++column) {
-        JxrTransformMathApplyDct2x2Down(
-            p0 + JxrInverseTransformStage2P0FirstOffsets[column], p0 + JxrInverseTransformStage2P0SecondOffsets[column],
-            p1 + JxrInverseTransformStage2P1FirstOffsets[column], p1 + JxrInverseTransformStage2P1SecondOffsets[column]);
-    }
-
-    /* Transform the bottom-right corner as one 4-point operation. */
-    JxrInverseTransformMathApplyOddOddPost(p1 + 0, p1 + 64, p1 + 16, p1 + 80);
-
-    /* Rotate the two anti-diagonal corners. */
-    JxrInverseTransformMathRotateHalf(&p0[48], &p0[32]);
-    JxrInverseTransformMathRotateHalf(&p0[112], &p0[96]);
-    JxrInverseTransformMathRotateHalf(&p1[-64], &p1[-128]);
-    JxrInverseTransformMathRotateHalf(&p1[-48], &p1[-112]);
-
-    /* The first Hadamard+scale pass is the only transform difference by mode. */
-    for (column = 0; column < 4; ++column) {
-        if (mode == JxrInverseTransformOverlapAlternate) {
-            JxrInverseTransformMathApplyAlternateHadamardScale2(
-                p0 + JxrInverseTransformStage2P0FirstOffsets[column],
-                p1 + JxrInverseTransformStage2P1SecondOffsets[column]);
-        }
-        else {
-            JxrInverseTransformMathApplyHadamardScale2(
-                p0 + JxrInverseTransformStage2P0FirstOffsets[column],
-                p1 + JxrInverseTransformStage2P1SecondOffsets[column]);
-        }
-    }
-
-    /* The second Hadamard+scale pass is shared by both modes. */
-    for (column = 0; column < 4; ++column) {
-        JxrInverseTransformMathApplyHadamardScale4(
-            p0 + JxrInverseTransformStage2P0FirstOffsets[column], p1 + JxrInverseTransformStage2P1FirstOffsets[column],
-            p0 + JxrInverseTransformStage2P0SecondOffsets[column], p1 + JxrInverseTransformStage2P1SecondOffsets[column]);
-    }
-}
-
 Void strPost4x4Stage2Split(PixelI* p0, PixelI* p1)
 {
-    JxrInverseTransformApplyStage2Split(p0, p1, JxrInverseTransformOverlapNormal);
+    JxrInverseTransformStagesApplyStage2SplitNormal(p0, p1);
 }
 
 Void strPost4x4Stage2Split_alternate(PixelI* p0, PixelI* p1)
 {
-    JxrInverseTransformApplyStage2Split(p0, p1, JxrInverseTransformOverlapAlternate);
+    JxrInverseTransformStagesApplyStage2SplitAlternate(p0, p1);
 }
 /*************************************************************************
   Top-level function to inverse tranform possible part of a macroblock
