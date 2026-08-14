@@ -36,5 +36,10 @@ Void JxrInverseTransformMathApplyAlternatePost4(
     PixelI* second,
     PixelI* third,
     PixelI* fourth);
+Void JxrInverseTransformMathApplyHadamardScale4(
+    PixelI* first,
+    PixelI* second,
+    PixelI* third,
+    PixelI* fourth);
 
 #endif

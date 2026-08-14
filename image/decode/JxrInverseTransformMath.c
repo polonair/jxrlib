@@ -175,3 +175,25 @@ Void JxrInverseTransformMathApplyAlternatePost4(
     *third = thirdValue;
     *fourth = fourthValue;
 }
+
+Void JxrInverseTransformMathApplyHadamardScale4(
+    PixelI* first,
+    PixelI* second,
+    PixelI* third,
+    PixelI* fourth)
+{
+    PixelI firstValue = *first;
+    PixelI secondValue = *second;
+    PixelI thirdValue = *third;
+    PixelI fourthValue = *fourth;
+
+    secondValue -= thirdValue;
+    firstValue += (fourthValue * 3 + 4) >> 3;
+    fourthValue -= secondValue >> 1;
+    thirdValue = ((firstValue - secondValue) >> 1) - thirdValue;
+
+    *third = fourthValue;
+    *fourth = thirdValue;
+    *first = firstValue - thirdValue;
+    *second = secondValue + fourthValue;
+}

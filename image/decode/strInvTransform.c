@@ -33,9 +33,9 @@
 
 /** local functions **/
 static Void invOddOdd(PixelI *, PixelI *, PixelI *, PixelI *);
+static Void strHSTdec(PixelI *, PixelI *, PixelI *, PixelI *);
 static Void invOddOddPost(PixelI *, PixelI *, PixelI *, PixelI *);
 static Void invOdd(PixelI *, PixelI *, PixelI *, PixelI *);
-static Void strHSTdec(PixelI *, PixelI *, PixelI *, PixelI *);
 static Void strHSTdec1(PixelI *, PixelI *);
 static Void strHSTdec1_alternate(PixelI *, PixelI *);
 
@@ -452,23 +452,8 @@ static Void strHSTdec1_alternate(PixelI *pa, PixelI *pd)
 
 static Void strHSTdec(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
 {
-    /** different realization : does rescaling as well! **/
-    PixelI a, b, c, d;
-    a = *pa;
-    b = *pb;
-    c = *pc;
-    d = *pd;
-
-    b -= c;
-    a += (d * 3 + 4) >> 3;
-
-    d -= (b >> 1);
-    c = ((a - b) >> 1) - c;
-    *pc = d;
-    *pd = c;
-    *pa = a - c, *pb = b + d;
+    JxrInverseTransformMathApplyHadamardScale4(pa, pb, pc, pd);
 }
-
 /** Kron(Rotate(pi/8), Rotate(pi/8)) **/
 static Void invOddOdd(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
 {
