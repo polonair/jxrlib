@@ -44,6 +44,7 @@
 #include "JxrInverseTransformPlaneStage1Normal.h"
 #include "JxrInverseTransformPlaneStage1Alternate.h"
 #include "JxrInverseTransformChroma420Plane.h"
+#include "JxrInverseTransformFullResolutionPlane.h"
 #include "JxrInverseTransformChroma422Plane.h"
 #include "JxrInverseTransformChroma420AlternatePlane.h"
 #include "JxrInverseTransformChroma422AlternatePlane.h"
@@ -303,10 +304,8 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
         pSC->m_param.cNumChannels, pSC->m_Dparam->cThumbnailScale);
     const OVERLAP olOverlap = geometry.overlap;
     const COLORFORMAT cfColorFormat = geometry.colorFormat;
-    const Bool left = geometry.isLeft, right = geometry.isRight;
+    const Bool left = geometry.isLeft;
     const Bool top = geometry.isTop, bottom = geometry.isBottom;
-    const Bool topORbottom = geometry.isTopOrBottom, leftORright = geometry.isLeftOrRight;
-    const Bool topORleft = geometry.isTopOrLeft, bottomORright = geometry.isBottomOrRight;
     const size_t mbWidth = geometry.macroblockWidth, mbX = geometry.macroblockColumn;
     const size_t iChannels = geometry.channelCount;
     const size_t tScale = geometry.thumbnailScale;
@@ -340,37 +339,9 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
         JxrInverseTransformPlaneContextInitialize(&planeContext,
             pSC->p0MBbuffer, pSC->p1MBbuffer, FALSE, i,
             &postProcessParameters, &highPassParameters);
-        PixelI* const p0 = planeContext.buffers.firstStage;
-        PixelI* const p1 = planeContext.buffers.secondStage;
-
-
-
-
-
-        //================================
-        // second level inverse transform
-        if (!bottomORright)
-        {
-            if(postProcessParameters.enabled)
-                updatePostProcInfo(pSC->pPostProcInfo, p1, mbX, i); // update postproc info before IDCT
-
-            JxrInverseTransformPlaneStage2Apply(p1, (i != 0), pSC->m_param.bScaledArith);
-
-        }
-
-        //================================
-        // second level inverse overlap
-        JxrInverseTransformPlaneStage2NormalApply(p0, p1, &geometry);
-
-        if(postProcessParameters.enabled)
-            postProcMB(pSC->pPostProcInfo, p0, p1, mbX, i, planeContext.directCurrentQuantizer); // second stage deblocking
-
-        //================================
-        JxrInverseTransformPlaneStage1NormalApply(p0, p1, olOverlap,
-            left, right, top, bottom, topORbottom, leftORright,
-            planeContext.highPassQuantizer, planeContext.isHighPassAbsent, tScale);
-        if(postProcessParameters.enabled && (!topORleft))
-            postProcBlock(pSC->pPostProcInfo, p0, p1, mbX, i, planeContext.lowPassQuantizer); // destairing and first stage deblocking
+        JxrInverseTransformFullResolutionPlaneApply(&planeContext, &geometry,
+            pSC->m_param.bScaledArith, postProcessParameters.enabled,
+            pSC->pPostProcInfo, mbX);
     }
 
     //================================================================

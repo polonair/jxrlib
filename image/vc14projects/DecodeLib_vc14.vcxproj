@@ -229,6 +229,7 @@
     <ClCompile Include="..\decode\JxrInverseTransformPlaneStage2Alternate.c" />
     <ClCompile Include="..\decode\JxrInverseTransformPlaneStage1Normal.c" />
     <ClCompile Include="..\decode\JxrInverseTransformPlaneStage1Alternate.c" />
+    <ClCompile Include="..\decode\JxrInverseTransformFullResolutionPlane.c" />
     <ClCompile Include="..\decode\JxrInverseTransformChroma420Plane.c" />
     <ClCompile Include="..\decode\JxrInverseTransformChroma422Plane.c" />
     <ClCompile Include="..\decode\JxrInverseTransformChroma420AlternatePlane.c" />
