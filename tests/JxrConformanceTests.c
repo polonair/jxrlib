@@ -2791,7 +2791,15 @@ static int test_inverse_transform_math_vectors(void)
 
     topLeft = 10; topRight = 40;
     JxrInverseTransformMathApplyAlternatePost2(&topLeft, &topRight);
-    return topLeft == 33 && topRight == 51;
+    if (topLeft != 33 || topRight != 51) return 0;
+
+    topLeft = 10; topRight = 20; bottomLeft = 30; bottomRight = 40;
+    JxrInverseTransformMathApplyPost2x2(&topLeft, &topRight, &bottomLeft, &bottomRight);
+    if (topLeft != 26 || topRight != 37 || bottomLeft != 47 || bottomRight != 56) return 0;
+
+    topLeft = 10; topRight = 20; bottomLeft = 30; bottomRight = 40;
+    JxrInverseTransformMathApplyAlternatePost2x2(&topLeft, &topRight, &bottomLeft, &bottomRight);
+    return topLeft == 26 && topRight == 37 && bottomLeft == 47 && bottomRight == 57;
 }
 
 static int test_transform_math_dct2x2_vectors(void)

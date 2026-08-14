@@ -123,67 +123,12 @@ Void strPost2_alternate(PixelI * pa, PixelI * pb)
 
 Void strPost2x2(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
 {
-    PixelI a, b, c, d;
-    a = *pa;
-    b = *pb;
-    c = *pc;
-    d = *pd;
-
-    /** butterflies **/
-    a += d;
-    b += c;
-    d -= (a + 1) >> 1;
-    c -= (b + 1) >> 1;
-
-    /** rotate **/
-    b += ((a + 2) >> 2);
-    a += ((b + 1) >> 1);
-    b += ((a + 2) >> 2);
-
-    /** butterflies **/
-    d += (a + 1) >> 1;
-    c += (b + 1) >> 1;
-    a -= d;
-    b -= c;
-
-    *pa = a;
-    *pb = b;
-    *pc = c;
-    *pd = d;
+    JxrInverseTransformMathApplyPost2x2(pa, pb, pc, pd);
 }
 
 Void strPost2x2_alternate(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
 {
-    PixelI a, b, c, d;
-    a = *pa;
-    b = *pb;
-    c = *pc;
-    d = *pd;
-
-    /** butterflies **/
-    a += d;
-    b += c;
-    d -= (a + 1) >> 1;
-    c -= (b + 1) >> 1;
-
-    /** rotate **/
-    b += ((a + 2) >> 2);
-    a += ((b + 1) >> 1);
-    a += (b >> 5);
-    a += (b >> 9);
-    a += (b >> 13);
-    b += ((a + 2) >> 2);
-
-    /** butterflies **/
-    d += (a + 1) >> 1;
-    c += (b + 1) >> 1;
-    a -= d;
-    b -= c;
-
-    *pa = a;
-    *pb = b;
-    *pc = c;
-    *pd = d;
+    JxrInverseTransformMathApplyAlternatePost2x2(pa, pb, pc, pd);
 }
 
 /** 4-point post for boundaries **/

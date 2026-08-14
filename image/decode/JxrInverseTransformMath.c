@@ -357,3 +357,68 @@ Void JxrInverseTransformMathApplyAlternatePost2(
     *first = firstValue;
     *second = secondValue;
 }
+
+Void JxrInverseTransformMathApplyPost2x2(
+    PixelI* first,
+    PixelI* second,
+    PixelI* third,
+    PixelI* fourth)
+{
+    PixelI firstValue = *first;
+    PixelI secondValue = *second;
+    PixelI thirdValue = *third;
+    PixelI fourthValue = *fourth;
+
+    firstValue += fourthValue;
+    secondValue += thirdValue;
+    fourthValue -= (firstValue + 1) >> 1;
+    thirdValue -= (secondValue + 1) >> 1;
+
+    secondValue += (firstValue + 2) >> 2;
+    firstValue += (secondValue + 1) >> 1;
+    secondValue += (firstValue + 2) >> 2;
+
+    fourthValue += (firstValue + 1) >> 1;
+    thirdValue += (secondValue + 1) >> 1;
+    firstValue -= fourthValue;
+    secondValue -= thirdValue;
+
+    *first = firstValue;
+    *second = secondValue;
+    *third = thirdValue;
+    *fourth = fourthValue;
+}
+
+Void JxrInverseTransformMathApplyAlternatePost2x2(
+    PixelI* first,
+    PixelI* second,
+    PixelI* third,
+    PixelI* fourth)
+{
+    PixelI firstValue = *first;
+    PixelI secondValue = *second;
+    PixelI thirdValue = *third;
+    PixelI fourthValue = *fourth;
+
+    firstValue += fourthValue;
+    secondValue += thirdValue;
+    fourthValue -= (firstValue + 1) >> 1;
+    thirdValue -= (secondValue + 1) >> 1;
+
+    secondValue += (firstValue + 2) >> 2;
+    firstValue += (secondValue + 1) >> 1;
+    firstValue += secondValue >> 5;
+    firstValue += secondValue >> 9;
+    firstValue += secondValue >> 13;
+    secondValue += (firstValue + 2) >> 2;
+
+    fourthValue += (firstValue + 1) >> 1;
+    thirdValue += (secondValue + 1) >> 1;
+    firstValue -= fourthValue;
+    secondValue -= thirdValue;
+
+    *first = firstValue;
+    *second = secondValue;
+    *third = thirdValue;
+    *fourth = fourthValue;
+}
