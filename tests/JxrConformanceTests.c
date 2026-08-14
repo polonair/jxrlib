@@ -73,6 +73,7 @@
 #include "JxrInverseHighPassParameters.h"
 #include "JxrInverseTransformPlanePlan.h"
 #include "JxrInverseTransformPlaneBuffers.h"
+#include "JxrInverseTransformPlaneContext.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -2937,6 +2938,36 @@ static int test_inverse_transform_plane_buffers_vectors(void)
     return buffers.firstStage == first2 && buffers.secondStage == second2;
 }
 
+static int test_inverse_transform_plane_context_vectors(void)
+{
+    PixelI first0[1], first1[1], first2[1];
+    PixelI second0[1], second1[1], second2[1];
+    PixelI* firstPlanes[] = { first0, first1, first2 };
+    PixelI* secondPlanes[] = { second0, second1, second2 };
+    JxrInversePostProcessParameters postProcessParameters;
+    JxrInverseHighPassParameters highPassParameters;
+    JxrInverseTransformPlaneContext context;
+
+    memset(&postProcessParameters, 0, sizeof(postProcessParameters));
+    memset(&highPassParameters, 0, sizeof(highPassParameters));
+    postProcessParameters.lowPassQuantizers[1] = 12;
+    postProcessParameters.directCurrentQuantizers[1] = 34;
+    highPassParameters.quantizers[1] = 56;
+    highPassParameters.isAbsent = FALSE;
+    JxrInverseTransformPlaneContextInitialize(&context, firstPlanes, secondPlanes,
+        TRUE, 1, &postProcessParameters, &highPassParameters);
+    if (context.buffers.firstStage != first2 || context.buffers.secondStage != second2 ||
+        context.channelIndex != 1 || context.lowPassQuantizer != 12 ||
+        context.directCurrentQuantizer != 34 || context.highPassQuantizer != 56 ||
+        context.isHighPassAbsent) return 0;
+
+    JxrInverseTransformPlaneContextInitialize(&context, firstPlanes, secondPlanes,
+        FALSE, 0, &postProcessParameters, NULL);
+    return context.buffers.firstStage == first0 && context.buffers.secondStage == second0 &&
+        context.highPassQuantizer == JXR_INVERSE_DEFAULT_HIGH_PASS_QUANTIZER &&
+        context.isHighPassAbsent;
+}
+
 static int test_inverse_transform_math_vectors(void)
 {
     PixelI first, second;
@@ -3627,6 +3658,7 @@ int main(int argc, char** argv)
         { "inverse_highpass_parameters_vectors", test_inverse_highpass_parameters_vectors },
         { "inverse_transform_plane_plan_vectors", test_inverse_transform_plane_plan_vectors },
         { "inverse_transform_plane_buffers_vectors", test_inverse_transform_plane_buffers_vectors },
+        { "inverse_transform_plane_context_vectors", test_inverse_transform_plane_context_vectors },
         { "inverse_transform_math_vectors", test_inverse_transform_math_vectors },
         { "transform_math_dct2x2_vectors", test_transform_math_dct2x2_vectors },
         { "forward_transform_math_vectors", test_forward_transform_math_vectors },

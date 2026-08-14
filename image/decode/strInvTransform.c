@@ -37,6 +37,7 @@
 #include "JxrInverseHighPassParameters.h"
 #include "JxrInverseTransformPlanePlan.h"
 #include "JxrInverseTransformPlaneBuffers.h"
+#include "JxrInverseTransformPlaneContext.h"
 #include "JxrTransformMath.h"
 static const Int JxrInverseTransformStage2P0FirstOffsets[4] = { -96, -32, -80, -16 };
 static const Int JxrInverseTransformStage2P0SecondOffsets[4] = { 96, 32, 112, 48 };
@@ -328,13 +329,15 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
     // 400_Y, 444_YUV
     for (i = 0; i < planePlan.fullResolutionChannelCount && planePlan.transformsSamples; ++i)
     {
-        JxrInverseTransformPlaneBuffers planeBuffers;
-        JxrInverseTransformPlaneBuffersResolveFullResolution(&planeBuffers,
-            pSC->p0MBbuffer, pSC->p1MBbuffer, i);
-        PixelI* const p0 = planeBuffers.firstStage;
-        PixelI* const p1 = planeBuffers.secondStage;
+        JxrInverseTransformPlaneContext planeContext;
+        JxrInverseTransformPlaneContextInitialize(&planeContext,
+            pSC->p0MBbuffer, pSC->p1MBbuffer, FALSE, i,
+            &postProcessParameters, &highPassParameters);
+        PixelI* const p0 = planeContext.buffers.firstStage;
+        PixelI* const p1 = planeContext.buffers.secondStage;
 
-        const Int iHPQP = highPassParameters.quantizers[i];
+
+        const Int iHPQP = planeContext.highPassQuantizer;
 
 
         //================================
@@ -378,7 +381,7 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
         }
 
         if(postProcessParameters.enabled)
-            postProcMB(pSC->pPostProcInfo, p0, p1, mbX, i, postProcessParameters.directCurrentQuantizers[i]); // second stage deblocking
+            postProcMB(pSC->pPostProcInfo, p0, p1, mbX, i, planeContext.directCurrentQuantizer); // second stage deblocking
 
         //================================
         // first level inverse transform
@@ -442,15 +445,15 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
                     JxrInverseTransformMathApplyPost4(p + 7, p + 6, p + 66, p + 67);
                     p = NULL;
 
-                    strPost4x4Stage1(p1 + j, 0, iHPQP, highPassParameters.isAbsent);
+                    strPost4x4Stage1(p1 + j, 0, iHPQP, planeContext.isHighPassAbsent);
                 }
             }
             else if (bottom)
             {
                 for (j = (left ? 0 : -192); j < (right ? -64 : 64); j += 64)
                 {
-                    strPost4x4Stage1(p0 + 16 + j, 0, iHPQP, highPassParameters.isAbsent);
-                    strPost4x4Stage1(p0 + 32 + j, 0, iHPQP, highPassParameters.isAbsent);
+                    strPost4x4Stage1(p0 + 16 + j, 0, iHPQP, planeContext.isHighPassAbsent);
+                    strPost4x4Stage1(p0 + 32 + j, 0, iHPQP, planeContext.isHighPassAbsent);
 
                     p = p0 + 48 + j;
                     JxrInverseTransformMathApplyPost4(p + 15, p + 14, p + 74, p + 75);
@@ -462,29 +465,31 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
             {
                 for (j = (left ? 0 : -192); j < (right ? -64 : 64); j += 64)
                 {
-                    strPost4x4Stage1(p0 + 16 + j, 0, iHPQP, highPassParameters.isAbsent);
-                    strPost4x4Stage1(p0 + 32 + j, 0, iHPQP, highPassParameters.isAbsent);
-                    strPost4x4Stage1Split(p0 + 48 + j, p1 + j, 0, iHPQP, highPassParameters.isAbsent);
-                    strPost4x4Stage1(p1 + j, 0, iHPQP, highPassParameters.isAbsent);
+                    strPost4x4Stage1(p0 + 16 + j, 0, iHPQP, planeContext.isHighPassAbsent);
+                    strPost4x4Stage1(p0 + 32 + j, 0, iHPQP, planeContext.isHighPassAbsent);
+                    strPost4x4Stage1Split(p0 + 48 + j, p1 + j, 0, iHPQP, planeContext.isHighPassAbsent);
+                    strPost4x4Stage1(p1 + j, 0, iHPQP, planeContext.isHighPassAbsent);
                 }
             }
         }
         
         if(postProcessParameters.enabled && (!topORleft))
-            postProcBlock(pSC->pPostProcInfo, p0, p1, mbX, i, postProcessParameters.lowPassQuantizers[i]); // destairing and first stage deblocking
+            postProcBlock(pSC->pPostProcInfo, p0, p1, mbX, i, planeContext.lowPassQuantizer); // destairing and first stage deblocking
     }
 
     //================================================================
     // 420_UV
     for (i = 0; i < planePlan.chroma420ChannelCount && planePlan.transformsSamples; ++i)
     {
-        JxrInverseTransformPlaneBuffers planeBuffers;
-        JxrInverseTransformPlaneBuffersResolveChroma(&planeBuffers,
-            pSC->p0MBbuffer, pSC->p1MBbuffer, i);
-        PixelI* const p0 = planeBuffers.firstStage;
-        PixelI* const p1 = planeBuffers.secondStage;
+        JxrInverseTransformPlaneContext planeContext;
+        JxrInverseTransformPlaneContextInitialize(&planeContext,
+            pSC->p0MBbuffer, pSC->p1MBbuffer, TRUE, i,
+            &postProcessParameters, &highPassParameters);
+        PixelI* const p0 = planeContext.buffers.firstStage;
+        PixelI* const p1 = planeContext.buffers.secondStage;
 
-        const Int iHPQP = highPassParameters.quantizers[i];
+
+        const Int iHPQP = planeContext.highPassQuantizer;
 
 
         //========================================
@@ -564,7 +569,7 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
                 {
                     for (j = -48; j < (right ? -16 : 16); j += 32)
                     {
-                        strPost4x4Stage1Split(p0 + j, p1 - 16 + j, 32, iHPQP, highPassParameters.isAbsent);
+                        strPost4x4Stage1Split(p0 + j, p1 - 16 + j, 32, iHPQP, planeContext.isHighPassAbsent);
                     }
                 }
 
@@ -581,10 +586,10 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
                 }
                 else
                 {
-                    strPost4x4Stage1(p0 - 32, 32, iHPQP, highPassParameters.isAbsent);
+                    strPost4x4Stage1(p0 - 32, 32, iHPQP, planeContext.isHighPassAbsent);
                 }
 
-                strPost4x4Stage1(p0 - 64, 32, iHPQP, highPassParameters.isAbsent);
+                strPost4x4Stage1(p0 - 64, 32, iHPQP, planeContext.isHighPassAbsent);
             }
             else if (top)
             {
@@ -614,13 +619,15 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
     // 422_UV
     for (i = 0; i < planePlan.chroma422ChannelCount && planePlan.transformsSamples; ++i)
     {
-        JxrInverseTransformPlaneBuffers planeBuffers;
-        JxrInverseTransformPlaneBuffersResolveChroma(&planeBuffers,
-            pSC->p0MBbuffer, pSC->p1MBbuffer, i);
-        PixelI* const p0 = planeBuffers.firstStage;
-        PixelI* const p1 = planeBuffers.secondStage;
+        JxrInverseTransformPlaneContext planeContext;
+        JxrInverseTransformPlaneContextInitialize(&planeContext,
+            pSC->p0MBbuffer, pSC->p1MBbuffer, TRUE, i,
+            &postProcessParameters, &highPassParameters);
+        PixelI* const p0 = planeContext.buffers.firstStage;
+        PixelI* const p1 = planeContext.buffers.secondStage;
 
-        const Int iHPQP = highPassParameters.quantizers[i];
+
+        const Int iHPQP = planeContext.highPassQuantizer;
 
 
         //========================================
@@ -720,7 +727,7 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
 
                 for (j = (left ? 0 : -128); j < (right ? -64 : 0); j += 64)
                 {
-                    strPost4x4Stage1(p0 + j + 32, 0, iHPQP, highPassParameters.isAbsent);
+                    strPost4x4Stage1(p0 + j + 32, 0, iHPQP, planeContext.isHighPassAbsent);
                 }
             }
 
@@ -743,8 +750,8 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
 
                 for (j = (left ? 0 : -128); j < (right ? -64 : 0); j += 64)
                 {
-                    strPost4x4Stage1(p1 + j +  0, 0, iHPQP, highPassParameters.isAbsent);
-                    strPost4x4Stage1(p1 + j + 16, 0, iHPQP, highPassParameters.isAbsent);
+                    strPost4x4Stage1(p1 + j +  0, 0, iHPQP, planeContext.isHighPassAbsent);
+                    strPost4x4Stage1(p1 + j + 16, 0, iHPQP, planeContext.isHighPassAbsent);
                 }
             }
 
@@ -769,7 +776,7 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
 
                 for (j = (left ? 0 : -128); j < (right ? -64 : 0); j += 64)
                 {
-                    strPost4x4Stage1Split(p0 + j + 48, p1 + j + 0, 0, iHPQP, highPassParameters.isAbsent);
+                    strPost4x4Stage1Split(p0 + j + 48, p1 + j + 0, 0, iHPQP, planeContext.isHighPassAbsent);
                 }
             }
         }
@@ -851,11 +858,13 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
     // 400_Y, 444_YUV
     for (i = 0; i < planePlan.fullResolutionChannelCount && planePlan.transformsSamples; ++i)
     {
-        JxrInverseTransformPlaneBuffers planeBuffers;
-        JxrInverseTransformPlaneBuffersResolveFullResolution(&planeBuffers,
-            pSC->p0MBbuffer, pSC->p1MBbuffer, i);
-        PixelI* const p0 = planeBuffers.firstStage;
-        PixelI* const p1 = planeBuffers.secondStage;
+        JxrInverseTransformPlaneContext planeContext;
+        JxrInverseTransformPlaneContextInitialize(&planeContext,
+            pSC->p0MBbuffer, pSC->p1MBbuffer, FALSE, i,
+            &postProcessParameters, NULL);
+        PixelI* const p0 = planeContext.buffers.firstStage;
+        PixelI* const p1 = planeContext.buffers.secondStage;
+
 
         //================================
         // second level inverse transform
@@ -921,7 +930,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
         }
 
         if(postProcessParameters.enabled)
-            postProcMB(pSC->pPostProcInfo, p0, p1, hardTileState.previousMacroblockX, i, postProcessParameters.directCurrentQuantizers[i]); // second stage deblocking
+            postProcMB(pSC->pPostProcInfo, p0, p1, hardTileState.previousMacroblockX, i, planeContext.directCurrentQuantizer); // second stage deblocking
 
         //================================
         // first level inverse transform
@@ -1061,18 +1070,20 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
         }
         
         if(postProcessParameters.enabled && (!topORleft))
-            postProcBlock(pSC->pPostProcInfo, p0, p1, hardTileState.previousMacroblockX, i, postProcessParameters.lowPassQuantizers[i]); // destairing and first stage deblocking
+            postProcBlock(pSC->pPostProcInfo, p0, p1, hardTileState.previousMacroblockX, i, planeContext.lowPassQuantizer); // destairing and first stage deblocking
     }
 
     //================================================================
     // 420_UV
     for (i = 0; i < planePlan.chroma420ChannelCount && planePlan.transformsSamples; ++i)
     {
-        JxrInverseTransformPlaneBuffers planeBuffers;
-        JxrInverseTransformPlaneBuffersResolveChroma(&planeBuffers,
-            pSC->p0MBbuffer, pSC->p1MBbuffer, i);
-        PixelI* const p0 = planeBuffers.firstStage;
-        PixelI* const p1 = planeBuffers.secondStage;
+        JxrInverseTransformPlaneContext planeContext;
+        JxrInverseTransformPlaneContextInitialize(&planeContext,
+            pSC->p0MBbuffer, pSC->p1MBbuffer, TRUE, i,
+            &postProcessParameters, NULL);
+        PixelI* const p0 = planeContext.buffers.firstStage;
+        PixelI* const p1 = planeContext.buffers.secondStage;
+
 
         //========================================
         // second level inverse transform (420_UV)
@@ -1261,11 +1272,13 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
     // 422_UV
     for (i = 0; i < planePlan.chroma422ChannelCount && planePlan.transformsSamples; ++i)
     {
-        JxrInverseTransformPlaneBuffers planeBuffers;
-        JxrInverseTransformPlaneBuffersResolveChroma(&planeBuffers,
-            pSC->p0MBbuffer, pSC->p1MBbuffer, i);
-        PixelI* const p0 = planeBuffers.firstStage;
-        PixelI* const p1 = planeBuffers.secondStage;
+        JxrInverseTransformPlaneContext planeContext;
+        JxrInverseTransformPlaneContextInitialize(&planeContext,
+            pSC->p0MBbuffer, pSC->p1MBbuffer, TRUE, i,
+            &postProcessParameters, NULL);
+        PixelI* const p0 = planeContext.buffers.firstStage;
+        PixelI* const p1 = planeContext.buffers.secondStage;
+
 
         //========================================
         // second level inverse transform (422_UV)
