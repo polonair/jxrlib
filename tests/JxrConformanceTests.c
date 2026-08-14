@@ -2717,6 +2717,11 @@ static int test_inverse_transform_math_vectors(void)
     first = -10; second = 5;
     JxrInverseTransformMathRotateThreeEighths(&first, &second);
     if (first != -12 || second != 1) return 0;
+    first = 10;
+    JxrInverseTransformMathAddCornerPrediction(&first, 6);
+    if (first != 16) return 0;
+    JxrInverseTransformMathSubtractCornerPrediction(&first, 9);
+    if (first != 7) return 0;
     if (!(!JxrInverseTransformMathShouldCompensateDc(0, 20, FALSE) &&
         JxrInverseTransformMathShouldCompensateDc(0, 21, FALSE) &&
         JxrInverseTransformMathShouldCompensateDc(-20, 21, FALSE) &&

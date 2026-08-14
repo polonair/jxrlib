@@ -5,6 +5,8 @@
 
 Void JxrInverseTransformMathRotateHalf(PixelI* first, PixelI* second);
 Void JxrInverseTransformMathRotateThreeEighths(PixelI* first, PixelI* second);
+Void JxrInverseTransformMathAddCornerPrediction(PixelI* target, PixelI prediction);
+Void JxrInverseTransformMathSubtractCornerPrediction(PixelI* target, PixelI prediction);
 Bool JxrInverseTransformMathShouldCompensateDc(
     Int directCurrent,
     Int highPassQuantizer,

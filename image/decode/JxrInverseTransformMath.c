@@ -12,6 +12,15 @@ Void JxrInverseTransformMathRotateThreeEighths(PixelI* first, PixelI* second)
     *first -= (*second * 3 + 4) >> 3;
     *second += (*first * 3 + 4) >> 3;
 }
+Void JxrInverseTransformMathAddCornerPrediction(PixelI* target, PixelI prediction)
+{
+    *target += prediction;
+}
+
+Void JxrInverseTransformMathSubtractCornerPrediction(PixelI* target, PixelI prediction)
+{
+    *target -= prediction;
+}
 
 Bool JxrInverseTransformMathShouldCompensateDc(
     Int directCurrent,
