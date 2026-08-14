@@ -764,6 +764,7 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
 Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
 {
     JxrInverseTransformMacroblockGeometry geometry;
+    JxrHardTileBoundaryState hardTileState;
     // const BITDEPTH_BITS bdBitDepth = pSC->WMII.bdBitDepth;
     PixelI * p = NULL;// * pt = NULL;
     size_t i;
@@ -791,7 +792,6 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
     {
         JxrHardTileBoundaryConfiguration hardTileConfiguration;
         JxrHardTileBoundaryState previousHardTileState;
-        JxrHardTileBoundaryState hardTileState;
 
         hardTileConfiguration.enabled = pSC->WMISCP.bUseHardTileBoundaries;
         hardTileConfiguration.verticalSliceCountMinusOne = pSC->WMISCP.cNumOfSliceMinus1V;
@@ -840,7 +840,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
         if (!bottomORright)
         {
             if(pSC->WMII.cPostProcStrength > 0)
-                updatePostProcInfo(pSC->pPostProcInfo, p1, pSC->mbX, i); // update postproc info before IDCT
+                updatePostProcInfo(pSC->pPostProcInfo, p1, hardTileState.previousMacroblockX, i); // update postproc info before IDCT
 
             strIDCT4x4Stage2(p1);
             if (pSC->m_param.bScaledArith) {
@@ -853,22 +853,22 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
         if (OL_TWO == olOverlap)
         {
             /* Corner operations */
-            if ((top || pSC->bHoriTileBoundary) && (left || pSC->bVertTileBoundary))
+            if ((top || hardTileState.isHorizontalBoundary) && (left || hardTileState.isVerticalBoundary))
                 JxrInverseTransformMathApplyAlternatePost4(p1 + 0, p1 + 64, p1 + 0 + 16, p1 + 64 + 16);
-            if ((top || pSC->bHoriTileBoundary) && (right || pSC->bVertTileBoundary))
+            if ((top || hardTileState.isHorizontalBoundary) && (right || hardTileState.isVerticalBoundary))
                 JxrInverseTransformMathApplyAlternatePost4(p1 - 128, p1 - 64, p1 - 128 + 16, p1 - 64 + 16);
-            if ((bottom || pSC->bHoriTileBoundary) && (left || pSC->bVertTileBoundary))
+            if ((bottom || hardTileState.isHorizontalBoundary) && (left || hardTileState.isVerticalBoundary))
                 JxrInverseTransformMathApplyAlternatePost4(p0 + 32, p0 + 96, p0 + 32 + 16, p0 + 96 + 16);
-            if ((bottom || pSC->bHoriTileBoundary) && (right || pSC->bVertTileBoundary))
+            if ((bottom || hardTileState.isHorizontalBoundary) && (right || hardTileState.isVerticalBoundary))
                 JxrInverseTransformMathApplyAlternatePost4(p0 - 96, p0 - 32, p0 - 96 + 16, p0 - 32 + 16);
-            if ((leftORright || pSC->bVertTileBoundary) && (!topORbottom  && !pSC->bHoriTileBoundary))
+            if ((leftORright || hardTileState.isVerticalBoundary) && (!topORbottom  && !hardTileState.isHorizontalBoundary))
             {
-                if (left || pSC->bVertTileBoundary) {
+                if (left || hardTileState.isVerticalBoundary) {
                     j = 0;
                     JxrInverseTransformMathApplyAlternatePost4(p0 + j + 32, p0 + j +  48, p1 + j +  0, p1 + j + 16);
                     JxrInverseTransformMathApplyAlternatePost4(p0 + j + 96, p0 + j + 112, p1 + j + 64, p1 + j + 80);
                 }
-                if (right || pSC->bVertTileBoundary) {
+                if (right || hardTileState.isVerticalBoundary) {
                     j = -128;
                     JxrInverseTransformMathApplyAlternatePost4(p0 + j + 32, p0 + j +  48, p1 + j +  0, p1 + j + 16);
                     JxrInverseTransformMathApplyAlternatePost4(p0 + j + 96, p0 + j + 112, p1 + j + 64, p1 + j + 80);
@@ -877,15 +877,15 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
 
             if (!leftORright)
             {
-                if ((topORbottom || pSC->bHoriTileBoundary) && !pSC->bVertTileBoundary)
+                if ((topORbottom || hardTileState.isHorizontalBoundary) && !hardTileState.isVerticalBoundary)
                 {
-                    if (top || pSC->bHoriTileBoundary) {
+                    if (top || hardTileState.isHorizontalBoundary) {
                         p = p1;
                         JxrInverseTransformMathApplyAlternatePost4(p - 128, p - 64, p +  0, p + 64);
                         JxrInverseTransformMathApplyAlternatePost4(p - 112, p - 48, p + 16, p + 80);
                         p = NULL;
                     }
-                    if (bottom || pSC->bHoriTileBoundary) {
+                    if (bottom || hardTileState.isHorizontalBoundary) {
                         p = p0 + 32;
                         JxrInverseTransformMathApplyAlternatePost4(p - 128, p - 64, p +  0, p + 64);
                         JxrInverseTransformMathApplyAlternatePost4(p - 112, p - 48, p + 16, p + 80);
@@ -893,13 +893,13 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                     }
                 }
                 
-                if (!topORbottom && !pSC->bHoriTileBoundary && !pSC->bVertTileBoundary)
+                if (!topORbottom && !hardTileState.isHorizontalBoundary && !hardTileState.isVerticalBoundary)
                     strPost4x4Stage2Split_alternate(p0, p1);
             }
         }
 
         if(pSC->WMII.cPostProcStrength > 0)
-            postProcMB(pSC->pPostProcInfo, p0, p1, pSC->mbX, i, dcqp[i]); // second stage deblocking
+            postProcMB(pSC->pPostProcInfo, p0, p1, hardTileState.previousMacroblockX, i, dcqp[i]); // second stage deblocking
 
         //================================
         // first level inverse transform
@@ -932,18 +932,18 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
         // first level inverse overlap
         if (OL_NONE != olOverlap)
         {
-            if (leftORright || pSC->bVertTileBoundary)
+            if (leftORright || hardTileState.isVerticalBoundary)
             {
                 /* Corner operations */
-                if ((top || pSC->bHoriTileBoundary) && (left || pSC->bVertTileBoundary))
+                if ((top || hardTileState.isHorizontalBoundary) && (left || hardTileState.isVerticalBoundary))
                     JxrInverseTransformMathApplyAlternatePost4(p1 + 0, p1 + 1, p1 + 2, p1 + 3);
-                if ((top || pSC->bHoriTileBoundary) && (right || pSC->bVertTileBoundary))
+                if ((top || hardTileState.isHorizontalBoundary) && (right || hardTileState.isVerticalBoundary))
                     JxrInverseTransformMathApplyAlternatePost4(p1 - 59, p1 - 60, p1 - 57, p1 - 58);
-                if ((bottom || pSC->bHoriTileBoundary) && (left || pSC->bVertTileBoundary))
+                if ((bottom || hardTileState.isHorizontalBoundary) && (left || hardTileState.isVerticalBoundary))
                     JxrInverseTransformMathApplyAlternatePost4(p0 + 48 + 10, p0 + 48 + 11, p0 + 48 + 8, p0 + 48 + 9);
-                if ((bottom || pSC->bHoriTileBoundary) && (right || pSC->bVertTileBoundary))
+                if ((bottom || hardTileState.isHorizontalBoundary) && (right || hardTileState.isVerticalBoundary))
                     JxrInverseTransformMathApplyAlternatePost4(p0 - 1, p0 - 2, p0 - 3, p0 - 4);
-                if (left || pSC->bVertTileBoundary) {
+                if (left || hardTileState.isVerticalBoundary) {
                     j = 0 + 10;
                     if (!top)
                     {
@@ -961,13 +961,13 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                         JxrInverseTransformMathApplyAlternatePost4(p + 1, p - 1, p + 7, p + 9);
                         p = NULL;
                     }
-                    if (!topORbottom && !pSC->bHoriTileBoundary)
+                    if (!topORbottom && !hardTileState.isHorizontalBoundary)
                     {
                         JxrInverseTransformMathApplyAlternatePost4(p0 + 48 + j + 0, p0 + 48 + j - 2, p1 - 10 + j, p1 - 8 + j);
                         JxrInverseTransformMathApplyAlternatePost4(p0 + 48 + j + 1, p0 + 48 + j - 1, p1 -  9 + j, p1 - 7 + j);
                     }
                 }
-                if (right || pSC->bVertTileBoundary) {
+                if (right || hardTileState.isVerticalBoundary) {
                     j = -64 + 14;
                     if (!top)
                     {
@@ -985,7 +985,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                         JxrInverseTransformMathApplyAlternatePost4(p + 1, p - 1, p + 7, p + 9);
                         p = NULL;
                     }
-                    if (!topORbottom && !pSC->bHoriTileBoundary)
+                    if (!topORbottom && !hardTileState.isHorizontalBoundary)
                     {
                         JxrInverseTransformMathApplyAlternatePost4(p0 + 48 + j + 0, p0 + 48 + j - 2, p1 - 10 + j, p1 - 8 + j);
                         JxrInverseTransformMathApplyAlternatePost4(p0 + 48 + j + 1, p0 + 48 + j - 1, p1 -  9 + j, p1 - 7 + j);
@@ -993,11 +993,11 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                 }
             }
 
-            if (top || pSC->bHoriTileBoundary)
+            if (top || hardTileState.isHorizontalBoundary)
             {
                 for (j = (left ? 0 : -192); j < (right ? -64 : 64); j += 64)
                 {
-                    if (!pSC->bVertTileBoundary || j != -64) {
+                    if (!hardTileState.isVerticalBoundary || j != -64) {
                         p = p1 + j;
                         JxrInverseTransformMathApplyAlternatePost4(p + 5, p + 4, p + 64, p + 65);
                         JxrInverseTransformMathApplyAlternatePost4(p + 7, p + 6, p + 66, p + 67);
@@ -1008,11 +1008,11 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                 }
             }
 
-            if (bottom || pSC->bHoriTileBoundary)
+            if (bottom || hardTileState.isHorizontalBoundary)
             {
                 for (j = (left ? 0 : -192); j < (right ? -64 : 64); j += 64)
                 {
-                    if (!pSC->bVertTileBoundary || j != -64) {
+                    if (!hardTileState.isVerticalBoundary || j != -64) {
                         strPost4x4Stage1_alternate(p0 + 16 + j, 0);
                         strPost4x4Stage1_alternate(p0 + 32 + j, 0);
 
@@ -1024,11 +1024,11 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                 }
             }
 
-            if (!top && !bottom && !pSC->bHoriTileBoundary)
+            if (!top && !bottom && !hardTileState.isHorizontalBoundary)
             {
                 for (j = (left ? 0 : -192); j < (right ? -64 : 64); j += 64)
                 {
-                    if (!pSC->bVertTileBoundary || j != -64) {
+                    if (!hardTileState.isVerticalBoundary || j != -64) {
                         strPost4x4Stage1_alternate(p0 + 16 + j, 0);
                         strPost4x4Stage1_alternate(p0 + 32 + j, 0);
                         strPost4x4Stage1Split_alternate(p0 + 48 + j, p1 + j, 0);
@@ -1039,7 +1039,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
         }
         
         if(pSC->WMII.cPostProcStrength > 0 && (!topORleft))
-            postProcBlock(pSC->pPostProcInfo, p0, p1, pSC->mbX, i, qp[i]); // destairing and first stage deblocking
+            postProcBlock(pSC->pPostProcInfo, p0, p1, hardTileState.previousMacroblockX, i, qp[i]); // destairing and first stage deblocking
     }
 
     //================================================================
@@ -1065,51 +1065,51 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
         // second level inverse overlap (420_UV)
         if (OL_TWO == olOverlap)
         {
-            if ((leftAdjacentColumn || pSC->bOneMBRightVertTB) && (top || pSC->bHoriTileBoundary))
+            if ((leftAdjacentColumn || hardTileState.isOneMacroblockRightOfVerticalBoundary) && (top || hardTileState.isHorizontalBoundary))
                 JxrInverseTransformMathSubtractCornerPredictionAt(p1, -64, p1[-32]);
-            if ((rightAdjacentColumn || pSC->bOneMBLeftVertTB) && (top || pSC->bHoriTileBoundary))
+            if ((rightAdjacentColumn || hardTileState.isOneMacroblockLeftOfVerticalBoundary) && (top || hardTileState.isHorizontalBoundary))
                 pSC->iPredBefore[i][0] = p1[0];
-            if ((right || pSC->bVertTileBoundary) && (top || pSC->bHoriTileBoundary))
+            if ((right || hardTileState.isVerticalBoundary) && (top || hardTileState.isHorizontalBoundary))
                 JxrInverseTransformMathSubtractCornerPredictionAt(p1, -32, pSC->iPredBefore[i][0]);
-            if ((leftAdjacentColumn || pSC->bOneMBRightVertTB) && (bottom || pSC->bHoriTileBoundary))
+            if ((leftAdjacentColumn || hardTileState.isOneMacroblockRightOfVerticalBoundary) && (bottom || hardTileState.isHorizontalBoundary))
                 JxrInverseTransformMathSubtractCornerPredictionAt(p0, -48, p0[-16]);
-            if ((rightAdjacentColumn || pSC->bOneMBLeftVertTB) && (bottom || pSC->bHoriTileBoundary))
+            if ((rightAdjacentColumn || hardTileState.isOneMacroblockLeftOfVerticalBoundary) && (bottom || hardTileState.isHorizontalBoundary))
                 pSC->iPredBefore[i][1] = p0[16];
-            if ((right || pSC->bVertTileBoundary) && (bottom || pSC->bHoriTileBoundary))
+            if ((right || hardTileState.isVerticalBoundary) && (bottom || hardTileState.isHorizontalBoundary))
                 JxrInverseTransformMathSubtractCornerPredictionAt(p0, -16, pSC->iPredBefore[i][1]);
 
-            if ((leftORright || pSC->bVertTileBoundary) && !topORbottom && !pSC->bHoriTileBoundary)
+            if ((leftORright || hardTileState.isVerticalBoundary) && !topORbottom && !hardTileState.isHorizontalBoundary)
             {
-                if (left || pSC->bVertTileBoundary)
+                if (left || hardTileState.isVerticalBoundary)
                     JxrInverseTransformMathApplyAlternatePost2(p0 +   0 + 16, p1 +   0);
-                if (right || pSC->bVertTileBoundary)
+                if (right || hardTileState.isVerticalBoundary)
                     JxrInverseTransformMathApplyAlternatePost2(p0 + -32 + 16, p1 + -32);
             }
 
             if (!leftORright)
             {
-                if ((topORbottom || pSC->bHoriTileBoundary) && !pSC->bVertTileBoundary)
+                if ((topORbottom || hardTileState.isHorizontalBoundary) && !hardTileState.isVerticalBoundary)
                 {
-                    if (top || pSC->bHoriTileBoundary)
+                    if (top || hardTileState.isHorizontalBoundary)
                         JxrInverseTransformMathApplyAlternatePost2(p1 - 32, p1);
-                    if (bottom || pSC->bHoriTileBoundary)
+                    if (bottom || hardTileState.isHorizontalBoundary)
                         JxrInverseTransformMathApplyAlternatePost2(p0 + 16 - 32, p0 + 16);
                 }
-                else if (!topORbottom && !pSC->bHoriTileBoundary && !pSC->bVertTileBoundary) {
+                else if (!topORbottom && !hardTileState.isHorizontalBoundary && !hardTileState.isVerticalBoundary) {
                     JxrInverseTransformMathApplyAlternatePost2x2(p0 - 16, p0 + 16, p1 - 32, p1);
                 }
             }
-            if ((leftAdjacentColumn || pSC->bOneMBRightVertTB) && (top || pSC->bHoriTileBoundary))
+            if ((leftAdjacentColumn || hardTileState.isOneMacroblockRightOfVerticalBoundary) && (top || hardTileState.isHorizontalBoundary))
                 JxrInverseTransformMathAddCornerPredictionAt(p1, -64, p1[-32]);
-            if ((rightAdjacentColumn || pSC->bOneMBLeftVertTB) && (top || pSC->bHoriTileBoundary))
+            if ((rightAdjacentColumn || hardTileState.isOneMacroblockLeftOfVerticalBoundary) && (top || hardTileState.isHorizontalBoundary))
                 pSC->iPredAfter[i][0] = p1[0];
-            if ((right || pSC->bVertTileBoundary) && (top || pSC->bHoriTileBoundary))
+            if ((right || hardTileState.isVerticalBoundary) && (top || hardTileState.isHorizontalBoundary))
                 JxrInverseTransformMathAddCornerPredictionAt(p1, -32, pSC->iPredAfter[i][0]);
-            if ((leftAdjacentColumn || pSC->bOneMBRightVertTB) && (bottom || pSC->bHoriTileBoundary))
+            if ((leftAdjacentColumn || hardTileState.isOneMacroblockRightOfVerticalBoundary) && (bottom || hardTileState.isHorizontalBoundary))
                 JxrInverseTransformMathAddCornerPredictionAt(p0, -48, p0[-16]);
-            if ((rightAdjacentColumn || pSC->bOneMBLeftVertTB) && (bottom || pSC->bHoriTileBoundary))
+            if ((rightAdjacentColumn || hardTileState.isOneMacroblockLeftOfVerticalBoundary) && (bottom || hardTileState.isHorizontalBoundary))
                 pSC->iPredAfter[i][1] = p0[16];
-            if ((right || pSC->bVertTileBoundary) && (bottom || pSC->bHoriTileBoundary))
+            if ((right || hardTileState.isVerticalBoundary) && (bottom || hardTileState.isHorizontalBoundary))
                 JxrInverseTransformMathAddCornerPredictionAt(p0, -16, pSC->iPredAfter[i][1]);
         }
 
@@ -1123,7 +1123,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
             // In order to allow correction operation of corner chroma overlap operators (fixed)
             // processing of left most MB column must be delayed by one MB 
             // Thus left MB not processed until leftAdjacentColumn = 1
-            for (j = ((left) ? 48 : ((leftAdjacentColumn || pSC->bOneMBRightVertTB) ? -48 : -16)); j < ((right || pSC->bVertTileBoundary) ? 16 : 48); j += 32)
+            for (j = ((left) ? 48 : ((leftAdjacentColumn || hardTileState.isOneMacroblockRightOfVerticalBoundary) ? -48 : -16)); j < ((right || hardTileState.isVerticalBoundary) ? 16 : 48); j += 32)
             {
                 strIDCT4x4Stage1(p0 + j);
             }
@@ -1134,7 +1134,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
             // In order to allow correction operation of corner chroma overlap operators (fixed)
             // processing of left most MB column must be delayed by one MB 
             // Thus left MB not processed until leftAdjacentColumn = 1
-            for (j = ((left) ? 32 : ((leftAdjacentColumn || pSC->bOneMBRightVertTB) ? -64 : -32)); j < ((right || pSC->bVertTileBoundary) ? 0 : 32); j += 32)
+            for (j = ((left) ? 32 : ((leftAdjacentColumn || hardTileState.isOneMacroblockRightOfVerticalBoundary) ? -64 : -32)); j < ((right || hardTileState.isVerticalBoundary) ? 0 : 32); j += 32)
             {
                 strIDCT4x4Stage1(p1 + j);
             }
@@ -1146,21 +1146,21 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
         {
             /* Corner operations */
             /* Change because the top-left corner ICT will not have happened until leftAdjacentColumn ==1 */
-            if ((top || pSC->bHoriTileBoundary) && (leftAdjacentColumn || pSC->bOneMBRightVertTB))
+            if ((top || hardTileState.isHorizontalBoundary) && (leftAdjacentColumn || hardTileState.isOneMacroblockRightOfVerticalBoundary))
                 JxrInverseTransformMathApplyAlternatePost4(p1 - 64 + 0, p1 - 64 + 1, p1 - 64 + 2, p1 - 64 + 3);
-            if ((top || pSC->bHoriTileBoundary) && (right || pSC->bVertTileBoundary))
+            if ((top || hardTileState.isHorizontalBoundary) && (right || hardTileState.isVerticalBoundary))
                 JxrInverseTransformMathApplyAlternatePost4(p1 - 27, p1 - 28, p1 - 25, p1 - 26);
             /* Change because the bottom-left corner ICT will not have happened until leftAdjacentColumn ==1 */
-            if ((bottom || pSC->bHoriTileBoundary) && (leftAdjacentColumn || pSC->bOneMBRightVertTB))
+            if ((bottom || hardTileState.isHorizontalBoundary) && (leftAdjacentColumn || hardTileState.isOneMacroblockRightOfVerticalBoundary))
                 JxrInverseTransformMathApplyAlternatePost4(p0 - 64 + 16 + 10, p0 - 64 + 16 + 11, p0 - 64 + 16 + 8, p0 - 64 + 16 + 9);
-            if ((bottom || pSC->bHoriTileBoundary) && (right || pSC->bVertTileBoundary))
+            if ((bottom || hardTileState.isHorizontalBoundary) && (right || hardTileState.isVerticalBoundary))
                 JxrInverseTransformMathApplyAlternatePost4(p0 - 1, p0 - 2, p0 - 3, p0 - 4);
             if(!left && !top)
             {
                 /* Change because the vertical 1-D overlap operations of the left edge pixels cannot be performed until leftAdjacentColumn ==1 */
-                if (leftAdjacentColumn || pSC->bOneMBRightVertTB)
+                if (leftAdjacentColumn || hardTileState.isOneMacroblockRightOfVerticalBoundary)
                 {
-                    if (!bottom && !pSC->bHoriTileBoundary)
+                    if (!bottom && !hardTileState.isHorizontalBoundary)
                     {
                         JxrInverseTransformMathApplyAlternatePost4(p0 - 64 + 26, p0 - 64 + 24, p1 - 64 + 0, p1 - 64 + 2);
                         JxrInverseTransformMathApplyAlternatePost4(p0 - 64 + 27, p0 - 64 + 25, p1 - 64 + 1, p1 - 64 + 3);
@@ -1169,14 +1169,14 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                     JxrInverseTransformMathApplyAlternatePost4(p0 - 64 + 10, p0 - 64 + 8, p0 - 64 + 16, p0 - 64 + 18);
                     JxrInverseTransformMathApplyAlternatePost4(p0 - 64 + 11, p0 - 64 + 9, p0 - 64 + 17, p0 - 64 + 19);
                 }
-                if (bottom || pSC->bHoriTileBoundary)
+                if (bottom || hardTileState.isHorizontalBoundary)
                 {
                     p = p0 + -48;
                     JxrInverseTransformMathApplyAlternatePost4(p + 15, p + 14, p + 42, p + 43);
                     JxrInverseTransformMathApplyAlternatePost4(p + 13, p + 12, p + 40, p + 41);
                     p = NULL;
 
-                    if (!right && !pSC->bVertTileBoundary)
+                    if (!right && !hardTileState.isVerticalBoundary)
                     {
                         p = p0 + -16;
                         JxrInverseTransformMathApplyAlternatePost4(p + 15, p + 14, p + 42, p + 43);
@@ -1188,13 +1188,13 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                 {
                     strPost4x4Stage1Split_alternate(p0 + -48, p1 - 16 + -48, 32);
 
-                    if (!right && !pSC->bVertTileBoundary)
+                    if (!right && !hardTileState.isVerticalBoundary)
                         strPost4x4Stage1Split_alternate(p0 + -16, p1 - 16 + -16, 32);
                 }
 
-                if (right || pSC->bVertTileBoundary)
+                if (right || hardTileState.isVerticalBoundary)
                 {
-                    if (!bottom && !pSC->bHoriTileBoundary)
+                    if (!bottom && !hardTileState.isHorizontalBoundary)
                     {
                         JxrInverseTransformMathApplyAlternatePost4(p0 - 2 , p0 - 4 , p1 - 28, p1 - 26);
                         JxrInverseTransformMathApplyAlternatePost4(p0 - 1 , p0 - 3 , p1 - 27, p1 - 25);
@@ -1211,7 +1211,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                 strPost4x4Stage1_alternate(p0 - 64, 32);
             }
 
-            if (top || pSC->bHoriTileBoundary)
+            if (top || hardTileState.isHorizontalBoundary)
             {
                 if (!left)
                 {
@@ -1221,7 +1221,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                     p = NULL;
                 }
 
-                if (!left && !right && !pSC->bVertTileBoundary)
+                if (!left && !right && !hardTileState.isVerticalBoundary)
                 {
                     p = p1 + -32 + 4;
                     JxrInverseTransformMathApplyAlternatePost4(p + 1, p + 0, p + 28, p + 29);
@@ -1261,45 +1261,45 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
         // second level inverse overlap (422_UV)
         if (OL_TWO == olOverlap)
         {
-            if ((leftAdjacentColumn || pSC->bOneMBRightVertTB) && (top || pSC->bHoriTileBoundary))
+            if ((leftAdjacentColumn || hardTileState.isOneMacroblockRightOfVerticalBoundary) && (top || hardTileState.isHorizontalBoundary))
                 JxrInverseTransformMathSubtractCornerPredictionAt(p1, -128, p1[-64]);
 
-            if ((rightAdjacentColumn || pSC->bOneMBLeftVertTB) && (top || pSC->bHoriTileBoundary))
+            if ((rightAdjacentColumn || hardTileState.isOneMacroblockLeftOfVerticalBoundary) && (top || hardTileState.isHorizontalBoundary))
                 pSC->iPredBefore[i][0] = p1[0];
-            if ((right || pSC->bVertTileBoundary) && (top || pSC->bHoriTileBoundary))
+            if ((right || hardTileState.isVerticalBoundary) && (top || hardTileState.isHorizontalBoundary))
                 JxrInverseTransformMathSubtractCornerPredictionAt(p1, -64, pSC->iPredBefore[i][0]);
 
-            if ((leftAdjacentColumn || pSC->bOneMBRightVertTB) && (bottom || pSC->bHoriTileBoundary))
+            if ((leftAdjacentColumn || hardTileState.isOneMacroblockRightOfVerticalBoundary) && (bottom || hardTileState.isHorizontalBoundary))
                 JxrInverseTransformMathSubtractCornerPredictionAt(p0, -80, p0[-16]);
 
-            if ((rightAdjacentColumn || pSC->bOneMBLeftVertTB) && (bottom || pSC->bHoriTileBoundary))
+            if ((rightAdjacentColumn || hardTileState.isOneMacroblockLeftOfVerticalBoundary) && (bottom || hardTileState.isHorizontalBoundary))
                 pSC->iPredBefore[i][1] = p0[48];
-            if ((right || pSC->bVertTileBoundary) && (bottom || pSC->bHoriTileBoundary))
+            if ((right || hardTileState.isVerticalBoundary) && (bottom || hardTileState.isHorizontalBoundary))
                 JxrInverseTransformMathSubtractCornerPredictionAt(p0, -16, pSC->iPredBefore[i][1]);
 
             if (!bottom)
             {
-                if (leftORright || pSC->bVertTileBoundary)
+                if (leftORright || hardTileState.isVerticalBoundary)
                 {
-                    if (!top && !pSC->bHoriTileBoundary)
+                    if (!top && !hardTileState.isHorizontalBoundary)
                     {
-                        if (left || pSC->bVertTileBoundary)
+                        if (left || hardTileState.isVerticalBoundary)
                             JxrInverseTransformMathApplyAlternatePost2(p0 + 48 + 0, p1 + 0);
 
-                        if (right || pSC->bVertTileBoundary)
+                        if (right || hardTileState.isVerticalBoundary)
                             JxrInverseTransformMathApplyAlternatePost2(p0 + 48 + -64, p1 + -64);
                     }
 
-                    if (left || pSC->bVertTileBoundary)
+                    if (left || hardTileState.isVerticalBoundary)
                         JxrInverseTransformMathApplyAlternatePost2(p1 + 16, p1 + 16 + 16);
 
-                    if (right || pSC->bVertTileBoundary)
+                    if (right || hardTileState.isVerticalBoundary)
                         JxrInverseTransformMathApplyAlternatePost2(p1 + -48, p1 + -48 + 16);
                 }
 
-                if (!leftORright && !pSC->bVertTileBoundary)
+                if (!leftORright && !hardTileState.isVerticalBoundary)
                 {
-                    if (top || pSC->bHoriTileBoundary)
+                    if (top || hardTileState.isHorizontalBoundary)
                         JxrInverseTransformMathApplyAlternatePost2(p1 - 64, p1);
                     else
                         JxrInverseTransformMathApplyAlternatePost2x2(p0 - 16, p0 + 48, p1 - 64, p1);
@@ -1308,23 +1308,23 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                 }
             }
             
-            if ((bottom || pSC->bHoriTileBoundary) && (!leftORright && !pSC->bVertTileBoundary))
+            if ((bottom || hardTileState.isHorizontalBoundary) && (!leftORright && !hardTileState.isVerticalBoundary))
                 JxrInverseTransformMathApplyAlternatePost2(p0 - 16, p0 + 48);
 
-            if ((leftAdjacentColumn || pSC->bOneMBRightVertTB) && (top || pSC->bHoriTileBoundary))
+            if ((leftAdjacentColumn || hardTileState.isOneMacroblockRightOfVerticalBoundary) && (top || hardTileState.isHorizontalBoundary))
                 JxrInverseTransformMathAddCornerPredictionAt(p1, -128, p1[-64]);
 
-            if ((rightAdjacentColumn || pSC->bOneMBLeftVertTB) && (top || pSC->bHoriTileBoundary))
+            if ((rightAdjacentColumn || hardTileState.isOneMacroblockLeftOfVerticalBoundary) && (top || hardTileState.isHorizontalBoundary))
                 pSC->iPredAfter[i][0] = p1[0];
-            if ((right || pSC->bVertTileBoundary) && (top || pSC->bHoriTileBoundary))
+            if ((right || hardTileState.isVerticalBoundary) && (top || hardTileState.isHorizontalBoundary))
                 JxrInverseTransformMathAddCornerPredictionAt(p1, -64, pSC->iPredAfter[i][0]);
 
-            if ((leftAdjacentColumn || pSC->bOneMBRightVertTB) && (bottom || pSC->bHoriTileBoundary))
+            if ((leftAdjacentColumn || hardTileState.isOneMacroblockRightOfVerticalBoundary) && (bottom || hardTileState.isHorizontalBoundary))
                 JxrInverseTransformMathAddCornerPredictionAt(p0, -80, p0[-16]);
 
-            if ((rightAdjacentColumn || pSC->bOneMBLeftVertTB) && (bottom || pSC->bHoriTileBoundary))
+            if ((rightAdjacentColumn || hardTileState.isOneMacroblockLeftOfVerticalBoundary) && (bottom || hardTileState.isHorizontalBoundary))
                 pSC->iPredAfter[i][1] = p0[48];
-            if ((right || pSC->bVertTileBoundary) && (bottom || pSC->bHoriTileBoundary))
+            if ((right || hardTileState.isVerticalBoundary) && (bottom || hardTileState.isHorizontalBoundary))
                 JxrInverseTransformMathAddCornerPredictionAt(p0, -16, pSC->iPredAfter[i][1]);
         }
 
@@ -1337,7 +1337,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
         {
             // Need to delay processing of left column until leftAdjacentColumn = 1 for corner overlap operators
             // Since 422 has no vertical downsampling, no top MB delay of processing is necessary
-            for (j = (left ? 112 : ((leftAdjacentColumn || pSC->bOneMBRightVertTB) ? -80 : -16)); j < ((right || pSC->bVertTileBoundary) ? 48 : 112); j += 64)
+            for (j = (left ? 112 : ((leftAdjacentColumn || hardTileState.isOneMacroblockRightOfVerticalBoundary) ? -80 : -16)); j < ((right || hardTileState.isVerticalBoundary) ? 48 : 112); j += 64)
             {
                 strIDCT4x4Stage1(p0 + j);
             }
@@ -1347,7 +1347,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
         {
             // Need to delay processing of left column until leftAdjacentColumn = 1 for corner overlap operators
             // Since 422 has no vertical downsampling, no top MB delay of processing is necessary
-            for (j = (left ? 64 : ((leftAdjacentColumn || pSC->bOneMBRightVertTB) ? -128 : -64)); j < ((right || pSC->bVertTileBoundary) ? 0 : 64); j += 64)
+            for (j = (left ? 64 : ((leftAdjacentColumn || hardTileState.isOneMacroblockRightOfVerticalBoundary) ? -128 : -64)); j < ((right || hardTileState.isVerticalBoundary) ? 0 : 64); j += 64)
             {
                 strIDCT4x4Stage1(p1 + j + 0);
                 strIDCT4x4Stage1(p1 + j + 16);
@@ -1360,39 +1360,39 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
         if (OL_NONE != olOverlap)
         {
             /* Corner operations */
-            if ((top || pSC->bHoriTileBoundary) && (leftAdjacentColumn || pSC->bOneMBRightVertTB))
+            if ((top || hardTileState.isHorizontalBoundary) && (leftAdjacentColumn || hardTileState.isOneMacroblockRightOfVerticalBoundary))
                 JxrInverseTransformMathApplyAlternatePost4(p1 - 128 + 0, p1 - 128 + 1, p1 - 128 + 2, p1 - 128 + 3);
-            if ((top || pSC->bHoriTileBoundary) && (right || pSC->bVertTileBoundary))
+            if ((top || hardTileState.isHorizontalBoundary) && (right || hardTileState.isVerticalBoundary))
                 JxrInverseTransformMathApplyAlternatePost4(p1 - 59, p1 - 60, p1 - 57, p1 - 58);
-            if ((bottom || pSC->bHoriTileBoundary) && (leftAdjacentColumn || pSC->bOneMBRightVertTB))
+            if ((bottom || hardTileState.isHorizontalBoundary) && (leftAdjacentColumn || hardTileState.isOneMacroblockRightOfVerticalBoundary))
                 JxrInverseTransformMathApplyAlternatePost4(p0 - 128 + 48 + 10, p0 - 128 + 48 + 11, p0 - 128 + 48 + 8, p0 - 128 + 48 + 9);
-            if ((bottom || pSC->bHoriTileBoundary) && (right || pSC->bVertTileBoundary))
+            if ((bottom || hardTileState.isHorizontalBoundary) && (right || hardTileState.isVerticalBoundary))
                 JxrInverseTransformMathApplyAlternatePost4(p0 - 1, p0 - 2, p0 - 3, p0 - 4);
             if (!top)
             {
                 // Need to delay processing of left column until leftAdjacentColumn = 1 for corner overlap operators
-                if (leftAdjacentColumn || pSC->bOneMBRightVertTB) {
+                if (leftAdjacentColumn || hardTileState.isOneMacroblockRightOfVerticalBoundary) {
                     p = p0 + 32 + 10 - 128;
                     JxrInverseTransformMathApplyAlternatePost4(p + 0, p - 2, p + 6, p + 8);
                     JxrInverseTransformMathApplyAlternatePost4(p + 1, p - 1, p + 7, p + 9);
                     p = NULL;
                 }
 
-                if (right || pSC->bVertTileBoundary) {
+                if (right || hardTileState.isVerticalBoundary) {
                     p = p0 + -32 + 14;
                     JxrInverseTransformMathApplyAlternatePost4(p + 0, p - 2, p + 6, p + 8);
                     JxrInverseTransformMathApplyAlternatePost4(p + 1, p - 1, p + 7, p + 9);
                     p = NULL;
                 }
 
-                for (j = (left ? 0 : -128); j < ((right || pSC->bVertTileBoundary) ? -64 : 0); j += 64)
+                for (j = (left ? 0 : -128); j < ((right || hardTileState.isVerticalBoundary) ? -64 : 0); j += 64)
                     strPost4x4Stage1_alternate(p0 + j + 32, 0);
             }
 
             if (!bottom)
             {
                 // Need to delay processing of left column until leftAdjacentColumn = 1 for corner overlap operators
-                if (leftAdjacentColumn || pSC->bOneMBRightVertTB)
+                if (leftAdjacentColumn || hardTileState.isOneMacroblockRightOfVerticalBoundary)
                 {
                     p = p1 + 0 + 10 - 128;
                     JxrInverseTransformMathApplyAlternatePost4(p + 0, p - 2, p + 6, p + 8);
@@ -1403,7 +1403,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                     p = NULL;
                 }
 
-                if (right || pSC->bVertTileBoundary)
+                if (right || hardTileState.isVerticalBoundary)
                 {
                     p = p1 + -64 + 14;
                     JxrInverseTransformMathApplyAlternatePost4(p + 0, p - 2, p + 6, p + 8);
@@ -1414,18 +1414,18 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                     p = NULL;
                 }
 
-                for (j = (left ? 0 : -128); j < ((right || pSC->bVertTileBoundary) ? -64 : 0); j += 64)
+                for (j = (left ? 0 : -128); j < ((right || hardTileState.isVerticalBoundary) ? -64 : 0); j += 64)
                 {
                     strPost4x4Stage1_alternate(p1 + j +  0, 0);
                     strPost4x4Stage1_alternate(p1 + j + 16, 0);
                 }
             }
 
-            if (topORbottom || pSC->bHoriTileBoundary)
+            if (topORbottom || hardTileState.isHorizontalBoundary)
             {
-                if (top || pSC->bHoriTileBoundary) {
+                if (top || hardTileState.isHorizontalBoundary) {
                     p = p1 + 5;
-                    for (j = (left ? 0 : -128); j < ((right || pSC->bVertTileBoundary) ? -64 : 0); j += 64)
+                    for (j = (left ? 0 : -128); j < ((right || hardTileState.isVerticalBoundary) ? -64 : 0); j += 64)
                     {
                         JxrInverseTransformMathApplyAlternatePost4(p + j + 0, p + j - 1, p + j + 59, p + j + 60);
                         JxrInverseTransformMathApplyAlternatePost4(p + j + 2, p + j + 1, p + j + 61, p + j + 62);
@@ -1433,9 +1433,9 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
                     p = NULL;
                 }
 
-                if (bottom || pSC->bHoriTileBoundary) {
+                if (bottom || hardTileState.isHorizontalBoundary) {
                     p = p0 + 48 + 13;
-                    for (j = (left ? 0 : -128); j < ((right || pSC->bVertTileBoundary) ? -64 : 0); j += 64)
+                    for (j = (left ? 0 : -128); j < ((right || hardTileState.isVerticalBoundary) ? -64 : 0); j += 64)
                     {
                         JxrInverseTransformMathApplyAlternatePost4(p + j + 0, p + j - 1, p + j + 59, p + j + 60);
                         JxrInverseTransformMathApplyAlternatePost4(p + j + 2, p + j + 1, p + j + 61, p + j + 62);
@@ -1446,21 +1446,21 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
             else
             {
                 // Need to delay processing of left column until leftAdjacentColumn = 1 for corner overlap operators
-                if (leftAdjacentColumn || pSC->bOneMBRightVertTB)
+                if (leftAdjacentColumn || hardTileState.isOneMacroblockRightOfVerticalBoundary)
                 {
                     j = 0 + 0 - 128;
                     JxrInverseTransformMathApplyAlternatePost4(p0 + j + 48 + 10 + 0, p0 + j + 48 + 10 - 2, p1 + j + 0, p1 + j + 2);
                     JxrInverseTransformMathApplyAlternatePost4(p0 + j + 48 + 10 + 1, p0 + j + 48 + 10 - 1, p1 + j + 1, p1 + j + 3);
                 }
 
-                if (right || pSC->bVertTileBoundary)
+                if (right || hardTileState.isVerticalBoundary)
                 {
                     j = -64 + 4;
                     JxrInverseTransformMathApplyAlternatePost4(p0 + j + 48 + 10 + 0, p0 + j + 48 + 10 - 2, p1 + j + 0, p1 + j + 2);
                     JxrInverseTransformMathApplyAlternatePost4(p0 + j + 48 + 10 + 1, p0 + j + 48 + 10 - 1, p1 + j + 1, p1 + j + 3);
                 }
 
-                for (j = (left ? 0 : -128); j < ((right || pSC->bVertTileBoundary) ? -64 : 0); j += 64)
+                for (j = (left ? 0 : -128); j < ((right || hardTileState.isVerticalBoundary) ? -64 : 0); j += 64)
                     strPost4x4Stage1Split_alternate(p0 + j + 48, p1 + j + 0, 0);
             }
         }
