@@ -66,6 +66,7 @@
 #include "JxrSecondaryPlaneInitializer.h"
 #include "JxrPredictionMath.h"
 #include "JxrInverseTransformMath.h"
+#include "JxrInverseTransformMacroblockGeometry.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -2700,6 +2701,37 @@ static int test_prediction_math_vectors(void)
         JxrPredictionMathSaturateAdaptiveCount(16) == 15;
 }
 
+static int test_inverse_transform_macroblock_geometry_vectors(void)
+{
+    JxrInverseTransformMacroblockGeometry geometry;
+
+    JxrInverseTransformMacroblockGeometryInitialize(&geometry,
+        OL_TWO, YUV_420, 0, 0, 4, 7, 3, 8);
+    if (geometry.overlap != OL_TWO || geometry.colorFormat != YUV_420 ||
+        !geometry.isLeft || geometry.isRight || !geometry.isTop || geometry.isBottom ||
+        !geometry.isTopOrBottom || !geometry.isLeftOrRight ||
+        !geometry.isTopOrLeft || geometry.isBottomOrRight ||
+        geometry.isLeftAdjacentColumn || geometry.isRightAdjacentColumn ||
+        geometry.macroblockWidth != 4 || geometry.macroblockColumn != 0 ||
+        geometry.channelCount != 1 || geometry.thumbnailScale != 8) return 0;
+
+    JxrInverseTransformMacroblockGeometryInitialize(&geometry,
+        OL_ONE, YUV_444, 3, 7, 4, 7, 4, 16);
+    if (geometry.overlap != OL_ONE || geometry.colorFormat != YUV_444 ||
+        geometry.isLeft || geometry.isRight || geometry.isTop || !geometry.isBottom ||
+        !geometry.isTopOrBottom || geometry.isLeftOrRight ||
+        geometry.isTopOrLeft || !geometry.isBottomOrRight ||
+        geometry.isLeftAdjacentColumn || !geometry.isRightAdjacentColumn ||
+        geometry.macroblockWidth != 4 || geometry.macroblockColumn != 3 ||
+        geometry.channelCount != 4 || geometry.thumbnailScale != 16) return 0;
+
+    JxrInverseTransformMacroblockGeometryInitialize(&geometry,
+        OL_NONE, YUV_444, 4, 2, 4, 7, 3, 2);
+    return geometry.isRight && !geometry.isBottom &&
+        geometry.isLeftOrRight && geometry.isBottomOrRight &&
+        !geometry.isRightAdjacentColumn && geometry.channelCount == 3;
+}
+
 static int test_inverse_transform_math_vectors(void)
 {
     PixelI first, second;
@@ -3383,6 +3415,7 @@ int main(int argc, char** argv)
         { "macroblock_cbp_state_vectors", test_macroblock_cbp_state_vectors },
         { "bit_math_vectors", test_bit_math_vectors },
         { "prediction_math_vectors", test_prediction_math_vectors },
+        { "inverse_transform_macroblock_geometry_vectors", test_inverse_transform_macroblock_geometry_vectors },
         { "inverse_transform_math_vectors", test_inverse_transform_math_vectors },
         { "transform_math_dct2x2_vectors", test_transform_math_dct2x2_vectors },
         { "forward_transform_math_vectors", test_forward_transform_math_vectors },

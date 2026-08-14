@@ -30,6 +30,7 @@
 #include "strcodec.h"
 #include "decode.h"
 #include "JxrInverseTransformMath.h"
+#include "JxrInverseTransformMacroblockGeometry.h"
 #include "JxrTransformMath.h"
 static const Int JxrInverseTransformStage2P0FirstOffsets[4] = { -96, -32, -80, -16 };
 static const Int JxrInverseTransformStage2P0SecondOffsets[4] = { 96, 32, 112, 48 };
@@ -276,18 +277,23 @@ Void strPost4x4Stage2Split_alternate(PixelI* p0, PixelI* p1)
 *************************************************************************/
 Int  invTransformMacroblock(CWMImageStrCodec * pSC)
 {
-    const OVERLAP olOverlap = pSC->WMISCP.olOverlap;
-    const COLORFORMAT cfColorFormat = pSC->m_param.cfColorFormat;
+    JxrInverseTransformMacroblockGeometry geometry;
     // const BITDEPTH_BITS bdBitDepth = pSC->WMII.bdBitDepth;
-    const Bool left = (pSC->cColumn == 0), right = (pSC->cColumn == pSC->cmbWidth);
-    const Bool top = (pSC->cRow == 0), bottom = (pSC->cRow == pSC->cmbHeight);
-    const Bool topORbottom = (top || bottom), leftORright = (left || right);
-    const Bool topORleft = (top || left), bottomORright = (bottom || right);
-    const size_t mbWidth = pSC->cmbWidth, mbX = pSC->cColumn;
     PixelI * p = NULL;// * pt = NULL;
     size_t i;
-    const size_t iChannels = (cfColorFormat == YUV_420 || cfColorFormat == YUV_422) ? 1 : pSC->m_param.cNumChannels;
-    const size_t tScale = pSC->m_Dparam->cThumbnailScale;
+    JxrInverseTransformMacroblockGeometryInitialize(&geometry,
+        pSC->WMISCP.olOverlap, pSC->m_param.cfColorFormat,
+        pSC->cColumn, pSC->cRow, pSC->cmbWidth, pSC->cmbHeight,
+        pSC->m_param.cNumChannels, pSC->m_Dparam->cThumbnailScale);
+    const OVERLAP olOverlap = geometry.overlap;
+    const COLORFORMAT cfColorFormat = geometry.colorFormat;
+    const Bool left = geometry.isLeft, right = geometry.isRight;
+    const Bool top = geometry.isTop, bottom = geometry.isBottom;
+    const Bool topORbottom = geometry.isTopOrBottom, leftORright = geometry.isLeftOrRight;
+    const Bool topORleft = geometry.isTopOrLeft, bottomORright = geometry.isBottomOrRight;
+    const size_t mbWidth = geometry.macroblockWidth, mbX = geometry.macroblockColumn;
+    const size_t iChannels = geometry.channelCount;
+    const size_t tScale = geometry.thumbnailScale;
     Int j = 0;
 
     Int qp[MAX_CHANNELS], dcqp[MAX_CHANNELS], iStrength = (1 << pSC->WMII.cPostProcStrength);
@@ -756,20 +762,26 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
 
 Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
 {
-    const OVERLAP olOverlap = pSC->WMISCP.olOverlap;
-    const COLORFORMAT cfColorFormat = pSC->m_param.cfColorFormat;
+    JxrInverseTransformMacroblockGeometry geometry;
     // const BITDEPTH_BITS bdBitDepth = pSC->WMII.bdBitDepth;
-    const Bool left = (pSC->cColumn == 0), right = (pSC->cColumn == pSC->cmbWidth);
-    const Bool top = (pSC->cRow == 0), bottom = (pSC->cRow == pSC->cmbHeight);
-    const Bool topORbottom = (top || bottom), leftORright = (left || right);
-    const Bool topORleft = (top || left), bottomORright = (bottom || right);
-    Bool leftAdjacentColumn = (pSC->cColumn == 1), rightAdjacentColumn = (pSC->cColumn == pSC->cmbWidth - 1);
-    // Bool topAdjacentRow =  (pSC->cRow == 1), bottomAdjacentRow = (pSC->cRow == pSC->cmbHeight - 1);
-    const size_t mbWidth = pSC->cmbWidth;
     PixelI * p = NULL;// * pt = NULL;
     size_t i;
-    const size_t iChannels = (cfColorFormat == YUV_420 || cfColorFormat == YUV_422) ? 1 : pSC->m_param.cNumChannels;
-    const size_t tScale = pSC->m_Dparam->cThumbnailScale;
+    JxrInverseTransformMacroblockGeometryInitialize(&geometry,
+        pSC->WMISCP.olOverlap, pSC->m_param.cfColorFormat,
+        pSC->cColumn, pSC->cRow, pSC->cmbWidth, pSC->cmbHeight,
+        pSC->m_param.cNumChannels, pSC->m_Dparam->cThumbnailScale);
+    const OVERLAP olOverlap = geometry.overlap;
+    const COLORFORMAT cfColorFormat = geometry.colorFormat;
+    const Bool left = geometry.isLeft, right = geometry.isRight;
+    const Bool top = geometry.isTop, bottom = geometry.isBottom;
+    const Bool topORbottom = geometry.isTopOrBottom, leftORright = geometry.isLeftOrRight;
+    const Bool topORleft = geometry.isTopOrLeft, bottomORright = geometry.isBottomOrRight;
+    const Bool leftAdjacentColumn = geometry.isLeftAdjacentColumn;
+    const Bool rightAdjacentColumn = geometry.isRightAdjacentColumn;
+    // Bool topAdjacentRow =  (pSC->cRow == 1), bottomAdjacentRow = (pSC->cRow == pSC->cmbHeight - 1);
+    const size_t mbWidth = geometry.macroblockWidth;
+    const size_t iChannels = geometry.channelCount;
+    const size_t tScale = geometry.thumbnailScale;
     Int j = 0;
 
     Int qp[MAX_CHANNELS], dcqp[MAX_CHANNELS], iStrength = (1 << pSC->WMII.cPostProcStrength);
