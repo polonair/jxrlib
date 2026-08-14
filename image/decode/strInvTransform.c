@@ -31,6 +31,7 @@
 #include "decode.h"
 #include "JxrInverseTransformMath.h"
 #include "JxrInverseTransformMacroblockGeometry.h"
+#include "JxrHardTileBoundaryState.h"
 #include "JxrTransformMath.h"
 static const Int JxrInverseTransformStage2P0FirstOffsets[4] = { -96, -32, -80, -16 };
 static const Int JxrInverseTransformStage2P0SecondOffsets[4] = { 96, 32, 112, 48 };
@@ -787,43 +788,35 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
     Int qp[MAX_CHANNELS], dcqp[MAX_CHANNELS], iStrength = (1 << pSC->WMII.cPostProcStrength);
     // ERR_CODE result = ICERR_OK;
 
-    if (pSC->WMISCP.bUseHardTileBoundaries) {
-        //Add tile location information
-        if (pSC->cColumn == 0) {
-            pSC->bVertTileBoundary = FALSE;
-            pSC->tileY = 0;
-        }
-        pSC->bOneMBLeftVertTB = pSC->bOneMBRightVertTB = FALSE;
-        if(pSC->tileY > 0 && pSC->tileY <= pSC->WMISCP.cNumOfSliceMinus1H && (pSC->cColumn - 1) == pSC->WMISCP.uiTileY[pSC->tileY])
-            pSC->bOneMBRightVertTB = TRUE;
-        if(pSC->tileY < pSC->WMISCP.cNumOfSliceMinus1H && pSC->cColumn == pSC->WMISCP.uiTileY[pSC->tileY + 1]) {
-            pSC->bVertTileBoundary = TRUE;
-            pSC->tileY++;
-        }
-        else 
-            pSC->bVertTileBoundary = FALSE;
-        if(pSC->tileY < pSC->WMISCP.cNumOfSliceMinus1H && (pSC->cColumn + 1) == pSC->WMISCP.uiTileY[pSC->tileY + 1])
-            pSC->bOneMBLeftVertTB = TRUE;
+    {
+        JxrHardTileBoundaryConfiguration hardTileConfiguration;
+        JxrHardTileBoundaryState previousHardTileState;
+        JxrHardTileBoundaryState hardTileState;
 
-        if (pSC->cRow == 0) {
-            pSC->bHoriTileBoundary = FALSE;
-            pSC->tileX = 0;
-        }
-        else if(pSC->mbY != pSC->cRow && pSC->tileX < pSC->WMISCP.cNumOfSliceMinus1V && pSC->cRow == pSC->WMISCP.uiTileX[pSC->tileX + 1]) {
-            pSC->bHoriTileBoundary = TRUE;
-            pSC->tileX++;
-        }
-        else if(pSC->mbY != pSC->cRow)
-            pSC->bHoriTileBoundary = FALSE;
+        hardTileConfiguration.enabled = pSC->WMISCP.bUseHardTileBoundaries;
+        hardTileConfiguration.verticalSliceCountMinusOne = pSC->WMISCP.cNumOfSliceMinus1V;
+        hardTileConfiguration.horizontalSliceCountMinusOne = pSC->WMISCP.cNumOfSliceMinus1H;
+        hardTileConfiguration.verticalSliceColumns = pSC->WMISCP.uiTileY;
+        hardTileConfiguration.horizontalSliceRows = pSC->WMISCP.uiTileX;
+        previousHardTileState.tileX = pSC->tileX;
+        previousHardTileState.tileY = pSC->tileY;
+        previousHardTileState.previousMacroblockX = pSC->mbX;
+        previousHardTileState.previousMacroblockY = pSC->mbY;
+        previousHardTileState.isVerticalBoundary = pSC->bVertTileBoundary;
+        previousHardTileState.isHorizontalBoundary = pSC->bHoriTileBoundary;
+        previousHardTileState.isOneMacroblockLeftOfVerticalBoundary = pSC->bOneMBLeftVertTB;
+        previousHardTileState.isOneMacroblockRightOfVerticalBoundary = pSC->bOneMBRightVertTB;
+        JxrHardTileBoundaryStateCalculate(&hardTileState, &previousHardTileState,
+            &hardTileConfiguration, pSC->cColumn, pSC->cRow);
+        pSC->tileX = hardTileState.tileX;
+        pSC->tileY = hardTileState.tileY;
+        pSC->mbX = hardTileState.previousMacroblockX;
+        pSC->mbY = hardTileState.previousMacroblockY;
+        pSC->bVertTileBoundary = hardTileState.isVerticalBoundary;
+        pSC->bHoriTileBoundary = hardTileState.isHorizontalBoundary;
+        pSC->bOneMBLeftVertTB = hardTileState.isOneMacroblockLeftOfVerticalBoundary;
+        pSC->bOneMBRightVertTB = hardTileState.isOneMacroblockRightOfVerticalBoundary;
     }
-    else {
-        pSC->bVertTileBoundary = FALSE;
-        pSC->bHoriTileBoundary = FALSE;
-        pSC->bOneMBLeftVertTB = FALSE;
-        pSC->bOneMBRightVertTB = FALSE;
-    }
-    pSC->mbX = pSC->cColumn, pSC->mbY = pSC->cRow;
-
     if(pSC->WMII.cPostProcStrength > 0){
         // threshold for post processing
         for(i = 0; i < iChannels; i ++){

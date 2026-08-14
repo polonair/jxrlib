@@ -67,6 +67,7 @@
 #include "JxrPredictionMath.h"
 #include "JxrInverseTransformMath.h"
 #include "JxrInverseTransformMacroblockGeometry.h"
+#include "JxrHardTileBoundaryState.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -2732,6 +2733,61 @@ static int test_inverse_transform_macroblock_geometry_vectors(void)
         !geometry.isRightAdjacentColumn && geometry.channelCount == 3;
 }
 
+static int test_hard_tile_boundary_state_vectors(void)
+{
+    static const U32 verticalColumns[] = { 0, 3, 6, 10 };
+    static const U32 horizontalRows[] = { 0, 2, 5 };
+    JxrHardTileBoundaryConfiguration configuration;
+    JxrHardTileBoundaryState previous;
+    JxrHardTileBoundaryState result;
+
+    memset(&configuration, 0, sizeof(configuration));
+    memset(&previous, 0, sizeof(previous));
+    configuration.enabled = FALSE;
+    previous.tileX = 3;
+    previous.tileY = 2;
+    previous.isVerticalBoundary = TRUE;
+    previous.isHorizontalBoundary = TRUE;
+    previous.isOneMacroblockLeftOfVerticalBoundary = TRUE;
+    previous.isOneMacroblockRightOfVerticalBoundary = TRUE;
+    JxrHardTileBoundaryStateCalculate(&result, &previous, &configuration, 4, 5);
+    if (result.tileX != 3 || result.tileY != 2 || result.isVerticalBoundary ||
+        result.isHorizontalBoundary || result.isOneMacroblockLeftOfVerticalBoundary ||
+        result.isOneMacroblockRightOfVerticalBoundary ||
+        result.previousMacroblockX != 4 || result.previousMacroblockY != 5) return 0;
+
+    configuration.enabled = TRUE;
+    configuration.verticalSliceCountMinusOne = 2;
+    configuration.horizontalSliceCountMinusOne = 3;
+    configuration.verticalSliceColumns = verticalColumns;
+    configuration.horizontalSliceRows = horizontalRows;
+    previous.tileX = 1;
+    previous.tileY = 2;
+    previous.previousMacroblockY = 4;
+    previous.isVerticalBoundary = TRUE;
+    previous.isHorizontalBoundary = TRUE;
+    JxrHardTileBoundaryStateCalculate(&result, &previous, &configuration, 0, 0);
+    if (result.tileX != 0 || result.tileY != 0 || result.isVerticalBoundary ||
+        result.isHorizontalBoundary || result.isOneMacroblockLeftOfVerticalBoundary ||
+        result.isOneMacroblockRightOfVerticalBoundary) return 0;
+
+    previous = result;
+    previous.previousMacroblockY = 1;
+    JxrHardTileBoundaryStateCalculate(&result, &previous, &configuration, 3, 2);
+    if (!result.isVerticalBoundary || !result.isHorizontalBoundary ||
+        result.tileY != 1 || result.tileX != 1 ||
+        result.isOneMacroblockLeftOfVerticalBoundary ||
+        result.isOneMacroblockRightOfVerticalBoundary) return 0;
+
+    previous = result;
+    previous.previousMacroblockY = 2;
+    JxrHardTileBoundaryStateCalculate(&result, &previous, &configuration, 4, 2);
+    return !result.isVerticalBoundary && result.isHorizontalBoundary &&
+        !result.isOneMacroblockLeftOfVerticalBoundary &&
+        result.isOneMacroblockRightOfVerticalBoundary &&
+        result.tileY == 1 && result.tileX == 1;
+}
+
 static int test_inverse_transform_math_vectors(void)
 {
     PixelI first, second;
@@ -3416,6 +3472,7 @@ int main(int argc, char** argv)
         { "bit_math_vectors", test_bit_math_vectors },
         { "prediction_math_vectors", test_prediction_math_vectors },
         { "inverse_transform_macroblock_geometry_vectors", test_inverse_transform_macroblock_geometry_vectors },
+        { "hard_tile_boundary_state_vectors", test_hard_tile_boundary_state_vectors },
         { "inverse_transform_math_vectors", test_inverse_transform_math_vectors },
         { "transform_math_dct2x2_vectors", test_transform_math_dct2x2_vectors },
         { "forward_transform_math_vectors", test_forward_transform_math_vectors },
