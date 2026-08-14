@@ -39,6 +39,7 @@
 #include "JxrInverseTransformPlaneBuffers.h"
 #include "JxrInverseTransformPlaneContext.h"
 #include "JxrInverseTransformPlaneStage2.h"
+#include "JxrInverseTransformPlaneStage2Alternate.h"
 #include "JxrInverseTransformPlaneStage1Normal.h"
 #include "JxrInverseTransformPlaneStage1Alternate.h"
 #include "JxrTransformMath.h"
@@ -794,53 +795,8 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
 
         //================================
         // second level inverse overlap
-        if (OL_TWO == olOverlap)
-        {
-            /* Corner operations */
-            if ((boundaryContext.hasTopBoundary) && (boundaryContext.hasLeftBoundary))
-                JxrInverseTransformMathApplyAlternatePost4(p1 + 0, p1 + 64, p1 + 0 + 16, p1 + 64 + 16);
-            if ((boundaryContext.hasTopBoundary) && (boundaryContext.hasRightBoundary))
-                JxrInverseTransformMathApplyAlternatePost4(p1 - 128, p1 - 64, p1 - 128 + 16, p1 - 64 + 16);
-            if ((boundaryContext.hasBottomBoundary) && (boundaryContext.hasLeftBoundary))
-                JxrInverseTransformMathApplyAlternatePost4(p0 + 32, p0 + 96, p0 + 32 + 16, p0 + 96 + 16);
-            if ((boundaryContext.hasBottomBoundary) && (boundaryContext.hasRightBoundary))
-                JxrInverseTransformMathApplyAlternatePost4(p0 - 96, p0 - 32, p0 - 96 + 16, p0 - 32 + 16);
-            if ((boundaryContext.hasLeftOrRightBoundary) && (!boundaryContext.hasTopOrBottomBoundary))
-            {
-                if (boundaryContext.hasLeftBoundary) {
-                    j = 0;
-                    JxrInverseTransformMathApplyAlternatePost4(p0 + j + 32, p0 + j +  48, p1 + j +  0, p1 + j + 16);
-                    JxrInverseTransformMathApplyAlternatePost4(p0 + j + 96, p0 + j + 112, p1 + j + 64, p1 + j + 80);
-                }
-                if (boundaryContext.hasRightBoundary) {
-                    j = -128;
-                    JxrInverseTransformMathApplyAlternatePost4(p0 + j + 32, p0 + j +  48, p1 + j +  0, p1 + j + 16);
-                    JxrInverseTransformMathApplyAlternatePost4(p0 + j + 96, p0 + j + 112, p1 + j + 64, p1 + j + 80);
-                }
-            }
-
-            if (!leftORright)
-            {
-                if ((boundaryContext.hasTopOrBottomBoundary) && !boundaryContext.isVerticalTileBoundary)
-                {
-                    if (boundaryContext.hasTopBoundary) {
-                        p = p1;
-                        JxrInverseTransformMathApplyAlternatePost4(p - 128, p - 64, p +  0, p + 64);
-                        JxrInverseTransformMathApplyAlternatePost4(p - 112, p - 48, p + 16, p + 80);
-                        p = NULL;
-                    }
-                    if (boundaryContext.hasBottomBoundary) {
-                        p = p0 + 32;
-                        JxrInverseTransformMathApplyAlternatePost4(p - 128, p - 64, p +  0, p + 64);
-                        JxrInverseTransformMathApplyAlternatePost4(p - 112, p - 48, p + 16, p + 80);
-                        p = NULL;
-                    }
-                }
-                
-                if (!boundaryContext.hasTopOrBottomBoundary && !boundaryContext.isVerticalTileBoundary)
-                    strPost4x4Stage2Split_alternate(p0, p1);
-            }
-        }
+        JxrInverseTransformPlaneStage2AlternateApply(p0, p1, olOverlap,
+            leftORright, &boundaryContext);
 
         if(postProcessParameters.enabled)
             postProcMB(pSC->pPostProcInfo, p0, p1, hardTileState.previousMacroblockX, i, planeContext.directCurrentQuantizer); // second stage deblocking
