@@ -222,3 +222,61 @@ Void JxrInverseTransformMathApplyAlternateHadamardScale2(
     *second += *first >> 7;
     *second -= *first >> 10;
 }
+
+static Void JxrInverseTransformMathApplyOddOddCore(
+    PixelI* first,
+    PixelI* second,
+    PixelI* third,
+    PixelI* fourth,
+    Int firstRotationRounding,
+    Int secondRotationRounding,
+    Bool negateMiddleOutputs)
+{
+    PixelI firstValue = *first;
+    PixelI secondValue = *second;
+    PixelI thirdValue = *third;
+    PixelI fourthValue = *fourth;
+    PixelI firstHalf;
+    PixelI secondHalf;
+
+    fourthValue += firstValue;
+    thirdValue -= secondValue;
+    firstHalf = fourthValue >> 1;
+    secondHalf = thirdValue >> 1;
+    firstValue -= firstHalf;
+    secondValue += secondHalf;
+
+    firstValue -= (secondValue * 3 + firstRotationRounding) >> 3;
+    secondValue += (firstValue * 3 + secondRotationRounding) >> 2;
+    firstValue -= (secondValue * 3 + 4) >> 3;
+
+    secondValue -= secondHalf;
+    firstValue += firstHalf;
+    thirdValue += secondValue;
+    fourthValue -= firstValue;
+
+    *first = firstValue;
+    *second = negateMiddleOutputs ? -secondValue : secondValue;
+    *third = negateMiddleOutputs ? -thirdValue : thirdValue;
+    *fourth = fourthValue;
+}
+
+Void JxrInverseTransformMathApplyOddOdd(
+    PixelI* first,
+    PixelI* second,
+    PixelI* third,
+    PixelI* fourth)
+{
+    JxrInverseTransformMathApplyOddOddCore(
+        first, second, third, fourth, 3, 3, TRUE);
+}
+
+Void JxrInverseTransformMathApplyOddOddPost(
+    PixelI* first,
+    PixelI* second,
+    PixelI* third,
+    PixelI* fourth)
+{
+    JxrInverseTransformMathApplyOddOddCore(
+        first, second, third, fourth, 6, 2, FALSE);
+}

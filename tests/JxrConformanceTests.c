@@ -2767,7 +2767,15 @@ static int test_inverse_transform_math_vectors(void)
 
     topLeft = 1000; topRight = 1000;
     JxrInverseTransformMathApplyAlternateHadamardScale2(&topLeft, &topRight);
-    return topLeft == 2000 && topRight == 389;
+    if (topLeft != 2000 || topRight != 389) return 0;
+
+    topLeft = 10; topRight = 20; bottomLeft = 30; bottomRight = 40;
+    JxrInverseTransformMathApplyOddOdd(&topLeft, &topRight, &bottomLeft, &bottomRight);
+    if (topLeft != -2 || topRight != -2 || bottomLeft != -12 || bottomRight != 52) return 0;
+
+    topLeft = 10; topRight = 20; bottomLeft = 30; bottomRight = 40;
+    JxrInverseTransformMathApplyOddOddPost(&topLeft, &topRight, &bottomLeft, &bottomRight);
+    return topLeft == -2 && topRight == 1 && bottomLeft == 11 && bottomRight == 52;
 }
 
 static int test_transform_math_dct2x2_vectors(void)

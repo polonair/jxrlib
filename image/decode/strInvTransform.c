@@ -428,68 +428,14 @@ static Void strHSTdec(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
 /** Kron(Rotate(pi/8), Rotate(pi/8)) **/
 static Void invOddOdd(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
 {
-    PixelI a, b, c, d, t1, t2;
-    a = *pa;
-    b = *pb;
-    c = *pc;
-    d = *pd;
-
-    /** butterflies **/
-    d += a;
-    c -= b;
-    a -= (t1 = d >> 1);
-    b += (t2 = c >> 1);
-
-    /** rotate pi/4 **/
-    a -= (b * 3 + 3) >> 3;
-    b += (a * 3 + 3) >> 2;
-    a -= (b * 3 + 4) >> 3;
-
-    /** butterflies **/
-    b -= t2;
-    a += t1;
-    c += b;
-    d -= a;
-
-    /** sign flips **/
-    *pa = a;
-    *pb = -b;
-    *pc = -c;
-    *pd = d;
+    JxrInverseTransformMathApplyOddOdd(pa, pb, pc, pd);
 }
 
 /** Kron(Rotate(pi/8), Rotate(pi/8)) **/
 static Void invOddOddPost(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
 {
-    PixelI a, b, c, d, t1, t2;
-    a = *pa;
-    b = *pb;
-    c = *pc;
-    d = *pd;
-
-    /** butterflies **/
-    d += a;
-    c -= b;
-    a -= (t1 = d >> 1);
-    b += (t2 = c >> 1);
-
-    /** rotate pi/4 **/
-    a -= (b * 3 + 6) >> 3;
-    b += (a * 3 + 2) >> 2;
-    a -= (b * 3 + 4) >> 3;
-
-    /** butterflies **/
-    b -= t2;
-    a += t1;
-    c += b;
-    d -= a;
-
-    *pa = a;
-    *pb = b;
-    *pc = c;
-    *pd = d;
+    JxrInverseTransformMathApplyOddOddPost(pa, pb, pc, pd);
 }
-
 
 /** Kron(Rotate(-pi/8), [1 1; 1 -1]/sqrt(2)) **/
 /** [D C A B] => [a b c d] **/
