@@ -39,6 +39,7 @@
 #include "JxrInverseTransformPlaneBuffers.h"
 #include "JxrInverseTransformPlaneContext.h"
 #include "JxrInverseTransformPlaneStage2.h"
+#include "JxrInverseTransformPlaneStage2Normal.h"
 #include "JxrInverseTransformPlaneStage2Alternate.h"
 #include "JxrInverseTransformPlaneStage1Normal.h"
 #include "JxrInverseTransformPlaneStage1Alternate.h"
@@ -295,7 +296,6 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
     JxrInverseTransformMacroblockGeometry geometry;
     JxrInverseTransformPlanePlan planePlan;
     // const BITDEPTH_BITS bdBitDepth = pSC->WMII.bdBitDepth;
-    PixelI * p = NULL;// * pt = NULL;
     size_t i;
     JxrInverseTransformMacroblockGeometryInitialize(&geometry,
         pSC->WMISCP.olOverlap, pSC->m_param.cfColorFormat,
@@ -313,7 +313,6 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
     JxrInverseTransformPlanePlanInitialize(&planePlan,
         cfColorFormat, iChannels,
         tScale);
-    Int j = 0;
 
     JxrInversePostProcessParameters postProcessParameters;
     // ERR_CODE result = ICERR_OK;
@@ -361,30 +360,7 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
 
         //================================
         // second level inverse overlap
-        if (OL_TWO == olOverlap)
-        {
-            if (leftORright && (!topORbottom))
-            {
-                j = left ? 0 : -128;
-                JxrInverseTransformMathApplyPost4(p0 + j + 32, p0 + j +  48, p1 + j +  0, p1 + j + 16);
-                JxrInverseTransformMathApplyPost4(p0 + j + 96, p0 + j + 112, p1 + j + 64, p1 + j + 80);
-            }
-
-            if (!leftORright)
-            {
-                if (topORbottom)
-                {
-                    p = top ? p1 : p0 + 32;
-                    JxrInverseTransformMathApplyPost4(p - 128, p - 64, p +  0, p + 64);
-                    JxrInverseTransformMathApplyPost4(p - 112, p - 48, p + 16, p + 80);
-                    p = NULL;
-                }
-                else
-                {
-                    strPost4x4Stage2Split(p0, p1);
-                }
-            }
-        }
+        JxrInverseTransformPlaneStage2NormalApply(p0, p1, &geometry);
 
         if(postProcessParameters.enabled)
             postProcMB(pSC->pPostProcInfo, p0, p1, mbX, i, planeContext.directCurrentQuantizer); // second stage deblocking

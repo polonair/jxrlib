@@ -225,6 +225,7 @@
     <ClCompile Include="..\decode\JxrInverseTransformPlaneBuffers.c" />
     <ClCompile Include="..\decode\JxrInverseTransformPlaneContext.c" />
     <ClCompile Include="..\decode\JxrInverseTransformPlaneStage2.c" />
+    <ClCompile Include="..\decode\JxrInverseTransformPlaneStage2Normal.c" />
     <ClCompile Include="..\decode\JxrInverseTransformPlaneStage2Alternate.c" />
     <ClCompile Include="..\decode\JxrInverseTransformPlaneStage1Normal.c" />
     <ClCompile Include="..\decode\JxrInverseTransformPlaneStage1Alternate.c" />
