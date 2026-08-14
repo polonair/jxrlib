@@ -30,6 +30,7 @@
 #include "strcodec.h"
 #include "decode.h"
 #include "JxrInverseTransformMath.h"
+#include "JxrTransformMath.h"
 
 /** local functions **/
 
@@ -48,7 +49,7 @@
 Void strIDCT4x4Stage1(PixelI* p)
 {
     /** top left corner, butterfly => butterfly **/
-    strDCT2x2up(p + 0, p + 1, p + 2, p + 3);
+    JxrTransformMathApplyDct2x2Up(p + 0, p + 1, p + 2, p + 3);
 
     /** top right corner, -pi/8 rotation => butterfly **/
     JxrInverseTransformMathApplyOdd(p + 5, p + 4, p + 7, p + 6);
@@ -61,7 +62,7 @@ Void strIDCT4x4Stage1(PixelI* p)
     
     /** butterfly **/
     //FOURBUTTERFLY(p, 0, 4, 8, 12, 1, 5, 9, 13, 2, 6, 10, 14, 3, 7, 11, 15);
-    strTransformApplyFourButterfly(p, JxrTransformFirstStageFourButterflyOffsets);
+    JxrTransformMathApplyFourButterfly(p, JxrTransformFirstStageFourButterflyOffsets);
 }
 
 Void strIDCT4x4Stage2(PixelI* p)
@@ -76,10 +77,10 @@ Void strIDCT4x4Stage2(PixelI* p)
     JxrInverseTransformMathApplyOddOdd(p + 160, p + 224, p + 176, p + 240);
 
     /** top left corner, butterfly => butterfly **/
-    strDCT2x2up(p + 0, p + 64, p + 16, p + 80);
+    JxrTransformMathApplyDct2x2Up(p + 0, p + 64, p + 16, p + 80);
     
     /** butterfly **/
-    strTransformApplyFourButterfly(p, JxrTransformSecondStageFourButterflyOffsets);
+    JxrTransformMathApplyFourButterfly(p, JxrTransformSecondStageFourButterflyOffsets);
 }
 
 Void strNormalizeDec(PixelI* p, Bool bChroma)
@@ -155,7 +156,7 @@ Void strPost4x4Stage1Split(PixelI *p0, PixelI *p1, Int iOffset, Int iHPQP, Bool 
 
     /* Apply the 2x2 DCT to each of the four aligned columns. */
     for (column = 0; column < 4; ++column) {
-        strDCT2x2dn(p0 + column, p2 + column, p1 + column, p3 + column);
+        JxrTransformMathApplyDct2x2Down(p0 + column, p2 + column, p1 + column, p3 + column);
     }
 
     /* Transform the bottom-right corner as one 4-point operation. */
@@ -204,7 +205,7 @@ Void strPost4x4Stage1Split_alternate(PixelI *p0, PixelI *p1, Int iOffset)
 
     /* Apply the 2x2 DCT to each of the four aligned columns. */
     for (column = 0; column < 4; ++column) {
-        strDCT2x2dn(p0 + column, p2 + column, p1 + column, p3 + column);
+        JxrTransformMathApplyDct2x2Down(p0 + column, p2 + column, p1 + column, p3 + column);
     }
 
     /* Transform the bottom-right corner as one 4-point operation. */
@@ -256,7 +257,7 @@ Void strPost4x4Stage2Split(PixelI* p0, PixelI* p1)
 
     /* Apply the 2x2 DCT to each logical column in its legacy scan order. */
     for (column = 0; column < 4; ++column) {
-        strDCT2x2dn(
+        JxrTransformMathApplyDct2x2Down(
             p0 + p0FirstOffsets[column], p0 + p0SecondOffsets[column],
             p1 + p1FirstOffsets[column], p1 + p1SecondOffsets[column]);
     }
@@ -290,7 +291,7 @@ Void strPost4x4Stage2Split_alternate(PixelI* p0, PixelI* p1)
 
     /* Apply the 2x2 DCT to each logical column in its legacy scan order. */
     for (column = 0; column < 4; ++column) {
-        strDCT2x2dn(
+        JxrTransformMathApplyDct2x2Down(
             p0 + p0FirstOffsets[column], p0 + p0SecondOffsets[column],
             p1 + p1FirstOffsets[column], p1 + p1SecondOffsets[column]);
     }
@@ -513,7 +514,7 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
         if (!bottomORright)
         {
             if (!pSC->m_param.bScaledArith) {
-                strDCT2x2dn(p1, p1 + 32, p1 + 16, p1 + 48);
+                JxrTransformMathApplyDct2x2Down(p1, p1 + 32, p1 + 16, p1 + 48);
             }
             else {
                 strDCT2x2dnDec(p1, p1 + 32, p1 + 16, p1 + 48);
@@ -651,8 +652,8 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
             p1[32] += p1[0];
 
             if (!pSC->m_param.bScaledArith) {
-                strDCT2x2dn(p1 +  0, p1 + 64, p1 + 16, p1 +  80);
-                strDCT2x2dn(p1 + 32, p1 + 96, p1 + 48, p1 + 112);
+                JxrTransformMathApplyDct2x2Down(p1 +  0, p1 + 64, p1 + 16, p1 +  80);
+                JxrTransformMathApplyDct2x2Down(p1 + 32, p1 + 96, p1 + 48, p1 + 112);
             }
             else {
                 strDCT2x2dnDec(p1 +  0, p1 + 64, p1 + 16, p1 +  80);
@@ -1092,7 +1093,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
         if (!bottomORright)
         {
             if (!pSC->m_param.bScaledArith) {
-                strDCT2x2dn(p1, p1 + 32, p1 + 16, p1 + 48);
+                JxrTransformMathApplyDct2x2Down(p1, p1 + 32, p1 + 16, p1 + 48);
             }
             else {
                 strDCT2x2dnDec(p1, p1 + 32, p1 + 16, p1 + 48);
@@ -1286,8 +1287,8 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
             p1[32] += p1[0];
 
             if (!pSC->m_param.bScaledArith) {
-                strDCT2x2dn(p1 +  0, p1 + 64, p1 + 16, p1 +  80);
-                strDCT2x2dn(p1 + 32, p1 + 96, p1 + 48, p1 + 112);
+                JxrTransformMathApplyDct2x2Down(p1 +  0, p1 + 64, p1 + 16, p1 +  80);
+                JxrTransformMathApplyDct2x2Down(p1 + 32, p1 + 96, p1 + 48, p1 + 112);
             }
             else {
                 strDCT2x2dnDec(p1 +  0, p1 + 64, p1 + 16, p1 +  80);
