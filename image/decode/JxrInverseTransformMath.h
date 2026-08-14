@@ -5,8 +5,14 @@
 
 Void JxrInverseTransformMathRotateHalf(PixelI* first, PixelI* second);
 Void JxrInverseTransformMathRotateThreeEighths(PixelI* first, PixelI* second);
-Void JxrInverseTransformMathAddCornerPrediction(PixelI* target, PixelI prediction);
-Void JxrInverseTransformMathSubtractCornerPrediction(PixelI* target, PixelI prediction);
+Void JxrInverseTransformMathAddCornerPredictionAt(
+    PixelI* samples,
+    Int targetOffset,
+    PixelI prediction);
+Void JxrInverseTransformMathSubtractCornerPredictionAt(
+    PixelI* samples,
+    Int targetOffset,
+    PixelI prediction);
 Void JxrInverseTransformMathNormalizeBlock(
     PixelI* samples,
     Bool chroma,

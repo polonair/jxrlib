@@ -2717,11 +2717,14 @@ static int test_inverse_transform_math_vectors(void)
     first = -10; second = 5;
     JxrInverseTransformMathRotateThreeEighths(&first, &second);
     if (first != -12 || second != 1) return 0;
-    first = 10;
-    JxrInverseTransformMathAddCornerPrediction(&first, 6);
-    if (first != 16) return 0;
-    JxrInverseTransformMathSubtractCornerPrediction(&first, 9);
-    if (first != 7) return 0;
+    {
+        PixelI cornerSamples[3] = { 10, 20, 30 };
+
+        JxrInverseTransformMathAddCornerPredictionAt(cornerSamples + 1, -1, 6);
+        if (cornerSamples[0] != 16 || cornerSamples[1] != 20 || cornerSamples[2] != 30) return 0;
+        JxrInverseTransformMathSubtractCornerPredictionAt(cornerSamples, 2, 9);
+        if (cornerSamples[0] != 16 || cornerSamples[1] != 20 || cornerSamples[2] != 21) return 0;
+    }
     {
         PixelI samples[256];
         Int sampleIndex;
