@@ -110,7 +110,18 @@ Void strNormalizeDec(PixelI* p, Bool bChroma)
   ( 5)( 4)|( 0+64) (1+64) p1 ( 5)( 4)|(64)(65)
   ( 7)( 6)|( 2+64) (3+64)    ( 7)( 6)|(66)(67)
 *****************************************************************************************/
-Void strPost4x4Stage1Split(PixelI *p0, PixelI *p1, Int iOffset, Int iHPQP, Bool bHPAbsent)
+typedef enum JxrInverseTransformStage1Mode {
+    JxrInverseTransformStage1Normal,
+    JxrInverseTransformStage1Alternate
+} JxrInverseTransformStage1Mode;
+
+static Void JxrInverseTransformApplyStage1Split(
+    PixelI *p0,
+    PixelI *p1,
+    Int iOffset,
+    Int iHPQP,
+    Bool bHPAbsent,
+    JxrInverseTransformStage1Mode mode)
 {
     Int column;
     Int directCurrent[4];
@@ -135,12 +146,23 @@ Void strPost4x4Stage1Split(PixelI *p0, PixelI *p1, Int iOffset, Int iHPQP, Bool 
     JxrInverseTransformMathRotateHalf(&p2[1], &p2[3]);
     JxrInverseTransformMathRotateHalf(&p2[0], &p2[2]);
 
-    /* Complete the first and second Hadamard+scale passes for each column. */
+    /* The first Hadamard+scale pass is the only transform difference by mode. */
     for (column = 0; column < 4; ++column) {
-        JxrInverseTransformMathApplyHadamardScale2(p0 + column, p3 + column);
+        if (mode == JxrInverseTransformStage1Alternate) {
+            JxrInverseTransformMathApplyAlternateHadamardScale2(p0 + column, p3 + column);
+        }
+        else {
+            JxrInverseTransformMathApplyHadamardScale2(p0 + column, p3 + column);
+        }
     }
+
+    /* The second Hadamard+scale pass is shared by both modes. */
     for (column = 0; column < 4; ++column) {
         JxrInverseTransformMathApplyHadamardScale4(p0 + column, p2 + column, p1 + column, p3 + column);
+    }
+
+    if (mode == JxrInverseTransformStage1Alternate) {
+        return;
     }
 
     /* Compute all direct-current values before any compensation changes samples. */
@@ -156,6 +178,13 @@ Void strPost4x4Stage1Split(PixelI *p0, PixelI *p1, Int iOffset, Int iHPQP, Bool 
             directCurrent[column], iHPQP, bHPAbsent);
     }
 }
+
+Void strPost4x4Stage1Split(PixelI *p0, PixelI *p1, Int iOffset, Int iHPQP, Bool bHPAbsent)
+{
+    JxrInverseTransformApplyStage1Split(
+        p0, p1, iOffset, iHPQP, bHPAbsent, JxrInverseTransformStage1Normal);
+}
+
 Void strPost4x4Stage1(PixelI* p, Int iOffset, Int iHPQP, Bool bHPAbsent)
 {
     strPost4x4Stage1Split(p, p + 16, iOffset, iHPQP, bHPAbsent);
@@ -163,40 +192,14 @@ Void strPost4x4Stage1(PixelI* p, Int iOffset, Int iHPQP, Bool bHPAbsent)
 
 Void strPost4x4Stage1Split_alternate(PixelI *p0, PixelI *p1, Int iOffset)
 {
-    Int column;
-    PixelI *p2 = p0 + 72 - iOffset;
-    PixelI *p3 = p1 + 64 - iOffset;
-
-    p0 += 12;
-    p1 += 4;
-
-    /* Apply the 2x2 DCT to each of the four aligned columns. */
-    for (column = 0; column < 4; ++column) {
-        JxrTransformMathApplyDct2x2Down(p0 + column, p2 + column, p1 + column, p3 + column);
-    }
-
-    /* Transform the bottom-right corner as one 4-point operation. */
-    JxrInverseTransformMathApplyOddOddPost(p3 + 0, p3 + 1, p3 + 2, p3 + 3);
-
-    /* Rotate the two anti-diagonal corners. */
-    JxrInverseTransformMathRotateHalf(&p1[2], &p1[3]);
-    JxrInverseTransformMathRotateHalf(&p1[0], &p1[1]);
-    JxrInverseTransformMathRotateHalf(&p2[1], &p2[3]);
-    JxrInverseTransformMathRotateHalf(&p2[0], &p2[2]);
-
-    /* Complete the alternate first and shared second Hadamard+scale passes. */
-    for (column = 0; column < 4; ++column) {
-        JxrInverseTransformMathApplyAlternateHadamardScale2(p0 + column, p3 + column);
-    }
-    for (column = 0; column < 4; ++column) {
-        JxrInverseTransformMathApplyHadamardScale4(p0 + column, p2 + column, p1 + column, p3 + column);
-    }
+    JxrInverseTransformApplyStage1Split(
+        p0, p1, iOffset, 0, FALSE, JxrInverseTransformStage1Alternate);
 }
+
 Void strPost4x4Stage1_alternate(PixelI* p, Int iOffset)
 {
     strPost4x4Stage1Split_alternate(p, p + 16, iOffset);
 }
-
 /*****************************************************************************************
   Input data offsets:
   (15)(14)|(10+32)(11+32) p0 (15)(14)|(42)(43)
