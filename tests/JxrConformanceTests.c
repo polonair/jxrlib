@@ -71,6 +71,7 @@
 #include "JxrInverseTransformBoundaryContext.h"
 #include "JxrInversePostProcessParameters.h"
 #include "JxrInverseHighPassParameters.h"
+#include "JxrInverseTransformPlanePlan.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -2897,6 +2898,23 @@ static int test_inverse_highpass_parameters_vectors(void)
         parameters.quantizers[2] == JXR_INVERSE_DEFAULT_HIGH_PASS_QUANTIZER;
 }
 
+static int test_inverse_transform_plane_plan_vectors(void)
+{
+    JxrInverseTransformPlanePlan plan;
+
+    JxrInverseTransformPlanePlanInitialize(&plan, YUV_444, 3, 1);
+    if (!plan.transformsSamples || plan.fullResolutionChannelCount != 3 ||
+        plan.chroma420ChannelCount != 0 || plan.chroma422ChannelCount != 0) return 0;
+
+    JxrInverseTransformPlanePlanInitialize(&plan, YUV_420, 1, 4);
+    if (!plan.transformsSamples || plan.fullResolutionChannelCount != 1 ||
+        plan.chroma420ChannelCount != 2 || plan.chroma422ChannelCount != 0) return 0;
+
+    JxrInverseTransformPlanePlanInitialize(&plan, YUV_422, 1, 16);
+    return !plan.transformsSamples && plan.fullResolutionChannelCount == 1 &&
+        plan.chroma420ChannelCount == 0 && plan.chroma422ChannelCount == 2;
+}
+
 static int test_inverse_transform_math_vectors(void)
 {
     PixelI first, second;
@@ -3585,6 +3603,7 @@ int main(int argc, char** argv)
         { "inverse_transform_boundary_context_vectors", test_inverse_transform_boundary_context_vectors },
         { "inverse_postprocess_parameters_vectors", test_inverse_postprocess_parameters_vectors },
         { "inverse_highpass_parameters_vectors", test_inverse_highpass_parameters_vectors },
+        { "inverse_transform_plane_plan_vectors", test_inverse_transform_plane_plan_vectors },
         { "inverse_transform_math_vectors", test_inverse_transform_math_vectors },
         { "transform_math_dct2x2_vectors", test_transform_math_dct2x2_vectors },
         { "forward_transform_math_vectors", test_forward_transform_math_vectors },

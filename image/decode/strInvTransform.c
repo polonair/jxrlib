@@ -35,6 +35,7 @@
 #include "JxrInverseTransformBoundaryContext.h"
 #include "JxrInversePostProcessParameters.h"
 #include "JxrInverseHighPassParameters.h"
+#include "JxrInverseTransformPlanePlan.h"
 #include "JxrTransformMath.h"
 static const Int JxrInverseTransformStage2P0FirstOffsets[4] = { -96, -32, -80, -16 };
 static const Int JxrInverseTransformStage2P0SecondOffsets[4] = { 96, 32, 112, 48 };
@@ -282,6 +283,7 @@ Void strPost4x4Stage2Split_alternate(PixelI* p0, PixelI* p1)
 Int  invTransformMacroblock(CWMImageStrCodec * pSC)
 {
     JxrInverseTransformMacroblockGeometry geometry;
+    JxrInverseTransformPlanePlan planePlan;
     // const BITDEPTH_BITS bdBitDepth = pSC->WMII.bdBitDepth;
     PixelI * p = NULL;// * pt = NULL;
     size_t i;
@@ -298,6 +300,9 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
     const size_t mbWidth = geometry.macroblockWidth, mbX = geometry.macroblockColumn;
     const size_t iChannels = geometry.channelCount;
     const size_t tScale = geometry.thumbnailScale;
+    JxrInverseTransformPlanePlanInitialize(&planePlan,
+        cfColorFormat, iChannels,
+        tScale);
     Int j = 0;
 
     JxrInversePostProcessParameters postProcessParameters;
@@ -320,7 +325,7 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
     }
     //================================================================
     // 400_Y, 444_YUV
-    for (i = 0; i < iChannels && tScale < 16; ++i)
+    for (i = 0; i < planePlan.fullResolutionChannelCount && planePlan.transformsSamples; ++i)
     {
         PixelI* const p0 = pSC->p0MBbuffer[i];
         PixelI* const p1 = pSC->p1MBbuffer[i];
@@ -467,7 +472,7 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
 
     //================================================================
     // 420_UV
-    for (i = 0; i < (YUV_420 == cfColorFormat? 2U : 0U) && tScale < 16; ++i)
+    for (i = 0; i < planePlan.chroma420ChannelCount && planePlan.transformsSamples; ++i)
     {
         PixelI* const p0 = pSC->p0MBbuffer[1 + i];//(0 == i ? pSC->pU0 : pSC->pV0);
         PixelI* const p1 = pSC->p1MBbuffer[1 + i];//(0 == i ? pSC->pU1 : pSC->pV1);
@@ -600,7 +605,7 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
 
     //================================================================
     // 422_UV
-    for (i = 0; i < (YUV_422 == cfColorFormat? 2U : 0U) && tScale < 16; ++i)
+    for (i = 0; i < planePlan.chroma422ChannelCount && planePlan.transformsSamples; ++i)
     {
         PixelI* const p0 = pSC->p0MBbuffer[1 + i];//(0 == i ? pSC->pU0 : pSC->pV0);
         PixelI* const p1 = pSC->p1MBbuffer[1 + i];//(0 == i ? pSC->pU1 : pSC->pV1);
@@ -766,6 +771,7 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
 Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
 {
     JxrInverseTransformMacroblockGeometry geometry;
+    JxrInverseTransformPlanePlan planePlan;
     JxrHardTileBoundaryState hardTileState;
     JxrInverseTransformBoundaryContext boundaryContext;
     // const BITDEPTH_BITS bdBitDepth = pSC->WMII.bdBitDepth;
@@ -785,6 +791,9 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
     const size_t mbWidth = geometry.macroblockWidth;
     const size_t iChannels = geometry.channelCount;
     const size_t tScale = geometry.thumbnailScale;
+    JxrInverseTransformPlanePlanInitialize(&planePlan,
+        cfColorFormat, iChannels,
+        tScale);
     Int j = 0;
 
     JxrInversePostProcessParameters postProcessParameters;
@@ -830,7 +839,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
     }
     //================================================================
     // 400_Y, 444_YUV
-    for (i = 0; i < iChannels && tScale < 16; ++i)
+    for (i = 0; i < planePlan.fullResolutionChannelCount && planePlan.transformsSamples; ++i)
     {
         PixelI* const p0 = pSC->p0MBbuffer[i];
         PixelI* const p1 = pSC->p1MBbuffer[i];
@@ -1044,7 +1053,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
 
     //================================================================
     // 420_UV
-    for (i = 0; i < (YUV_420 == cfColorFormat? 2U : 0U) && tScale < 16; ++i)
+    for (i = 0; i < planePlan.chroma420ChannelCount && planePlan.transformsSamples; ++i)
     {
         PixelI* const p0 = pSC->p0MBbuffer[1 + i];//(0 == i ? pSC->pU0 : pSC->pV0);
         PixelI* const p1 = pSC->p1MBbuffer[1 + i];//(0 == i ? pSC->pU1 : pSC->pV1);
@@ -1234,7 +1243,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
 
     //================================================================
     // 422_UV
-    for (i = 0; i < (YUV_422 == cfColorFormat? 2U : 0U) && tScale < 16; ++i)
+    for (i = 0; i < planePlan.chroma422ChannelCount && planePlan.transformsSamples; ++i)
     {
         PixelI* const p0 = pSC->p0MBbuffer[1 + i];//(0 == i ? pSC->pU0 : pSC->pV0);
         PixelI* const p1 = pSC->p1MBbuffer[1 + i];//(0 == i ? pSC->pU1 : pSC->pV1);
