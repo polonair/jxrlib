@@ -36,6 +36,7 @@
 #include "JxrInversePostProcessParameters.h"
 #include "JxrInverseHighPassParameters.h"
 #include "JxrInverseTransformPlanePlan.h"
+#include "JxrInverseTransformPlaneBuffers.h"
 #include "JxrTransformMath.h"
 static const Int JxrInverseTransformStage2P0FirstOffsets[4] = { -96, -32, -80, -16 };
 static const Int JxrInverseTransformStage2P0SecondOffsets[4] = { 96, 32, 112, 48 };
@@ -327,8 +328,11 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
     // 400_Y, 444_YUV
     for (i = 0; i < planePlan.fullResolutionChannelCount && planePlan.transformsSamples; ++i)
     {
-        PixelI* const p0 = pSC->p0MBbuffer[i];
-        PixelI* const p1 = pSC->p1MBbuffer[i];
+        JxrInverseTransformPlaneBuffers planeBuffers;
+        JxrInverseTransformPlaneBuffersResolveFullResolution(&planeBuffers,
+            pSC->p0MBbuffer, pSC->p1MBbuffer, i);
+        PixelI* const p0 = planeBuffers.firstStage;
+        PixelI* const p1 = planeBuffers.secondStage;
 
         const Int iHPQP = highPassParameters.quantizers[i];
 
@@ -474,8 +478,11 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
     // 420_UV
     for (i = 0; i < planePlan.chroma420ChannelCount && planePlan.transformsSamples; ++i)
     {
-        PixelI* const p0 = pSC->p0MBbuffer[1 + i];//(0 == i ? pSC->pU0 : pSC->pV0);
-        PixelI* const p1 = pSC->p1MBbuffer[1 + i];//(0 == i ? pSC->pU1 : pSC->pV1);
+        JxrInverseTransformPlaneBuffers planeBuffers;
+        JxrInverseTransformPlaneBuffersResolveChroma(&planeBuffers,
+            pSC->p0MBbuffer, pSC->p1MBbuffer, i);
+        PixelI* const p0 = planeBuffers.firstStage;
+        PixelI* const p1 = planeBuffers.secondStage;
 
         const Int iHPQP = highPassParameters.quantizers[i];
 
@@ -607,8 +614,11 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
     // 422_UV
     for (i = 0; i < planePlan.chroma422ChannelCount && planePlan.transformsSamples; ++i)
     {
-        PixelI* const p0 = pSC->p0MBbuffer[1 + i];//(0 == i ? pSC->pU0 : pSC->pV0);
-        PixelI* const p1 = pSC->p1MBbuffer[1 + i];//(0 == i ? pSC->pU1 : pSC->pV1);
+        JxrInverseTransformPlaneBuffers planeBuffers;
+        JxrInverseTransformPlaneBuffersResolveChroma(&planeBuffers,
+            pSC->p0MBbuffer, pSC->p1MBbuffer, i);
+        PixelI* const p0 = planeBuffers.firstStage;
+        PixelI* const p1 = planeBuffers.secondStage;
 
         const Int iHPQP = highPassParameters.quantizers[i];
 
@@ -841,8 +851,11 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
     // 400_Y, 444_YUV
     for (i = 0; i < planePlan.fullResolutionChannelCount && planePlan.transformsSamples; ++i)
     {
-        PixelI* const p0 = pSC->p0MBbuffer[i];
-        PixelI* const p1 = pSC->p1MBbuffer[i];
+        JxrInverseTransformPlaneBuffers planeBuffers;
+        JxrInverseTransformPlaneBuffersResolveFullResolution(&planeBuffers,
+            pSC->p0MBbuffer, pSC->p1MBbuffer, i);
+        PixelI* const p0 = planeBuffers.firstStage;
+        PixelI* const p1 = planeBuffers.secondStage;
 
         //================================
         // second level inverse transform
@@ -1055,8 +1068,11 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
     // 420_UV
     for (i = 0; i < planePlan.chroma420ChannelCount && planePlan.transformsSamples; ++i)
     {
-        PixelI* const p0 = pSC->p0MBbuffer[1 + i];//(0 == i ? pSC->pU0 : pSC->pV0);
-        PixelI* const p1 = pSC->p1MBbuffer[1 + i];//(0 == i ? pSC->pU1 : pSC->pV1);
+        JxrInverseTransformPlaneBuffers planeBuffers;
+        JxrInverseTransformPlaneBuffersResolveChroma(&planeBuffers,
+            pSC->p0MBbuffer, pSC->p1MBbuffer, i);
+        PixelI* const p0 = planeBuffers.firstStage;
+        PixelI* const p1 = planeBuffers.secondStage;
 
         //========================================
         // second level inverse transform (420_UV)
@@ -1245,8 +1261,11 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
     // 422_UV
     for (i = 0; i < planePlan.chroma422ChannelCount && planePlan.transformsSamples; ++i)
     {
-        PixelI* const p0 = pSC->p0MBbuffer[1 + i];//(0 == i ? pSC->pU0 : pSC->pV0);
-        PixelI* const p1 = pSC->p1MBbuffer[1 + i];//(0 == i ? pSC->pU1 : pSC->pV1);
+        JxrInverseTransformPlaneBuffers planeBuffers;
+        JxrInverseTransformPlaneBuffersResolveChroma(&planeBuffers,
+            pSC->p0MBbuffer, pSC->p1MBbuffer, i);
+        PixelI* const p0 = planeBuffers.firstStage;
+        PixelI* const p1 = planeBuffers.secondStage;
 
         //========================================
         // second level inverse transform (422_UV)

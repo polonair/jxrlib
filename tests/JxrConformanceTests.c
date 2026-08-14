@@ -72,6 +72,7 @@
 #include "JxrInversePostProcessParameters.h"
 #include "JxrInverseHighPassParameters.h"
 #include "JxrInverseTransformPlanePlan.h"
+#include "JxrInverseTransformPlaneBuffers.h"
 #include "JxrInverseColorTransform.h"
 #include "JxrSampleClipping.h"
 #include "JxrFloatSampleConversion.h"
@@ -2915,6 +2916,27 @@ static int test_inverse_transform_plane_plan_vectors(void)
         plan.chroma420ChannelCount == 0 && plan.chroma422ChannelCount == 2;
 }
 
+static int test_inverse_transform_plane_buffers_vectors(void)
+{
+    PixelI first0[1], first1[1], first2[1];
+    PixelI second0[1], second1[1], second2[1];
+    PixelI* firstPlanes[] = { first0, first1, first2 };
+    PixelI* secondPlanes[] = { second0, second1, second2 };
+    JxrInverseTransformPlaneBuffers buffers;
+
+    JxrInverseTransformPlaneBuffersResolveFullResolution(
+        &buffers, firstPlanes, secondPlanes, 0);
+    if (buffers.firstStage != first0 || buffers.secondStage != second0) return 0;
+
+    JxrInverseTransformPlaneBuffersResolveFullResolution(
+        &buffers, firstPlanes, secondPlanes, 2);
+    if (buffers.firstStage != first2 || buffers.secondStage != second2) return 0;
+
+    JxrInverseTransformPlaneBuffersResolveChroma(
+        &buffers, firstPlanes, secondPlanes, 1);
+    return buffers.firstStage == first2 && buffers.secondStage == second2;
+}
+
 static int test_inverse_transform_math_vectors(void)
 {
     PixelI first, second;
@@ -3604,6 +3626,7 @@ int main(int argc, char** argv)
         { "inverse_postprocess_parameters_vectors", test_inverse_postprocess_parameters_vectors },
         { "inverse_highpass_parameters_vectors", test_inverse_highpass_parameters_vectors },
         { "inverse_transform_plane_plan_vectors", test_inverse_transform_plane_plan_vectors },
+        { "inverse_transform_plane_buffers_vectors", test_inverse_transform_plane_buffers_vectors },
         { "inverse_transform_math_vectors", test_inverse_transform_math_vectors },
         { "transform_math_dct2x2_vectors", test_transform_math_dct2x2_vectors },
         { "forward_transform_math_vectors", test_forward_transform_math_vectors },

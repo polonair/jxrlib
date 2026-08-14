@@ -222,6 +222,7 @@
     <ClCompile Include="..\decode\JxrInversePostProcessParameters.c" />
     <ClCompile Include="..\decode\JxrInverseHighPassParameters.c" />
     <ClCompile Include="..\decode\JxrInverseTransformPlanePlan.c" />
+    <ClCompile Include="..\decode\JxrInverseTransformPlaneBuffers.c" />
     <ClCompile Include="..\decode\JxrInverseColorTransform.c" />
     <ClCompile Include="..\decode\JxrSampleClipping.c" />
     <ClCompile Include="..\decode\JxrFloatSampleConversion.c" />
