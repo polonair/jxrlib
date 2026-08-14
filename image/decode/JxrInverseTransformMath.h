@@ -57,5 +57,10 @@ Void JxrInverseTransformMathApplyOddOddPost(
     PixelI* second,
     PixelI* third,
     PixelI* fourth);
+Void JxrInverseTransformMathApplyOdd(
+    PixelI* first,
+    PixelI* second,
+    PixelI* third,
+    PixelI* fourth);
 
 #endif

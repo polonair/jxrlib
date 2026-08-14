@@ -441,32 +441,7 @@ static Void invOddOddPost(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
 /** [D C A B] => [a b c d] **/
 Void invOdd(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
 {
-    PixelI a, b, c, d;
-    a = *pa;
-    b = *pb;
-    c = *pc;
-    d = *pd;
-
-    /** butterflies **/
-    b += d;
-    a -= c;
-    d -= (b) >> 1;
-    c += (a + 1) >> 1;
-
-    /** rotate pi/8 **/
-    JxrInverseTransformMathRotateThreeEighths(&a, &b);
-    JxrInverseTransformMathRotateThreeEighths(&c, &d);
-
-    /** butterflies **/
-    c -= (b + 1) >> 1;
-    d = ((a + 1) >> 1) - d;
-    b += c;
-    a -= d;
-
-    *pa = a;
-    *pb = b;
-    *pc = c;
-    *pd = d;
+    JxrInverseTransformMathApplyOdd(pa, pb, pc, pd);
 }
 
 /*************************************************************************

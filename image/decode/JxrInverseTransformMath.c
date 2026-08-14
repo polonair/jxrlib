@@ -280,3 +280,33 @@ Void JxrInverseTransformMathApplyOddOddPost(
     JxrInverseTransformMathApplyOddOddCore(
         first, second, third, fourth, 6, 2, FALSE);
 }
+
+Void JxrInverseTransformMathApplyOdd(
+    PixelI* first,
+    PixelI* second,
+    PixelI* third,
+    PixelI* fourth)
+{
+    PixelI firstValue = *first;
+    PixelI secondValue = *second;
+    PixelI thirdValue = *third;
+    PixelI fourthValue = *fourth;
+
+    secondValue += fourthValue;
+    firstValue -= thirdValue;
+    fourthValue -= secondValue >> 1;
+    thirdValue += (firstValue + 1) >> 1;
+
+    JxrInverseTransformMathRotateThreeEighths(&firstValue, &secondValue);
+    JxrInverseTransformMathRotateThreeEighths(&thirdValue, &fourthValue);
+
+    thirdValue -= (secondValue + 1) >> 1;
+    fourthValue = ((firstValue + 1) >> 1) - fourthValue;
+    secondValue += thirdValue;
+    firstValue -= fourthValue;
+
+    *first = firstValue;
+    *second = secondValue;
+    *third = thirdValue;
+    *fourth = fourthValue;
+}
