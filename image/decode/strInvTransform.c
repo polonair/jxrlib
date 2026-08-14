@@ -32,12 +32,6 @@
 #include "JxrInverseTransformMath.h"
 
 /** local functions **/
-static Void invOddOdd(PixelI *, PixelI *, PixelI *, PixelI *);
-static Void strHSTdec(PixelI *, PixelI *, PixelI *, PixelI *);
-static Void invOddOddPost(PixelI *, PixelI *, PixelI *, PixelI *);
-static Void invOdd(PixelI *, PixelI *, PixelI *, PixelI *);
-static Void strHSTdec1(PixelI *, PixelI *);
-static Void strHSTdec1_alternate(PixelI *, PixelI *);
 
 /** IDCT stuff **/
 /** reordering should be combined with zigzag scan **/
@@ -57,13 +51,13 @@ Void strIDCT4x4Stage1(PixelI* p)
     strDCT2x2up(p + 0, p + 1, p + 2, p + 3);
 
     /** top right corner, -pi/8 rotation => butterfly **/
-    invOdd(p + 5, p + 4, p + 7, p + 6);
+    JxrInverseTransformMathApplyOdd(p + 5, p + 4, p + 7, p + 6);
 
     /** bottom left corner, butterfly => -pi/8 rotation **/
-    invOdd(p + 10, p + 8, p + 11, p + 9);
+    JxrInverseTransformMathApplyOdd(p + 10, p + 8, p + 11, p + 9);
 
     /** bottom right corner, -pi/8 rotation => -pi/8 rotation **/
-    invOddOdd(p + 15, p + 14, p + 13, p + 12);
+    JxrInverseTransformMathApplyOddOdd(p + 15, p + 14, p + 13, p + 12);
     
     /** butterfly **/
     //FOURBUTTERFLY(p, 0, 4, 8, 12, 1, 5, 9, 13, 2, 6, 10, 14, 3, 7, 11, 15);
@@ -73,13 +67,13 @@ Void strIDCT4x4Stage1(PixelI* p)
 Void strIDCT4x4Stage2(PixelI* p)
 {
     /** bottom left corner, butterfly => -pi/8 rotation **/
-    invOdd(p + 32, p + 48, p + 96, p + 112);
+    JxrInverseTransformMathApplyOdd(p + 32, p + 48, p + 96, p + 112);
     
     /** top right corner, -pi/8 rotation => butterfly **/
-    invOdd(p + 128, p + 192, p + 144, p + 208);
+    JxrInverseTransformMathApplyOdd(p + 128, p + 192, p + 144, p + 208);
     
     /** bottom right corner, -pi/8 rotation => -pi/8 rotation **/
-    invOddOdd(p + 160, p + 224, p + 176, p + 240);
+    JxrInverseTransformMathApplyOddOdd(p + 160, p + 224, p + 176, p + 240);
 
     /** top left corner, butterfly => butterfly **/
     strDCT2x2up(p + 0, p + 64, p + 16, p + 80);
@@ -165,7 +159,7 @@ Void strPost4x4Stage1Split(PixelI *p0, PixelI *p1, Int iOffset, Int iHPQP, Bool 
     }
 
     /* Transform the bottom-right corner as one 4-point operation. */
-    invOddOddPost(p3 + 0, p3 + 1, p3 + 2, p3 + 3);
+    JxrInverseTransformMathApplyOddOddPost(p3 + 0, p3 + 1, p3 + 2, p3 + 3);
 
     /* Rotate the two anti-diagonal corners. */
     JxrInverseTransformMathRotateHalf(&p1[2], &p1[3]);
@@ -175,10 +169,10 @@ Void strPost4x4Stage1Split(PixelI *p0, PixelI *p1, Int iOffset, Int iHPQP, Bool 
 
     /* Complete the first and second Hadamard+scale passes for each column. */
     for (column = 0; column < 4; ++column) {
-        strHSTdec1(p0 + column, p3 + column);
+        JxrInverseTransformMathApplyHadamardScale2(p0 + column, p3 + column);
     }
     for (column = 0; column < 4; ++column) {
-        strHSTdec(p0 + column, p2 + column, p1 + column, p3 + column);
+        JxrInverseTransformMathApplyHadamardScale4(p0 + column, p2 + column, p1 + column, p3 + column);
     }
 
     /* Compute all direct-current values before any compensation changes samples. */
@@ -214,7 +208,7 @@ Void strPost4x4Stage1Split_alternate(PixelI *p0, PixelI *p1, Int iOffset)
     }
 
     /* Transform the bottom-right corner as one 4-point operation. */
-    invOddOddPost(p3 + 0, p3 + 1, p3 + 2, p3 + 3);
+    JxrInverseTransformMathApplyOddOddPost(p3 + 0, p3 + 1, p3 + 2, p3 + 3);
 
     /* Rotate the two anti-diagonal corners. */
     JxrInverseTransformMathRotateHalf(&p1[2], &p1[3]);
@@ -224,10 +218,10 @@ Void strPost4x4Stage1Split_alternate(PixelI *p0, PixelI *p1, Int iOffset)
 
     /* Complete the alternate first and shared second Hadamard+scale passes. */
     for (column = 0; column < 4; ++column) {
-        strHSTdec1_alternate(p0 + column, p3 + column);
+        JxrInverseTransformMathApplyAlternateHadamardScale2(p0 + column, p3 + column);
     }
     for (column = 0; column < 4; ++column) {
-        strHSTdec(p0 + column, p2 + column, p1 + column, p3 + column);
+        JxrInverseTransformMathApplyHadamardScale4(p0 + column, p2 + column, p1 + column, p3 + column);
     }
 }
 Void strPost4x4Stage1_alternate(PixelI* p, Int iOffset)
@@ -268,7 +262,7 @@ Void strPost4x4Stage2Split(PixelI* p0, PixelI* p1)
     }
 
     /* Transform the bottom-right corner as one 4-point operation. */
-    invOddOddPost(p1 + 0, p1 + 64, p1 + 16, p1 + 80);
+    JxrInverseTransformMathApplyOddOddPost(p1 + 0, p1 + 64, p1 + 16, p1 + 80);
 
     /* Rotate the two anti-diagonal corners. */
     JxrInverseTransformMathRotateHalf(&p0[48], &p0[32]);
@@ -278,10 +272,10 @@ Void strPost4x4Stage2Split(PixelI* p0, PixelI* p1)
 
     /* Complete the first and second Hadamard+scale passes in the same order. */
     for (column = 0; column < 4; ++column) {
-        strHSTdec1(p0 + p0FirstOffsets[column], p1 + p1SecondOffsets[column]);
+        JxrInverseTransformMathApplyHadamardScale2(p0 + p0FirstOffsets[column], p1 + p1SecondOffsets[column]);
     }
     for (column = 0; column < 4; ++column) {
-        strHSTdec(
+        JxrInverseTransformMathApplyHadamardScale4(
             p0 + p0FirstOffsets[column], p1 + p1FirstOffsets[column],
             p0 + p0SecondOffsets[column], p1 + p1SecondOffsets[column]);
     }
@@ -302,7 +296,7 @@ Void strPost4x4Stage2Split_alternate(PixelI* p0, PixelI* p1)
     }
 
     /* Transform the bottom-right corner as one 4-point operation. */
-    invOddOddPost(p1 + 0, p1 + 64, p1 + 16, p1 + 80);
+    JxrInverseTransformMathApplyOddOddPost(p1 + 0, p1 + 64, p1 + 16, p1 + 80);
 
     /* Rotate the two anti-diagonal corners. */
     JxrInverseTransformMathRotateHalf(&p0[48], &p0[32]);
@@ -312,50 +306,14 @@ Void strPost4x4Stage2Split_alternate(PixelI* p0, PixelI* p1)
 
     /* Complete the alternate first and shared second Hadamard+scale passes. */
     for (column = 0; column < 4; ++column) {
-        strHSTdec1_alternate(p0 + p0FirstOffsets[column], p1 + p1SecondOffsets[column]);
+        JxrInverseTransformMathApplyAlternateHadamardScale2(p0 + p0FirstOffsets[column], p1 + p1SecondOffsets[column]);
     }
     for (column = 0; column < 4; ++column) {
-        strHSTdec(
+        JxrInverseTransformMathApplyHadamardScale4(
             p0 + p0FirstOffsets[column], p1 + p1FirstOffsets[column],
             p0 + p0SecondOffsets[column], p1 + p1SecondOffsets[column]);
     }
 }
-/** 
-    Hadamard+Scale transform
-    for some strange reason, breaking up the function into two blocks, strHSTdec1 and strHSTdec
-    seems to work faster
-**/
-static Void strHSTdec1(PixelI *pa, PixelI *pd)
-{
-    JxrInverseTransformMathApplyHadamardScale2(pa, pd);
-}
-static Void strHSTdec1_alternate(PixelI *pa, PixelI *pd)
-{
-    JxrInverseTransformMathApplyAlternateHadamardScale2(pa, pd);
-}
-static Void strHSTdec(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
-{
-    JxrInverseTransformMathApplyHadamardScale4(pa, pb, pc, pd);
-}
-/** Kron(Rotate(pi/8), Rotate(pi/8)) **/
-static Void invOddOdd(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
-{
-    JxrInverseTransformMathApplyOddOdd(pa, pb, pc, pd);
-}
-
-/** Kron(Rotate(pi/8), Rotate(pi/8)) **/
-static Void invOddOddPost(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
-{
-    JxrInverseTransformMathApplyOddOddPost(pa, pb, pc, pd);
-}
-
-/** Kron(Rotate(-pi/8), [1 1; 1 -1]/sqrt(2)) **/
-/** [D C A B] => [a b c d] **/
-Void invOdd(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
-{
-    JxrInverseTransformMathApplyOdd(pa, pb, pc, pd);
-}
-
 /*************************************************************************
   Top-level function to inverse tranform possible part of a macroblock
 *************************************************************************/
