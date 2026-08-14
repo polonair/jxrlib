@@ -39,6 +39,7 @@
 #include "JxrInverseTransformPlaneBuffers.h"
 #include "JxrInverseTransformPlaneContext.h"
 #include "JxrInverseTransformPlaneStage2.h"
+#include "JxrInverseTransformPlaneStage1Normal.h"
 #include "JxrTransformMath.h"
 static const Int JxrInverseTransformStage2P0FirstOffsets[4] = { -96, -32, -80, -16 };
 static const Int JxrInverseTransformStage2P0SecondOffsets[4] = { 96, 32, 112, 48 };
@@ -383,95 +384,9 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
             postProcMB(pSC->pPostProcInfo, p0, p1, mbX, i, planeContext.directCurrentQuantizer); // second stage deblocking
 
         //================================
-        // first level inverse transform
-        if(tScale >= 4) // bypass first level transform for 4:1 and smaller thumbnail
-            continue;
-
-        if (!top)
-        {
-            for (j = (left ? 32 : -96); j < (right ? 32 : 160); j += 64)
-            {
-                strIDCT4x4Stage1(p0 + j +  0);
-                strIDCT4x4Stage1(p0 + j + 16);
-            }
-        }
-
-        if (!bottom)
-        {
-            for (j = (left ? 0 : -128); j < (right ? 0 : 128); j += 64)
-            {
-                strIDCT4x4Stage1(p1 + j +  0);
-                strIDCT4x4Stage1(p1 + j + 16);
-            }
-        }
-
-        //================================
-        // first level inverse overlap
-        if (OL_NONE != olOverlap)
-        {
-            if (leftORright)
-            {
-                j = left ? 0 + 10 : -64 + 14;
-                if (!top)
-                {
-                    p = p0 + 16 + j;
-                    JxrInverseTransformMathApplyPost4(p +  0, p -  2, p +  6, p +  8);
-                    JxrInverseTransformMathApplyPost4(p +  1, p -  1, p +  7, p +  9);
-                    JxrInverseTransformMathApplyPost4(p + 16, p + 14, p + 22, p + 24);
-                    JxrInverseTransformMathApplyPost4(p + 17, p + 15, p + 23, p + 25);
-                    p = NULL;
-                }
-                if (!bottom)
-                {
-                    p = p1 + j;
-                    JxrInverseTransformMathApplyPost4(p + 0, p - 2, p + 6, p + 8);
-                    JxrInverseTransformMathApplyPost4(p + 1, p - 1, p + 7, p + 9);
-                    p = NULL;
-                }
-                if (!topORbottom)
-                {
-                    JxrInverseTransformMathApplyPost4(p0 + 48 + j + 0, p0 + 48 + j - 2, p1 - 10 + j, p1 - 8 + j);
-                    JxrInverseTransformMathApplyPost4(p0 + 48 + j + 1, p0 + 48 + j - 1, p1 -  9 + j, p1 - 7 + j);
-                }
-            }
-
-            if (top)
-            {
-                for (j = (left ? 0 : -192); j < (right ? -64 : 64); j += 64)
-                {
-                    p = p1 + j;
-                    JxrInverseTransformMathApplyPost4(p + 5, p + 4, p + 64, p + 65);
-                    JxrInverseTransformMathApplyPost4(p + 7, p + 6, p + 66, p + 67);
-                    p = NULL;
-
-                    strPost4x4Stage1(p1 + j, 0, iHPQP, planeContext.isHighPassAbsent);
-                }
-            }
-            else if (bottom)
-            {
-                for (j = (left ? 0 : -192); j < (right ? -64 : 64); j += 64)
-                {
-                    strPost4x4Stage1(p0 + 16 + j, 0, iHPQP, planeContext.isHighPassAbsent);
-                    strPost4x4Stage1(p0 + 32 + j, 0, iHPQP, planeContext.isHighPassAbsent);
-
-                    p = p0 + 48 + j;
-                    JxrInverseTransformMathApplyPost4(p + 15, p + 14, p + 74, p + 75);
-                    JxrInverseTransformMathApplyPost4(p + 13, p + 12, p + 72, p + 73);
-                    p = NULL;
-                }
-            }
-            else
-            {
-                for (j = (left ? 0 : -192); j < (right ? -64 : 64); j += 64)
-                {
-                    strPost4x4Stage1(p0 + 16 + j, 0, iHPQP, planeContext.isHighPassAbsent);
-                    strPost4x4Stage1(p0 + 32 + j, 0, iHPQP, planeContext.isHighPassAbsent);
-                    strPost4x4Stage1Split(p0 + 48 + j, p1 + j, 0, iHPQP, planeContext.isHighPassAbsent);
-                    strPost4x4Stage1(p1 + j, 0, iHPQP, planeContext.isHighPassAbsent);
-                }
-            }
-        }
-        
+        JxrInverseTransformPlaneStage1NormalApply(p0, p1, olOverlap,
+            left, right, top, bottom, topORbottom, leftORright,
+            planeContext.highPassQuantizer, planeContext.isHighPassAbsent, tScale);
         if(postProcessParameters.enabled && (!topORleft))
             postProcBlock(pSC->pPostProcInfo, p0, p1, mbX, i, planeContext.lowPassQuantizer); // destairing and first stage deblocking
     }
