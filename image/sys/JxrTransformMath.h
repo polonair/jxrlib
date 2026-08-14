@@ -13,5 +13,8 @@ Void JxrTransformMathApplyDct2x2Up(
     PixelI* second,
     PixelI* third,
     PixelI* fourth);
+Void JxrTransformMathApplyFourButterfly(
+    PixelI* buffer,
+    const Int* offsets);
 
 #endif

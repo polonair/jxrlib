@@ -49,3 +49,20 @@ Void JxrTransformMathApplyDct2x2Up(
 {
     JxrTransformMathApplyDct2x2(first, second, third, fourth, TRUE);
 }
+
+Void JxrTransformMathApplyFourButterfly(
+    PixelI* buffer,
+    const Int* offsets)
+{
+    Int group;
+
+    for (group = 0; group < 4; ++group) {
+        Int offsetIndex = group * 4;
+
+        JxrTransformMathApplyDct2x2Down(
+            &buffer[offsets[offsetIndex]],
+            &buffer[offsets[offsetIndex + 1]],
+            &buffer[offsets[offsetIndex + 2]],
+            &buffer[offsets[offsetIndex + 3]]);
+    }
+}

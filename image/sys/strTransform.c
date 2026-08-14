@@ -67,11 +67,5 @@ Void strTransformAddCornerPrediction(PixelI* target, PixelI prediction)
 
 Void strTransformApplyFourButterfly(PixelI* buffer, const Int* offsets)
 {
-    Int group;
-
-    for (group = 0; group < 4; ++group) {
-        Int index = group * 4;
-        strDCT2x2dn(&buffer[offsets[index]], &buffer[offsets[index + 1]],
-            &buffer[offsets[index + 2]], &buffer[offsets[index + 3]]);
-    }
+    JxrTransformMathApplyFourButterfly(buffer, offsets);
 }

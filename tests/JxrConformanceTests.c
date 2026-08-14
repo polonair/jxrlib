@@ -2808,11 +2808,11 @@ static int test_four_butterfly_vectors(void)
     Int index;
 
     for (index = 0; index < 16; ++index) actual[index] = index - 7;
-    strTransformApplyFourButterfly(actual, JxrTransformFirstStageFourButterflyOffsets);
+    JxrTransformMathApplyFourButterfly(actual, JxrTransformFirstStageFourButterflyOffsets);
     if (memcmp(actual, expected, sizeof(actual)) != 0) return 0;
 
     for (index = 0; index < 256; ++index) secondStageActual[index] = index;
-    strTransformApplyFourButterfly(secondStageActual, JxrTransformSecondStageFourButterflyOffsets);
+    JxrTransformMathApplyFourButterfly(secondStageActual, JxrTransformSecondStageFourButterflyOffsets);
     return secondStageActual[0] == 240 && secondStageActual[192] == -48 &&
         secondStageActual[48] == -192 && secondStageActual[240] == 0 &&
         secondStageActual[64] == 240 && secondStageActual[128] == -48 &&
