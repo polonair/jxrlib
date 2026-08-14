@@ -38,7 +38,6 @@ static Void invOdd(PixelI *, PixelI *, PixelI *, PixelI *);
 static Void strHSTdec(PixelI *, PixelI *, PixelI *, PixelI *);
 static Void strHSTdec1(PixelI *, PixelI *);
 static Void strHSTdec1_alternate(PixelI *, PixelI *);
-static Void strHSTdec1_edge(PixelI *pa, PixelI *pd);
 
 /** IDCT stuff **/
 /** reordering should be combined with zigzag scan **/
@@ -228,27 +227,8 @@ Void strPost4(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
 }
 Void strPost4_alternate(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
 {
-    PixelI a, b, c, d;
-    a = *pa;
-    b = *pb;
-    c = *pc;
-    d = *pd;
-
-    a += d, b += c;
-    d -= ((a + 1) >> 1), c -= ((b + 1) >> 1);
-    
-    strHSTdec1_edge(&a, &d); strHSTdec1_edge(&b, &c);
-    JxrInverseTransformMathRotateHalf(&c, &d);
-    d += ((a + 1) >> 1), c += ((b + 1) >> 1);
-
-    a -= d, b -= c;
-
-    *pa = a;
-    *pb = b;
-    *pc = c;
-    *pd = d;
+    JxrInverseTransformMathApplyAlternatePost4(pa, pb, pc, pd);
 }
-
 /*****************************************************************************************
   Input data offsets:
   (15)(14)|(10+64)(11+64) p0 (15)(14)|(74)(75)
@@ -468,31 +448,6 @@ static Void strHSTdec1_alternate(PixelI *pa, PixelI *pd)
 
     *pa = a;
     *pd = d;
-}
-
-static Void strHSTdec1_edge (PixelI *pa, PixelI *pd)
-{
-    /** different realization as compared to scaling operator for 2D case **/
-    PixelI a, d;
-    a = *pa;
-    d = *pd;
-
-    a += d;
-    d = (a >> 1) - d;
-    a += (d * 3 + 0) >> 3;
-    d += (a * 3 + 0) >> 4;
-
-    //Scaling modification of adding 7/1024 in 2 steps (without multiplication by 7).
-    d += (a >> 7);
-    d -= (a >> 10);
-
-    a += (d * 3 + 4) >> 3;
-    d -= (a >> 1);
-    a += d;
-    // End new operations
-
-    *pa = a;
-    *pd = -d; // Negative sign needed here for 1D scaling case to ensure correct scaling.
 }
 
 static Void strHSTdec(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)

@@ -124,3 +124,54 @@ Void JxrInverseTransformMathApplyPost4(
     *third = thirdValue;
     *fourth = fourthValue;
 }
+
+static Void JxrInverseTransformMathApplyAlternatePost4Edge(
+    PixelI* first,
+    PixelI* fourth)
+{
+    PixelI firstValue = *first;
+    PixelI fourthValue = *fourth;
+
+    firstValue += fourthValue;
+    fourthValue = (firstValue >> 1) - fourthValue;
+    firstValue += (fourthValue * 3) >> 3;
+    fourthValue += (firstValue * 3) >> 4;
+    fourthValue += firstValue >> 7;
+    fourthValue -= firstValue >> 10;
+    firstValue += (fourthValue * 3 + 4) >> 3;
+    fourthValue -= firstValue >> 1;
+    firstValue += fourthValue;
+
+    *first = firstValue;
+    *fourth = -fourthValue;
+}
+
+Void JxrInverseTransformMathApplyAlternatePost4(
+    PixelI* first,
+    PixelI* second,
+    PixelI* third,
+    PixelI* fourth)
+{
+    PixelI firstValue = *first;
+    PixelI secondValue = *second;
+    PixelI thirdValue = *third;
+    PixelI fourthValue = *fourth;
+
+    firstValue += fourthValue;
+    secondValue += thirdValue;
+    fourthValue -= (firstValue + 1) >> 1;
+    thirdValue -= (secondValue + 1) >> 1;
+
+    JxrInverseTransformMathApplyAlternatePost4Edge(&firstValue, &fourthValue);
+    JxrInverseTransformMathApplyAlternatePost4Edge(&secondValue, &thirdValue);
+    JxrInverseTransformMathRotateHalf(&thirdValue, &fourthValue);
+    fourthValue += (firstValue + 1) >> 1;
+    thirdValue += (secondValue + 1) >> 1;
+    firstValue -= fourthValue;
+    secondValue -= thirdValue;
+
+    *first = firstValue;
+    *second = secondValue;
+    *third = thirdValue;
+    *fourth = fourthValue;
+}
