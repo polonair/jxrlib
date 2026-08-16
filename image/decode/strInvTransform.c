@@ -49,6 +49,7 @@
 #include "JxrInverseTransformFullResolutionPlane.h"
 #include "JxrInverseTransformAlternateFullResolutionPlane.h"
 #include "JxrInverseTransformNormalMacroblock.h"
+#include "JxrInverseTransformNormalCodecSetup.h"
 #include "JxrInverseTransformAlternateMacroblock.h"
 #include "JxrInverseTransformChroma422Plane.h"
 #include "JxrInverseTransformChroma420AlternatePlane.h"
@@ -152,52 +153,23 @@ Void strPost4x4Stage2Split_alternate(PixelI* p0, PixelI* p1)
 *************************************************************************/
 Int  invTransformMacroblock(CWMImageStrCodec * pSC)
 {
-    JxrInverseTransformMacroblockGeometry geometry;
-    JxrInverseTransformPlanePlan planePlan;
-    // const BITDEPTH_BITS bdBitDepth = pSC->WMII.bdBitDepth;
-    JxrInverseTransformMacroblockGeometryInitialize(&geometry,
-        pSC->WMISCP.olOverlap, pSC->m_param.cfColorFormat,
-        pSC->cColumn, pSC->cRow, pSC->cmbWidth, pSC->cmbHeight,
-        pSC->m_param.cNumChannels, pSC->m_Dparam->cThumbnailScale);
-    const OVERLAP olOverlap = geometry.overlap;
-    const COLORFORMAT cfColorFormat = geometry.colorFormat;
-    const Bool left = geometry.isLeft;
-    const Bool top = geometry.isTop, bottom = geometry.isBottom;
-    const size_t mbWidth = geometry.macroblockWidth, mbX = geometry.macroblockColumn;
-    const size_t iChannels = geometry.channelCount;
-    const size_t tScale = geometry.thumbnailScale;
-    JxrInverseTransformPlanePlanInitialize(&planePlan,
-        cfColorFormat, iChannels,
-        tScale);
+    JxrInverseTransformNormalCodecSetup setup;
 
-    JxrInversePostProcessParameters postProcessParameters;
-    // ERR_CODE result = ICERR_OK;
+    JxrInverseTransformNormalCodecSetupInitialize(&setup, pSC);
+    if (setup.postProcessParameters.enabled && setup.geometry.isLeft)
+        slideOneMBRow(pSC->pPostProcInfo, pSC->m_param.cNumChannels,
+            setup.geometry.macroblockWidth, setup.geometry.isTop, setup.geometry.isBottom);
 
-    JxrInverseHighPassParameters highPassParameters;
-
-    JxrInversePostProcessParametersInitialize(&postProcessParameters,
-        pSC->WMII.cPostProcStrength, olOverlap, iChannels,
-        pSC->pTile[pSC->cTileColumn].pQuantizerLP,
-        pSC->pTile[pSC->cTileColumn].pQuantizerDC,
-        pSC->MBInfo.iQIndexLP);
-    JxrInverseHighPassParametersInitialize(&highPassParameters,
-        pSC->WMISCP.sbSubband, pSC->m_param.cNumChannels,
-        pSC->pTile[pSC->cTileColumn].pQuantizerHP,
-        pSC->MBInfo.iQIndexHP);
-    if (postProcessParameters.enabled) {
-        if (left) // a new MB row
-            slideOneMBRow(pSC->pPostProcInfo, pSC->m_param.cNumChannels, mbWidth, top, bottom);  // previous current row becomes previous row
-    }
     {
         JxrInverseTransformNormalMacroblock macroblock;
-        macroblock.geometry = &geometry;
-        macroblock.planePlan = &planePlan;
-        macroblock.postProcessParameters = &postProcessParameters;
-        macroblock.highPassParameters = &highPassParameters;
+        macroblock.geometry = &setup.geometry;
+        macroblock.planePlan = &setup.planePlan;
+        macroblock.postProcessParameters = &setup.postProcessParameters;
+        macroblock.highPassParameters = &setup.highPassParameters;
         macroblock.firstStagePlanes = pSC->p0MBbuffer;
         macroblock.secondStagePlanes = pSC->p1MBbuffer;
         memcpy(macroblock.postProcessInfo, pSC->pPostProcInfo, sizeof(macroblock.postProcessInfo));
-        macroblock.macroblockColumn = mbX;
+        macroblock.macroblockColumn = setup.geometry.macroblockColumn;
         macroblock.usesScaledArithmetic = pSC->m_param.bScaledArith;
         JxrInverseTransformNormalMacroblockProcess(&macroblock);
     }
