@@ -48,6 +48,7 @@
 #include "JxrInverseTransformFullResolutionPlane.h"
 #include "JxrInverseTransformAlternateFullResolutionPlane.h"
 #include "JxrInverseTransformNormalMacroblock.h"
+#include "JxrInverseTransformAlternateMacroblock.h"
 #include "JxrInverseTransformChroma422Plane.h"
 #include "JxrInverseTransformChroma420AlternatePlane.h"
 #include "JxrInverseTransformChroma422AlternatePlane.h"
@@ -210,7 +211,6 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
     JxrHardTileBoundaryState hardTileState;
     JxrInverseTransformBoundaryContext boundaryContext;
     // const BITDEPTH_BITS bdBitDepth = pSC->WMII.bdBitDepth;
-    size_t i;
     JxrInverseTransformMacroblockGeometryInitialize(&geometry,
         pSC->WMISCP.olOverlap, pSC->m_param.cfColorFormat,
         pSC->cColumn, pSC->cRow, pSC->cmbWidth, pSC->cmbHeight,
@@ -268,44 +268,20 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
         if (left) // a new MB row
             slideOneMBRow(pSC->pPostProcInfo, pSC->m_param.cNumChannels, mbWidth, top, bottom);  // previous current row becomes previous row
     }
-    //================================================================
-    // 400_Y, 444_YUV
-    for (i = 0; i < planePlan.fullResolutionChannelCount && planePlan.transformsSamples; ++i)
     {
-        JxrInverseTransformPlaneContext planeContext;
-        JxrInverseTransformPlaneContextInitialize(&planeContext,
-            pSC->p0MBbuffer, pSC->p1MBbuffer, FALSE, i,
-            &postProcessParameters, NULL);
-        JxrInverseTransformAlternateFullResolutionPlaneApply(&planeContext,
-            &geometry, &boundaryContext, pSC->m_param.bScaledArith,
-            postProcessParameters.enabled, pSC->pPostProcInfo,
-            hardTileState.previousMacroblockX);
-    }
-
-    //================================================================
-    // 420_UV
-    for (i = 0; i < planePlan.chroma420ChannelCount && planePlan.transformsSamples; ++i)
-    {
-        JxrInverseTransformPlaneContext planeContext;
-        JxrInverseTransformPlaneContextInitialize(&planeContext,
-            pSC->p0MBbuffer, pSC->p1MBbuffer, TRUE, i,
-            &postProcessParameters, NULL);
-        JxrInverseTransformChroma420AlternatePlaneApply(&planeContext, &geometry,
-            &boundaryContext, pSC->m_param.bScaledArith,
-            pSC->iPredBefore[i], pSC->iPredAfter[i]);
-    }
-
-    //================================================================
-    // 422_UV
-    for (i = 0; i < planePlan.chroma422ChannelCount && planePlan.transformsSamples; ++i)
-    {
-        JxrInverseTransformPlaneContext planeContext;
-        JxrInverseTransformPlaneContextInitialize(&planeContext,
-            pSC->p0MBbuffer, pSC->p1MBbuffer, TRUE, i,
-            &postProcessParameters, NULL);
-        JxrInverseTransformChroma422AlternatePlaneApply(&planeContext, &geometry,
-            &boundaryContext, pSC->m_param.bScaledArith,
-            pSC->iPredBefore[i], pSC->iPredAfter[i]);
+        JxrInverseTransformAlternateMacroblock macroblock;
+        macroblock.geometry = &geometry;
+        macroblock.planePlan = &planePlan;
+        macroblock.boundaries = &boundaryContext;
+        macroblock.postProcessParameters = &postProcessParameters;
+        macroblock.firstStagePlanes = pSC->p0MBbuffer;
+        macroblock.secondStagePlanes = pSC->p1MBbuffer;
+        memcpy(macroblock.postProcessInfo, pSC->pPostProcInfo, sizeof(macroblock.postProcessInfo));
+        macroblock.predictionBefore = pSC->iPredBefore;
+        macroblock.predictionAfter = pSC->iPredAfter;
+        macroblock.macroblockColumn = hardTileState.previousMacroblockX;
+        macroblock.usesScaledArithmetic = pSC->m_param.bScaledArith;
+        JxrInverseTransformAlternateMacroblockProcess(&macroblock);
     }
 
     return ICERR_OK;

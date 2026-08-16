@@ -233,6 +233,7 @@
     <ClCompile Include="..\decode\JxrInverseTransformFullResolutionPlane.c" />
     <ClCompile Include="..\decode\JxrInverseTransformAlternateFullResolutionPlane.c" />
     <ClCompile Include="..\decode\JxrInverseTransformNormalMacroblock.c" />
+    <ClCompile Include="..\decode\JxrInverseTransformAlternateMacroblock.c" />
     <ClCompile Include="..\decode\JxrInverseTransformChroma420Plane.c" />
     <ClCompile Include="..\decode\JxrInverseTransformChroma422Plane.c" />
     <ClCompile Include="..\decode\JxrInverseTransformChroma420AlternatePlane.c" />
