@@ -33,6 +33,7 @@
 #include "JxrInverseTransformStages.h"
 #include "JxrInverseTransformMacroblockGeometry.h"
 #include "JxrHardTileBoundaryState.h"
+#include "JxrHardTileCodecStateAdapter.h"
 #include "JxrInverseTransformBoundaryContext.h"
 #include "JxrInversePostProcessParameters.h"
 #include "JxrInverseHighPassParameters.h"
@@ -230,35 +231,8 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
     JxrInversePostProcessParameters postProcessParameters;
     // ERR_CODE result = ICERR_OK;
 
-    {
-        JxrHardTileBoundaryConfiguration hardTileConfiguration;
-        JxrHardTileBoundaryState previousHardTileState;
-
-        hardTileConfiguration.enabled = pSC->WMISCP.bUseHardTileBoundaries;
-        hardTileConfiguration.verticalSliceCountMinusOne = pSC->WMISCP.cNumOfSliceMinus1V;
-        hardTileConfiguration.horizontalSliceCountMinusOne = pSC->WMISCP.cNumOfSliceMinus1H;
-        hardTileConfiguration.verticalSliceColumns = pSC->WMISCP.uiTileY;
-        hardTileConfiguration.horizontalSliceRows = pSC->WMISCP.uiTileX;
-        previousHardTileState.tileX = pSC->tileX;
-        previousHardTileState.tileY = pSC->tileY;
-        previousHardTileState.previousMacroblockX = pSC->mbX;
-        previousHardTileState.previousMacroblockY = pSC->mbY;
-        previousHardTileState.isVerticalBoundary = pSC->bVertTileBoundary;
-        previousHardTileState.isHorizontalBoundary = pSC->bHoriTileBoundary;
-        previousHardTileState.isOneMacroblockLeftOfVerticalBoundary = pSC->bOneMBLeftVertTB;
-        previousHardTileState.isOneMacroblockRightOfVerticalBoundary = pSC->bOneMBRightVertTB;
-        JxrHardTileBoundaryStateCalculate(&hardTileState, &previousHardTileState,
-            &hardTileConfiguration, pSC->cColumn, pSC->cRow);
-        JxrInverseTransformBoundaryContextInitialize(&boundaryContext, &geometry, &hardTileState);
-        pSC->tileX = hardTileState.tileX;
-        pSC->tileY = hardTileState.tileY;
-        pSC->mbX = hardTileState.previousMacroblockX;
-        pSC->mbY = hardTileState.previousMacroblockY;
-        pSC->bVertTileBoundary = hardTileState.isVerticalBoundary;
-        pSC->bHoriTileBoundary = hardTileState.isHorizontalBoundary;
-        pSC->bOneMBLeftVertTB = hardTileState.isOneMacroblockLeftOfVerticalBoundary;
-        pSC->bOneMBRightVertTB = hardTileState.isOneMacroblockRightOfVerticalBoundary;
-    }
+    JxrHardTileCodecStateAdapterUpdate(pSC, &geometry, &hardTileState,
+        &boundaryContext);
     JxrInversePostProcessParametersInitialize(&postProcessParameters,
         pSC->WMII.cPostProcStrength, olOverlap, iChannels,
         pSC->pTile[pSC->cTileColumn].pQuantizerLP,
