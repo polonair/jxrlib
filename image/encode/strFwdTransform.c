@@ -105,41 +105,13 @@ Void strDCT4x4SecondStage(PixelI * p)
 
 Void strNormalizeEnc(PixelI* p, Bool bChroma)
 {
-    int i;
-    if (!bChroma) {
-        //for (i = 0; i < 256; i += 16) {
-        //    p[i] = (p[i] + 1) >> 2;
-        //}
-    }
-    else {
-        for (i = 0; i < 256; i += 16) {
-            p[i] >>= 1;
-        }
-    }
+    JxrForwardTransformMathNormalizeBlock(p, bChroma, 256, 16);
 }
 
 /** 2x2 DCT with pre-scaling - for use on encoder side **/
 Void strDCT2x2dnEnc(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
 {
-    PixelI a, b, c, d, C, t;
-    a = (*pa + 0) >> 1;
-    b = (*pb + 0) >> 1;
-    C = (*pc + 0) >> 1;
-    d = (*pd + 0) >> 1;
-    //PixelI t1, t2;
-  
-    a += d;
-    b -= C;
-    t = ((a - b) >> 1);
-    c = t - d;
-    d = t - C;
-    a -= d;
-    b += c;
-
-    *pa = a;
-    *pb = b;
-    *pc = c;
-    *pd = d;
+    JxrForwardTransformMathApplyDct2x2Down(pa, pb, pc, pd);
 }
 
 /** pre filter stuff **/

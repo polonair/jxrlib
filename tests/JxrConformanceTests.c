@@ -3156,6 +3156,11 @@ static int test_transform_math_dct2x2_vectors(void)
 static int test_forward_transform_math_vectors(void)
 {
     PixelI first, second;
+    PixelI third, fourth;
+    PixelI samples[256];
+    PixelI legacySamples[256];
+    PixelI legacyFirst, legacySecond, legacyThird, legacyFourth;
+    Int sampleIndex;
 
     first = 10; second = 5;
     JxrForwardTransformMathRotateHalf(&first, &second);
@@ -3168,7 +3173,29 @@ static int test_forward_transform_math_vectors(void)
     if (first != 10 || second != 1) return 0;
     first = -10; second = 5;
     JxrForwardTransformMathRotateThreeEighths(&first, &second);
-    return first == -7 && second == 9;
+    if (first != -7 || second != 9) return 0;
+
+    for (sampleIndex = 0; sampleIndex < 256; ++sampleIndex) {
+        samples[sampleIndex] = sampleIndex - 128;
+        legacySamples[sampleIndex] = samples[sampleIndex];
+    }
+    JxrForwardTransformMathNormalizeBlock(samples, FALSE, 256, 16);
+    if (samples[0] != -128 || samples[16] != -112 || samples[17] != -111) return 0;
+    JxrForwardTransformMathNormalizeBlock(samples, TRUE, 256, 16);
+    if (samples[0] != -64 || samples[16] != -56 || samples[240] != 56 ||
+        samples[17] != -111) return 0;
+    strNormalizeEnc(legacySamples, TRUE);
+    if (memcmp(samples, legacySamples, sizeof(samples)) != 0) return 0;
+
+    first = 10; second = 20; third = 30; fourth = 40;
+    JxrForwardTransformMathApplyDct2x2Down(&first, &second, &third, &fourth);
+    if (first != 25 || second != -10 || third != -5 || fourth != 0) return 0;
+    legacyFirst = 10; legacySecond = 20; legacyThird = 30; legacyFourth = 40;
+    strDCT2x2dnEnc(&legacyFirst, &legacySecond, &legacyThird, &legacyFourth);
+    if (legacyFirst != first || legacySecond != second || legacyThird != third || legacyFourth != fourth) return 0;
+    first = -10; second = 5; third = 7; fourth = -3;
+    JxrForwardTransformMathApplyDct2x2Down(&first, &second, &third, &fourth);
+    return first == -1 && second == -2 && third == -1 && fourth == -6;
 }
 
 static int test_inverse_transform_corner_prediction_vectors(void)

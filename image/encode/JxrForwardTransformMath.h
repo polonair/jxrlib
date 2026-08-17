@@ -5,5 +5,15 @@
 
 Void JxrForwardTransformMathRotateHalf(PixelI* first, PixelI* second);
 Void JxrForwardTransformMathRotateThreeEighths(PixelI* first, PixelI* second);
+Void JxrForwardTransformMathNormalizeBlock(
+    PixelI* samples,
+    Bool chroma,
+    Int sampleCount,
+    Int sampleStride);
+Void JxrForwardTransformMathApplyDct2x2Down(
+    PixelI* first,
+    PixelI* second,
+    PixelI* third,
+    PixelI* fourth);
 
 #endif

@@ -14,6 +14,7 @@
   <ItemGroup>
     <ProjectReference Include="..\image\VC14Projects\CommonLib_vc14.vcxproj"><Project>{4b4c055c-170e-4dcf-8f73-bed91be7cfa4}</Project></ProjectReference>
     <ProjectReference Include="..\image\VC14Projects\DecodeLib_vc14.vcxproj"><Project>{F3DED308-7A6F-4B9F-8EDF-AF99DEC8BDE3}</Project></ProjectReference>
+    <ProjectReference Include="..\image\VC14Projects\EncodeLib_vc14.vcxproj"><Project>{F99F7B19-47A6-4677-94F2-93C12CF1FB97}</Project></ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>
