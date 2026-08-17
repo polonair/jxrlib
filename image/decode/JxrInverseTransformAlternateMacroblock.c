@@ -1,7 +1,28 @@
 #include "JxrInverseTransformAlternateMacroblock.h"
+#include "JxrInverseTransformAlternateCodecSetup.h"
+#include "JxrInverseTransformCodecInvocation.h"
 #include "JxrInverseTransformAlternateFullResolutionPlane.h"
 #include "JxrInverseTransformChroma420AlternatePlane.h"
 #include "JxrInverseTransformChroma422AlternatePlane.h"
+
+Void JxrInverseTransformAlternateMacroblockInitialize(
+    JxrInverseTransformAlternateMacroblock* macroblock,
+    const JxrInverseTransformAlternateCodecSetup* setup,
+    const JxrInverseTransformCodecInvocation* invocation)
+{
+    macroblock->geometry = &setup->geometry;
+    macroblock->planePlan = &setup->planePlan;
+    macroblock->boundaries = &setup->boundaryContext;
+    macroblock->postProcessParameters = &setup->postProcessParameters;
+    macroblock->firstStagePlanes = invocation->firstStagePlanes;
+    macroblock->secondStagePlanes = invocation->secondStagePlanes;
+    memcpy(macroblock->postProcessInfo, invocation->postProcessInfo,
+        sizeof(macroblock->postProcessInfo));
+    macroblock->predictionBefore = invocation->predictionBefore;
+    macroblock->predictionAfter = invocation->predictionAfter;
+    macroblock->macroblockColumn = setup->hardTileState.previousMacroblockX;
+    macroblock->usesScaledArithmetic = invocation->usesScaledArithmetic;
+}
 
 Void JxrInverseTransformAlternateMacroblockProcess(
     JxrInverseTransformAlternateMacroblock* macroblock)

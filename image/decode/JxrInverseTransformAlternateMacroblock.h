@@ -5,6 +5,9 @@
 #include "JxrInverseTransformPlanePlan.h"
 #include "JxrInverseTransformPlaneContext.h"
 
+struct JxrInverseTransformAlternateCodecSetup;
+struct JxrInverseTransformCodecInvocation;
+
 typedef struct JxrInverseTransformAlternateMacroblock {
     const JxrInverseTransformMacroblockGeometry* geometry;
     const JxrInverseTransformPlanePlan* planePlan;
@@ -18,6 +21,11 @@ typedef struct JxrInverseTransformAlternateMacroblock {
     size_t macroblockColumn;
     Bool usesScaledArithmetic;
 } JxrInverseTransformAlternateMacroblock;
+
+Void JxrInverseTransformAlternateMacroblockInitialize(
+    JxrInverseTransformAlternateMacroblock* macroblock,
+    const struct JxrInverseTransformAlternateCodecSetup* setup,
+    const struct JxrInverseTransformCodecInvocation* invocation);
 
 Void JxrInverseTransformAlternateMacroblockProcess(
     JxrInverseTransformAlternateMacroblock* macroblock);

@@ -165,15 +165,7 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
 
     {
         JxrInverseTransformNormalMacroblock macroblock;
-        macroblock.geometry = &setup.geometry;
-        macroblock.planePlan = &setup.planePlan;
-        macroblock.postProcessParameters = &setup.postProcessParameters;
-        macroblock.highPassParameters = &setup.highPassParameters;
-        macroblock.firstStagePlanes = invocation.firstStagePlanes;
-        macroblock.secondStagePlanes = invocation.secondStagePlanes;
-        memcpy(macroblock.postProcessInfo, invocation.postProcessInfo, sizeof(macroblock.postProcessInfo));
-        macroblock.macroblockColumn = setup.geometry.macroblockColumn;
-        macroblock.usesScaledArithmetic = invocation.usesScaledArithmetic;
+        JxrInverseTransformNormalMacroblockInitialize(&macroblock, &setup, &invocation);
         JxrInverseTransformNormalMacroblockProcess(&macroblock);
     }
 
@@ -191,17 +183,7 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
 
     {
         JxrInverseTransformAlternateMacroblock macroblock;
-        macroblock.geometry = &setup.geometry;
-        macroblock.planePlan = &setup.planePlan;
-        macroblock.boundaries = &setup.boundaryContext;
-        macroblock.postProcessParameters = &setup.postProcessParameters;
-        macroblock.firstStagePlanes = invocation.firstStagePlanes;
-        macroblock.secondStagePlanes = invocation.secondStagePlanes;
-        memcpy(macroblock.postProcessInfo, invocation.postProcessInfo, sizeof(macroblock.postProcessInfo));
-        macroblock.predictionBefore = invocation.predictionBefore;
-        macroblock.predictionAfter = invocation.predictionAfter;
-        macroblock.macroblockColumn = setup.hardTileState.previousMacroblockX;
-        macroblock.usesScaledArithmetic = invocation.usesScaledArithmetic;
+        JxrInverseTransformAlternateMacroblockInitialize(&macroblock, &setup, &invocation);
         JxrInverseTransformAlternateMacroblockProcess(&macroblock);
     }
 
