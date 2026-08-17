@@ -110,35 +110,7 @@ Void strPre4(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
 *****************************************************************************************/
 Void strPre4x4Stage1Split(PixelI *p0, PixelI *p1, Int iOffset)
 {
-    PixelI *p2 = p0 + 72 - iOffset;
-    PixelI *p3 = p1 + 64 - iOffset;
-    p0 += 12;
-    p1 += 4;
-
-    /** butterfly & scaling **/
-    JxrForwardTransformMathApplyHst4(p0 + 0, p2 + 0, p1 + 0, p3 + 0);
-    JxrForwardTransformMathApplyHst4(p0 + 1, p2 + 1, p1 + 1, p3 + 1);
-    JxrForwardTransformMathApplyHst4(p0 + 2, p2 + 2, p1 + 2, p3 + 2);
-    JxrForwardTransformMathApplyHst4(p0 + 3, p2 + 3, p1 + 3, p3 + 3);
-    JxrForwardTransformMathApplyHst1(p0 + 0, p3 + 0);
-    JxrForwardTransformMathApplyHst1(p0 + 1, p3 + 1);
-    JxrForwardTransformMathApplyHst1(p0 + 2, p3 + 2);
-    JxrForwardTransformMathApplyHst1(p0 + 3, p3 + 3);
-
-    /** anti diagonal corners: rotation by pi/8 **/
-    JxrForwardTransformMathRotateHalf(&p1[2], &p1[3]);
-    JxrForwardTransformMathRotateHalf(&p1[0], &p1[1]);
-    JxrForwardTransformMathRotateHalf(&p2[1], &p2[3]);
-    JxrForwardTransformMathRotateHalf(&p2[0], &p2[2]);
-
-    /** bottom right corner: pi/8 rotation => pi/8 rotation **/
-    JxrForwardTransformMathApplyOddOddPre(p3 + 0, p3 + 1, p3 + 2, p3 + 3);
-
-    /** butterfly **/
-    strDCT2x2dn(p0 + 0, p2 + 0, p1 + 0, p3 + 0);
-    strDCT2x2dn(p0 + 1, p2 + 1, p1 + 1, p3 + 1);
-    strDCT2x2dn(p0 + 2, p2 + 2, p1 + 2, p3 + 2);
-    strDCT2x2dn(p0 + 3, p2 + 3, p1 + 3, p3 + 3);
+    JxrForwardTransformStagesApplyPreStage1Split(p0, p1, iOffset);
 }
 
 Void strPre4x4Stage1(PixelI* p, Int iOffset)

@@ -3298,6 +3298,31 @@ static int test_forward_transform_stage_vectors(void)
         stage2[128] == -67 && stage2[240] == 0;
 }
 
+static int test_forward_transform_prestage_vectors(void)
+{
+    PixelI firstStage[128];
+    PixelI secondStage[128];
+    PixelI firstStageLegacy[128];
+    PixelI secondStageLegacy[128];
+    Int sampleIndex;
+
+    for (sampleIndex = 0; sampleIndex < 128; ++sampleIndex) {
+        firstStage[sampleIndex] = sampleIndex - 64;
+        secondStage[sampleIndex] = 96 - sampleIndex;
+        firstStageLegacy[sampleIndex] = firstStage[sampleIndex];
+        secondStageLegacy[sampleIndex] = secondStage[sampleIndex];
+    }
+    JxrForwardTransformStagesApplyPreStage1Split(firstStage + 16, secondStage + 16, 16);
+    strPre4x4Stage1Split(firstStageLegacy + 16, secondStageLegacy + 16, 16);
+    if (memcmp(firstStage, firstStageLegacy, sizeof(firstStage)) != 0 ||
+        memcmp(secondStage, secondStageLegacy, sizeof(secondStage)) != 0) return 0;
+
+    return firstStage[28] == -80 && firstStage[29] == -49 &&
+        firstStage[72] == 25 && firstStage[73] == -3 &&
+        secondStage[20] == 108 && secondStage[21] == 77 &&
+        secondStage[64] == 2 && secondStage[65] == 30;
+}
+
 static int test_inverse_transform_corner_prediction_vectors(void)
 {
     PixelI value = 12;
@@ -3838,6 +3863,7 @@ int main(int argc, char** argv)
         { "transform_math_dct2x2_vectors", test_transform_math_dct2x2_vectors },
         { "forward_transform_math_vectors", test_forward_transform_math_vectors },
         { "forward_transform_stage_vectors", test_forward_transform_stage_vectors },
+        { "forward_transform_prestage_vectors", test_forward_transform_prestage_vectors },
         { "inverse_transform_corner_prediction_vectors", test_inverse_transform_corner_prediction_vectors },
         { "four_butterfly_vectors", test_four_butterfly_vectors },
         { "inverse_transform_dc_clip_vectors", test_inverse_transform_dc_clip_vectors },
