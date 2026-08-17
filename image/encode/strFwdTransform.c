@@ -128,30 +128,7 @@ Void strPre4x4Stage1(PixelI* p, Int iOffset)
 *****************************************************************************************/
 Void strPre4x4Stage2Split(PixelI* p0, PixelI* p1)
 {
-    /** butterfly **/
-    JxrForwardTransformMathApplyHst4(p0 - 96, p0 +  96, p1 - 112, p1 + 80);
-    JxrForwardTransformMathApplyHst4(p0 - 32, p0 +  32, p1 -  48, p1 + 16);
-    JxrForwardTransformMathApplyHst4(p0 - 80, p0 + 112, p1 - 128, p1 + 64);
-    JxrForwardTransformMathApplyHst4(p0 - 16, p0 +  48, p1 -  64, p1 +  0);
-    JxrForwardTransformMathApplyHst1(p0 - 96, p1 + 80);
-    JxrForwardTransformMathApplyHst1(p0 - 32, p1 + 16);
-    JxrForwardTransformMathApplyHst1(p0 - 80, p1 + 64);
-    JxrForwardTransformMathApplyHst1(p0 - 16, p1 +  0);
-
-    /** anti diagonal corners: rotation **/
-    JxrForwardTransformMathRotateHalf(&p1[-48], &p1[-112]);
-    JxrForwardTransformMathRotateHalf(&p1[-64], &p1[-128]);
-    JxrForwardTransformMathRotateHalf(&p0[112], &p0[  96]);
-    JxrForwardTransformMathRotateHalf(&p0[ 48], &p0[  32]);
-
-    /** bottom right corner: pi/8 rotation => pi/8 rotation **/
-    JxrForwardTransformMathApplyOddOddPre(p1 + 0, p1 + 64, p1 + 16, p1 + 80);
-
-    /** butterfly **/
-    strDCT2x2dn(p0 - 96, p1 - 112, p0 +  96, p1 + 80);
-    strDCT2x2dn(p0 - 32, p1 -  48, p0 +  32, p1 + 16);
-    strDCT2x2dn(p0 - 80, p1 - 128, p0 + 112, p1 + 64);
-    strDCT2x2dn(p0 - 16, p1 -  64, p0 +  48, p1 +  0);
+    JxrForwardTransformStagesApplyPreStage2Split(p0, p1);
 }
 
 

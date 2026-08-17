@@ -50,3 +50,35 @@ Void JxrForwardTransformStagesApplyPreStage1Split(
             secondBottom + column, secondTop + column);
     }
 }
+
+Void JxrForwardTransformStagesApplyPreStage2Split(
+    PixelI* firstStage,
+    PixelI* secondStage)
+{
+    JxrForwardTransformMathApplyHst4(firstStage - 96, firstStage + 96,
+        secondStage - 112, secondStage + 80);
+    JxrForwardTransformMathApplyHst4(firstStage - 32, firstStage + 32,
+        secondStage - 48, secondStage + 16);
+    JxrForwardTransformMathApplyHst4(firstStage - 80, firstStage + 112,
+        secondStage - 128, secondStage + 64);
+    JxrForwardTransformMathApplyHst4(firstStage - 16, firstStage + 48,
+        secondStage - 64, secondStage);
+    JxrForwardTransformMathApplyHst1(firstStage - 96, secondStage + 80);
+    JxrForwardTransformMathApplyHst1(firstStage - 32, secondStage + 16);
+    JxrForwardTransformMathApplyHst1(firstStage - 80, secondStage + 64);
+    JxrForwardTransformMathApplyHst1(firstStage - 16, secondStage);
+    JxrForwardTransformMathRotateHalf(&secondStage[-48], &secondStage[-112]);
+    JxrForwardTransformMathRotateHalf(&secondStage[-64], &secondStage[-128]);
+    JxrForwardTransformMathRotateHalf(&firstStage[112], &firstStage[96]);
+    JxrForwardTransformMathRotateHalf(&firstStage[48], &firstStage[32]);
+    JxrForwardTransformMathApplyOddOddPre(secondStage, secondStage + 64,
+        secondStage + 16, secondStage + 80);
+    JxrTransformMathApplyDct2x2Down(firstStage - 96, secondStage - 112,
+        firstStage + 96, secondStage + 80);
+    JxrTransformMathApplyDct2x2Down(firstStage - 32, secondStage - 48,
+        firstStage + 32, secondStage + 16);
+    JxrTransformMathApplyDct2x2Down(firstStage - 80, secondStage - 128,
+        firstStage + 112, secondStage + 64);
+    JxrTransformMathApplyDct2x2Down(firstStage - 16, secondStage - 64,
+        firstStage + 48, secondStage);
+}
