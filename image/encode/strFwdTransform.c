@@ -35,23 +35,20 @@ static Void fwdOddOdd(PixelI *, PixelI *, PixelI *, PixelI *);
 static Void fwdOddOddPre(PixelI *, PixelI *, PixelI *, PixelI *);
 static Void fwdOdd(PixelI *, PixelI *, PixelI *, PixelI *);
 static Void strDCT2x2alt(PixelI * a, PixelI * b, PixelI * c, PixelI * d);
-static Void strHSTenc1(PixelI *, PixelI *);
-static Void strHSTenc(PixelI *, PixelI *, PixelI *, PixelI *);
-static Void strHSTenc1_edge (PixelI *pa, PixelI *pd);
 
 //static Void scaleDownUp0(PixelI *, PixelI *);
 //static Void scaleDownUp1(PixelI *, PixelI *);
 //static Void scaleDownUp2(PixelI *, PixelI *);
 //#define FOURBUTTERFLY_ENC_ALT(p, i00, i01, i02, i03, i10, i11, i12, i13,	\
 //    i20, i21, i22, i23, i30, i31, i32, i33)		\
-//    strHSTenc(&p[i00], &p[i01], &p[i02], &p[i03]);			\
-//    strHSTenc(&p[i10], &p[i11], &p[i12], &p[i13]);			\
-//    strHSTenc(&p[i20], &p[i21], &p[i22], &p[i23]);			\
-//    strHSTenc(&p[i30], &p[i31], &p[i32], &p[i33]);          \
-//    strHSTenc1(&p[i00], &p[i03]);			\
-//    strHSTenc1(&p[i10], &p[i13]);			\
-//    strHSTenc1(&p[i20], &p[i23]);			\
-//    strHSTenc1(&p[i30], &p[i33])
+//    JxrForwardTransformMathApplyHst4(&p[i00], &p[i01], &p[i02], &p[i03]);			\
+//    JxrForwardTransformMathApplyHst4(&p[i10], &p[i11], &p[i12], &p[i13]);			\
+//    JxrForwardTransformMathApplyHst4(&p[i20], &p[i21], &p[i22], &p[i23]);			\
+//    JxrForwardTransformMathApplyHst4(&p[i30], &p[i31], &p[i32], &p[i33]);          \
+//    JxrForwardTransformMathApplyHst1(&p[i00], &p[i03]);			\
+//    JxrForwardTransformMathApplyHst1(&p[i10], &p[i13]);			\
+//    JxrForwardTransformMathApplyHst1(&p[i20], &p[i23]);			\
+//    JxrForwardTransformMathApplyHst1(&p[i30], &p[i33])
 
 /** DCT stuff **/
 /** data order before DCT **/
@@ -148,14 +145,14 @@ Void strPre4x4Stage1Split(PixelI *p0, PixelI *p1, Int iOffset)
     p1 += 4;
 
     /** butterfly & scaling **/
-    strHSTenc(p0 + 0, p2 + 0, p1 + 0, p3 + 0);
-    strHSTenc(p0 + 1, p2 + 1, p1 + 1, p3 + 1);
-    strHSTenc(p0 + 2, p2 + 2, p1 + 2, p3 + 2);
-    strHSTenc(p0 + 3, p2 + 3, p1 + 3, p3 + 3);
-    strHSTenc1(p0 + 0, p3 + 0);
-    strHSTenc1(p0 + 1, p3 + 1);
-    strHSTenc1(p0 + 2, p3 + 2);
-    strHSTenc1(p0 + 3, p3 + 3);
+    JxrForwardTransformMathApplyHst4(p0 + 0, p2 + 0, p1 + 0, p3 + 0);
+    JxrForwardTransformMathApplyHst4(p0 + 1, p2 + 1, p1 + 1, p3 + 1);
+    JxrForwardTransformMathApplyHst4(p0 + 2, p2 + 2, p1 + 2, p3 + 2);
+    JxrForwardTransformMathApplyHst4(p0 + 3, p2 + 3, p1 + 3, p3 + 3);
+    JxrForwardTransformMathApplyHst1(p0 + 0, p3 + 0);
+    JxrForwardTransformMathApplyHst1(p0 + 1, p3 + 1);
+    JxrForwardTransformMathApplyHst1(p0 + 2, p3 + 2);
+    JxrForwardTransformMathApplyHst1(p0 + 3, p3 + 3);
 
     /** anti diagonal corners: rotation by pi/8 **/
     JxrForwardTransformMathRotateHalf(&p1[2], &p1[3]);
@@ -189,14 +186,14 @@ Void strPre4x4Stage1(PixelI* p, Int iOffset)
 Void strPre4x4Stage2Split(PixelI* p0, PixelI* p1)
 {
     /** butterfly **/
-    strHSTenc(p0 - 96, p0 +  96, p1 - 112, p1 + 80);
-    strHSTenc(p0 - 32, p0 +  32, p1 -  48, p1 + 16);
-    strHSTenc(p0 - 80, p0 + 112, p1 - 128, p1 + 64);
-    strHSTenc(p0 - 16, p0 +  48, p1 -  64, p1 +  0);
-    strHSTenc1(p0 - 96, p1 + 80);
-    strHSTenc1(p0 - 32, p1 + 16);
-    strHSTenc1(p0 - 80, p1 + 64);
-    strHSTenc1(p0 - 16, p1 +  0);
+    JxrForwardTransformMathApplyHst4(p0 - 96, p0 +  96, p1 - 112, p1 + 80);
+    JxrForwardTransformMathApplyHst4(p0 - 32, p0 +  32, p1 -  48, p1 + 16);
+    JxrForwardTransformMathApplyHst4(p0 - 80, p0 + 112, p1 - 128, p1 + 64);
+    JxrForwardTransformMathApplyHst4(p0 - 16, p0 +  48, p1 -  64, p1 +  0);
+    JxrForwardTransformMathApplyHst1(p0 - 96, p1 + 80);
+    JxrForwardTransformMathApplyHst1(p0 - 32, p1 + 16);
+    JxrForwardTransformMathApplyHst1(p0 - 80, p1 + 64);
+    JxrForwardTransformMathApplyHst1(p0 - 16, p1 +  0);
 
     /** anti diagonal corners: rotation **/
     JxrForwardTransformMathRotateHalf(&p1[-48], &p1[-112]);
@@ -220,73 +217,8 @@ Void strPre4x4Stage2Split(PixelI* p0, PixelI* p1)
     for some strange reason, breaking up the function into two blocks, strHSTenc1 and strHSTenc
     seems to work faster
 **/
-static Void strHSTenc(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
-{
-    /** different realization : does rescaling as well! **/
-    PixelI a, b, c, d;
-    a = *pa;
-    b = *pb;
-    d = *pc;
-    c = *pd;
 
-    a += c;
-    b -= d;
-    c = ((a - b) >> 1) - c;
-    d += (b >> 1);
-    b += c;
 
-    a -= (d * 3 + 4) >> 3;
-
-    *pa = a;
-    *pb = b;
-    *pc = c;
-    *pd = d;
-}
-
-static Void strHSTenc1(PixelI *pa, PixelI *pd)
-{
-    /** different realization : does rescaling as well! **/
-    PixelI a, d;
-    a = *pa;
-    d = *pd;
-
-    d -= (a >> 7);
-    d += (a >> 10);
-
-    //a -= (d * 3 + 4) >> 3;
-    d -= (a * 3 + 0) >> 4;
-    a -= (d * 3 + 0) >> 3;
-    d = (a >> 1) - d;
-    a -= d;
-
-    *pa = a;
-    *pd = d;
-}
-
-static Void strHSTenc1_edge (PixelI *pa, PixelI *pd)
-{
-    /** different realizion as compared to scaling operator for 2D case **/
-    PixelI a, d;
-    a = *pa;
-    d = -(*pd); // Negative sign needed here for 1D scaling case to ensure correct scaling.
-
-    a -= d;
-    d += (a >> 1);
-    a -= (d * 3 + 4) >> 3;
-    // End new operations
-
-    //Scaling modification of adding 7/1024 in two steps (without multiplication by 7).
-    d -= (a >> 7);
-    d += (a >> 10);
-
-    d -= (a * 3 + 0) >> 4;
-    a -= (d * 3 + 0) >> 3;
-    d = (a >> 1) - d;
-    a -= d;
-
-    *pa = a;
-    *pd = d;
-}
 
 /** Kron(Rotate(pi/8), Rotate(pi/8)) **/\
 static Void fwdOddOdd(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)

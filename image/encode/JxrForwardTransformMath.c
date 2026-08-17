@@ -153,3 +153,43 @@ Void JxrForwardTransformMathApplyPre4(
     *third = thirdValue;
     *fourth = fourthValue;
 }
+
+Void JxrForwardTransformMathApplyHst4(
+    PixelI* first,
+    PixelI* second,
+    PixelI* third,
+    PixelI* fourth)
+{
+    PixelI firstValue = *first;
+    PixelI secondValue = *second;
+    PixelI thirdValue = *fourth;
+    PixelI fourthValue = *third;
+
+    firstValue += thirdValue;
+    secondValue -= fourthValue;
+    thirdValue = ((firstValue - secondValue) >> 1) - thirdValue;
+    fourthValue += secondValue >> 1;
+    secondValue += thirdValue;
+    firstValue -= (fourthValue * 3 + 4) >> 3;
+
+    *first = firstValue;
+    *second = secondValue;
+    *third = thirdValue;
+    *fourth = fourthValue;
+}
+
+Void JxrForwardTransformMathApplyHst1(PixelI* first, PixelI* fourth)
+{
+    PixelI firstValue = *first;
+    PixelI fourthValue = *fourth;
+
+    fourthValue -= firstValue >> 7;
+    fourthValue += firstValue >> 10;
+    fourthValue -= (firstValue * 3) >> 4;
+    firstValue -= (fourthValue * 3) >> 3;
+    fourthValue = (firstValue >> 1) - fourthValue;
+    firstValue -= fourthValue;
+
+    *first = firstValue;
+    *fourth = fourthValue;
+}

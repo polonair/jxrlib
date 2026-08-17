@@ -26,5 +26,11 @@ Void JxrForwardTransformMathApplyPre4(
     PixelI* second,
     PixelI* third,
     PixelI* fourth);
+Void JxrForwardTransformMathApplyHst4(
+    PixelI* first,
+    PixelI* second,
+    PixelI* third,
+    PixelI* fourth);
+Void JxrForwardTransformMathApplyHst1(PixelI* first, PixelI* fourth);
 
 #endif

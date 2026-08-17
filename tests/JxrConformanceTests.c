@@ -3226,7 +3226,21 @@ static int test_forward_transform_math_vectors(void)
     if (legacyFirst != first || legacySecond != second || legacyThird != third || legacyFourth != fourth) return 0;
     first = -10; second = 5; third = 7; fourth = -3;
     JxrForwardTransformMathApplyPre4(&first, &second, &third, &fourth);
-    return first == -7 && second == 2 && third == 7 && fourth == -1;
+    if (first != -7 || second != 2 || third != 7 || fourth != -1) return 0;
+
+    first = 10; second = 20; third = 30; fourth = 40;
+    JxrForwardTransformMathApplyHst4(&first, &second, &third, &fourth);
+    if (first != 41 || second != -20 || third != -10 || fourth != 25) return 0;
+    first = -10; second = 5; third = 7; fourth = -3;
+    JxrForwardTransformMathApplyHst4(&first, &second, &third, &fourth);
+    if (first != -15 || second != -5 || third != -3 || fourth != 6) return 0;
+
+    first = 10; fourth = 40;
+    JxrForwardTransformMathApplyHst1(&first, &fourth);
+    if (first != 37 || fourth != -41) return 0;
+    first = -10; fourth = 5;
+    JxrForwardTransformMathApplyHst1(&first, &fourth);
+    return first == 1 && fourth == -13;
 }
 
 static int test_inverse_transform_corner_prediction_vectors(void)
