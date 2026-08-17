@@ -52,6 +52,7 @@
 #include "JxrInverseTransformNormalCodecSetup.h"
 #include "JxrInverseTransformAlternateMacroblock.h"
 #include "JxrInverseTransformAlternateCodecSetup.h"
+#include "JxrInverseTransformCodecInvocation.h"
 #include "JxrInverseTransformChroma422Plane.h"
 #include "JxrInverseTransformChroma420AlternatePlane.h"
 #include "JxrInverseTransformChroma422AlternatePlane.h"
@@ -155,11 +156,12 @@ Void strPost4x4Stage2Split_alternate(PixelI* p0, PixelI* p1)
 Int  invTransformMacroblock(CWMImageStrCodec * pSC)
 {
     JxrInverseTransformNormalCodecSetup setup;
+    JxrInverseTransformCodecInvocation invocation;
 
     JxrInverseTransformNormalCodecSetupInitialize(&setup, pSC);
-    if (setup.postProcessParameters.enabled && setup.geometry.isLeft)
-        slideOneMBRow(pSC->pPostProcInfo, pSC->m_param.cNumChannels,
-            setup.geometry.macroblockWidth, setup.geometry.isTop, setup.geometry.isBottom);
+    JxrInverseTransformCodecInvocationInitialize(&invocation, pSC);
+    JxrInverseTransformCodecInvocationAdvancePostProcessRow(&invocation,
+        &setup.geometry, setup.postProcessParameters.enabled);
 
     {
         JxrInverseTransformNormalMacroblock macroblock;
@@ -167,25 +169,25 @@ Int  invTransformMacroblock(CWMImageStrCodec * pSC)
         macroblock.planePlan = &setup.planePlan;
         macroblock.postProcessParameters = &setup.postProcessParameters;
         macroblock.highPassParameters = &setup.highPassParameters;
-        macroblock.firstStagePlanes = pSC->p0MBbuffer;
-        macroblock.secondStagePlanes = pSC->p1MBbuffer;
-        memcpy(macroblock.postProcessInfo, pSC->pPostProcInfo, sizeof(macroblock.postProcessInfo));
+        macroblock.firstStagePlanes = invocation.firstStagePlanes;
+        macroblock.secondStagePlanes = invocation.secondStagePlanes;
+        memcpy(macroblock.postProcessInfo, invocation.postProcessInfo, sizeof(macroblock.postProcessInfo));
         macroblock.macroblockColumn = setup.geometry.macroblockColumn;
-        macroblock.usesScaledArithmetic = pSC->m_param.bScaledArith;
+        macroblock.usesScaledArithmetic = invocation.usesScaledArithmetic;
         JxrInverseTransformNormalMacroblockProcess(&macroblock);
     }
 
     return ICERR_OK;
 }
-
 Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
 {
     JxrInverseTransformAlternateCodecSetup setup;
+    JxrInverseTransformCodecInvocation invocation;
 
     JxrInverseTransformAlternateCodecSetupInitialize(&setup, pSC);
-    if (setup.postProcessParameters.enabled && setup.geometry.isLeft)
-        slideOneMBRow(pSC->pPostProcInfo, pSC->m_param.cNumChannels,
-            setup.geometry.macroblockWidth, setup.geometry.isTop, setup.geometry.isBottom);
+    JxrInverseTransformCodecInvocationInitialize(&invocation, pSC);
+    JxrInverseTransformCodecInvocationAdvancePostProcessRow(&invocation,
+        &setup.geometry, setup.postProcessParameters.enabled);
 
     {
         JxrInverseTransformAlternateMacroblock macroblock;
@@ -193,13 +195,13 @@ Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
         macroblock.planePlan = &setup.planePlan;
         macroblock.boundaries = &setup.boundaryContext;
         macroblock.postProcessParameters = &setup.postProcessParameters;
-        macroblock.firstStagePlanes = pSC->p0MBbuffer;
-        macroblock.secondStagePlanes = pSC->p1MBbuffer;
-        memcpy(macroblock.postProcessInfo, pSC->pPostProcInfo, sizeof(macroblock.postProcessInfo));
-        macroblock.predictionBefore = pSC->iPredBefore;
-        macroblock.predictionAfter = pSC->iPredAfter;
+        macroblock.firstStagePlanes = invocation.firstStagePlanes;
+        macroblock.secondStagePlanes = invocation.secondStagePlanes;
+        memcpy(macroblock.postProcessInfo, invocation.postProcessInfo, sizeof(macroblock.postProcessInfo));
+        macroblock.predictionBefore = invocation.predictionBefore;
+        macroblock.predictionAfter = invocation.predictionAfter;
         macroblock.macroblockColumn = setup.hardTileState.previousMacroblockX;
-        macroblock.usesScaledArithmetic = pSC->m_param.bScaledArith;
+        macroblock.usesScaledArithmetic = invocation.usesScaledArithmetic;
         JxrInverseTransformAlternateMacroblockProcess(&macroblock);
     }
 
