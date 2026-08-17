@@ -237,6 +237,7 @@
     <ClCompile Include="..\decode\JxrInverseTransformNormalCodecSetup.c" />
     <ClCompile Include="..\decode\JxrInverseTransformAlternateCodecSetup.c" />
     <ClCompile Include="..\decode\JxrInverseTransformCodecInvocation.c" />
+    <ClCompile Include="..\decode\JxrInverseTransformDecoder.c" />
     <ClCompile Include="..\decode\JxrInverseTransformAlternateMacroblock.c" />
     <ClCompile Include="..\decode\JxrInverseTransformChroma420Plane.c" />
     <ClCompile Include="..\decode\JxrInverseTransformChroma422Plane.c" />

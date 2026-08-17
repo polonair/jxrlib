@@ -53,6 +53,7 @@
 #include "JxrInverseTransformAlternateMacroblock.h"
 #include "JxrInverseTransformAlternateCodecSetup.h"
 #include "JxrInverseTransformCodecInvocation.h"
+#include "JxrInverseTransformDecoder.h"
 #include "JxrInverseTransformChroma422Plane.h"
 #include "JxrInverseTransformChroma420AlternatePlane.h"
 #include "JxrInverseTransformChroma422AlternatePlane.h"
@@ -155,37 +156,9 @@ Void strPost4x4Stage2Split_alternate(PixelI* p0, PixelI* p1)
 *************************************************************************/
 Int  invTransformMacroblock(CWMImageStrCodec * pSC)
 {
-    JxrInverseTransformNormalCodecSetup setup;
-    JxrInverseTransformCodecInvocation invocation;
-
-    JxrInverseTransformNormalCodecSetupInitialize(&setup, pSC);
-    JxrInverseTransformCodecInvocationInitialize(&invocation, pSC);
-    JxrInverseTransformCodecInvocationAdvancePostProcessRow(&invocation,
-        &setup.geometry, setup.postProcessParameters.enabled);
-
-    {
-        JxrInverseTransformNormalMacroblock macroblock;
-        JxrInverseTransformNormalMacroblockInitialize(&macroblock, &setup, &invocation);
-        JxrInverseTransformNormalMacroblockProcess(&macroblock);
-    }
-
-    return ICERR_OK;
+    return JxrInverseTransformDecoderProcessNormalMacroblock(pSC);
 }
 Int  invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC)
 {
-    JxrInverseTransformAlternateCodecSetup setup;
-    JxrInverseTransformCodecInvocation invocation;
-
-    JxrInverseTransformAlternateCodecSetupInitialize(&setup, pSC);
-    JxrInverseTransformCodecInvocationInitialize(&invocation, pSC);
-    JxrInverseTransformCodecInvocationAdvancePostProcessRow(&invocation,
-        &setup.geometry, setup.postProcessParameters.enabled);
-
-    {
-        JxrInverseTransformAlternateMacroblock macroblock;
-        JxrInverseTransformAlternateMacroblockInitialize(&macroblock, &setup, &invocation);
-        JxrInverseTransformAlternateMacroblockProcess(&macroblock);
-    }
-
-    return ICERR_OK;
+    return JxrInverseTransformDecoderProcessAlternateMacroblock(pSC);
 }
