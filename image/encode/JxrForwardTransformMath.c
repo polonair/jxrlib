@@ -193,3 +193,93 @@ Void JxrForwardTransformMathApplyHst1(PixelI* first, PixelI* fourth)
     *first = firstValue;
     *fourth = fourthValue;
 }
+
+Void JxrForwardTransformMathApplyOddOdd(
+    PixelI* first,
+    PixelI* second,
+    PixelI* third,
+    PixelI* fourth)
+{
+    PixelI firstValue = *first;
+    PixelI secondValue = -*second;
+    PixelI thirdValue = -*third;
+    PixelI fourthValue = *fourth;
+    PixelI firstTemporary;
+    PixelI secondTemporary;
+
+    fourthValue += firstValue;
+    thirdValue -= secondValue;
+    firstValue -= (firstTemporary = fourthValue >> 1);
+    secondValue += (secondTemporary = thirdValue >> 1);
+    firstValue += (secondValue * 3 + 4) >> 3;
+    secondValue -= (firstValue * 3 + 3) >> 2;
+    firstValue += (secondValue * 3 + 3) >> 3;
+    secondValue -= secondTemporary;
+    firstValue += firstTemporary;
+    thirdValue += secondValue;
+    fourthValue -= firstValue;
+
+    *first = firstValue;
+    *second = secondValue;
+    *third = thirdValue;
+    *fourth = fourthValue;
+}
+
+Void JxrForwardTransformMathApplyOddOddPre(
+    PixelI* first,
+    PixelI* second,
+    PixelI* third,
+    PixelI* fourth)
+{
+    PixelI firstValue = *first;
+    PixelI secondValue = *second;
+    PixelI thirdValue = *third;
+    PixelI fourthValue = *fourth;
+    PixelI firstTemporary;
+    PixelI secondTemporary;
+
+    fourthValue += firstValue;
+    thirdValue -= secondValue;
+    firstValue -= (firstTemporary = fourthValue >> 1);
+    secondValue += (secondTemporary = thirdValue >> 1);
+    firstValue += (secondValue * 3 + 4) >> 3;
+    secondValue -= (firstValue * 3 + 2) >> 2;
+    firstValue += (secondValue * 3 + 6) >> 3;
+    secondValue -= secondTemporary;
+    firstValue += firstTemporary;
+    thirdValue += secondValue;
+    fourthValue -= firstValue;
+
+    *first = firstValue;
+    *second = secondValue;
+    *third = thirdValue;
+    *fourth = fourthValue;
+}
+
+Void JxrForwardTransformMathApplyOdd(
+    PixelI* first,
+    PixelI* second,
+    PixelI* third,
+    PixelI* fourth)
+{
+    PixelI firstValue = *first;
+    PixelI secondValue = *second;
+    PixelI thirdValue = *third;
+    PixelI fourthValue = *fourth;
+
+    secondValue -= thirdValue;
+    firstValue += fourthValue;
+    thirdValue += (secondValue + 1) >> 1;
+    fourthValue = ((firstValue + 1) >> 1) - fourthValue;
+    JxrForwardTransformMathRotateThreeEighths(&firstValue, &secondValue);
+    JxrForwardTransformMathRotateThreeEighths(&thirdValue, &fourthValue);
+    fourthValue += secondValue >> 1;
+    thirdValue -= (firstValue + 1) >> 1;
+    secondValue -= fourthValue;
+    firstValue += thirdValue;
+
+    *first = firstValue;
+    *second = secondValue;
+    *third = thirdValue;
+    *fourth = fourthValue;
+}

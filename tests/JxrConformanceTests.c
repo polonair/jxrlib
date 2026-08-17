@@ -3240,7 +3240,28 @@ static int test_forward_transform_math_vectors(void)
     if (first != 37 || fourth != -41) return 0;
     first = -10; fourth = 5;
     JxrForwardTransformMathApplyHst1(&first, &fourth);
-    return first == 1 && fourth == -13;
+    if (first != 1 || fourth != -13) return 0;
+
+    first = 10; second = 20; third = 30; fourth = 40;
+    JxrForwardTransformMathApplyOddOdd(&first, &second, &third, &fourth);
+    if (first != -2 || second != -2 || third != -12 || fourth != 52) return 0;
+    first = -10; second = 5; third = 7; fourth = -3;
+    JxrForwardTransformMathApplyOddOdd(&first, &second, &third, &fourth);
+    if (first != -13 || second != -2 || third != -4 || fourth != 0) return 0;
+
+    first = 10; second = 20; third = 30; fourth = 40;
+    JxrForwardTransformMathApplyOddOddPre(&first, &second, &third, &fourth);
+    if (first != 30 || second != 24 || third != 34 || fourth != 20) return 0;
+    first = -10; second = 5; third = 7; fourth = -3;
+    JxrForwardTransformMathApplyOddOddPre(&first, &second, &third, &fourth);
+    if (first != -5 || second != 6 || third != 8 || fourth != -8) return 0;
+
+    first = 10; second = 20; third = 30; fourth = 40;
+    JxrForwardTransformMathApplyOdd(&first, &second, &third, &fourth);
+    if (first != 35 || second != 10 || third != -4 || fourth != -39) return 0;
+    first = -10; second = 5; third = 7; fourth = -3;
+    JxrForwardTransformMathApplyOdd(&first, &second, &third, &fourth);
+    return first == -2 && second == 7 && third == 10 && fourth == -4;
 }
 
 static int test_inverse_transform_corner_prediction_vectors(void)

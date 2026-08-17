@@ -31,9 +31,6 @@
 #include "JxrForwardTransformMath.h"
 
 /** local functions **/
-static Void fwdOddOdd(PixelI *, PixelI *, PixelI *, PixelI *);
-static Void fwdOddOddPre(PixelI *, PixelI *, PixelI *, PixelI *);
-static Void fwdOdd(PixelI *, PixelI *, PixelI *, PixelI *);
 static Void strDCT2x2alt(PixelI * a, PixelI * b, PixelI * c, PixelI * d);
 
 //static Void scaleDownUp0(PixelI *, PixelI *);
@@ -73,13 +70,13 @@ Void strDCT4x4Stage1(PixelI * p)
     strDCT2x2up(&p[0], &p[1], &p[2], &p[3]);
 
     /** bottom right corner, pi/8 rotation => pi/8 rotation **/
-    fwdOddOdd(&p[15], &p[14], &p[13], &p[12]);
+    JxrForwardTransformMathApplyOddOdd(&p[15], &p[14], &p[13], &p[12]);
 
     /** top right corner, butterfly => pi/8 rotation **/
-    fwdOdd(&p[5], &p[4], &p[7], &p[6]);
+    JxrForwardTransformMathApplyOdd(&p[5], &p[4], &p[7], &p[6]);
 
     /** bottom left corner, pi/8 rotation => butterfly **/
-    fwdOdd(&p[10], &p[8], &p[11], &p[9]);
+    JxrForwardTransformMathApplyOdd(&p[10], &p[8], &p[11], &p[9]);
 }
 
 Void strDCT4x4SecondStage(PixelI * p)
@@ -91,13 +88,13 @@ Void strDCT4x4SecondStage(PixelI * p)
     strDCT2x2up(&p[0], &p[64], &p[16], &p[80]);
     
     /** bottom right corner, pi/8 rotation => pi/8 rotation **/
-    fwdOddOdd(&p[160], &p[224], &p[176], &p[240]);
+    JxrForwardTransformMathApplyOddOdd(&p[160], &p[224], &p[176], &p[240]);
     
     /** top right corner, butterfly => pi/8 rotation **/
-    fwdOdd(&p[128], &p[192], &p[144], &p[208]);
+    JxrForwardTransformMathApplyOdd(&p[128], &p[192], &p[144], &p[208]);
     
     /** bottom left corner, pi/8 rotation => butterfly **/
-    fwdOdd(&p[32], &p[48], &p[96], &p[112]);
+    JxrForwardTransformMathApplyOdd(&p[32], &p[48], &p[96], &p[112]);
 }
 
 Void strNormalizeEnc(PixelI* p, Bool bChroma)
@@ -161,7 +158,7 @@ Void strPre4x4Stage1Split(PixelI *p0, PixelI *p1, Int iOffset)
     JxrForwardTransformMathRotateHalf(&p2[0], &p2[2]);
 
     /** bottom right corner: pi/8 rotation => pi/8 rotation **/
-    fwdOddOddPre(p3 + 0, p3 + 1, p3 + 2, p3 + 3);
+    JxrForwardTransformMathApplyOddOddPre(p3 + 0, p3 + 1, p3 + 2, p3 + 3);
 
     /** butterfly **/
     strDCT2x2dn(p0 + 0, p2 + 0, p1 + 0, p3 + 0);
@@ -202,7 +199,7 @@ Void strPre4x4Stage2Split(PixelI* p0, PixelI* p1)
     JxrForwardTransformMathRotateHalf(&p0[ 48], &p0[  32]);
 
     /** bottom right corner: pi/8 rotation => pi/8 rotation **/
-    fwdOddOddPre(p1 + 0, p1 + 64, p1 + 16, p1 + 80);
+    JxrForwardTransformMathApplyOddOddPre(p1 + 0, p1 + 64, p1 + 16, p1 + 80);
 
     /** butterfly **/
     strDCT2x2dn(p0 - 96, p1 - 112, p0 +  96, p1 + 80);
@@ -221,100 +218,10 @@ Void strPre4x4Stage2Split(PixelI* p0, PixelI* p1)
 
 
 /** Kron(Rotate(pi/8), Rotate(pi/8)) **/\
-static Void fwdOddOdd(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
-{
-    PixelI a, b, c, d, t1, t2;
-
-    a = *pa;
-    b = -*pb;
-    c = -*pc;
-    d = *pd;
-
-    /** butterflies **/
-    d += a;
-    c -= b;
-    a -= (t1 = d >> 1);
-    b += (t2 = c >> 1);
-
-    /** rotate pi/4 **/
-    a += (b * 3 + 4) >> 3;
-    b -= (a * 3 + 3) >> 2;
-    a += (b * 3 + 3) >> 3;
-
-    /** butterflies **/
-    b -= t2;
-    a += t1;
-    c += b;
-    d -= a;
-
-    *pa = a;
-    *pb = b;
-    *pc = c;
-    *pd = d;
-}
 /** Kron(Rotate(pi/8), Rotate(pi/8)) **/
-static Void fwdOddOddPre(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
-{
-    PixelI a, b, c, d, t1, t2;
-    a = *pa;
-    b = *pb;
-    c = *pc;
-    d = *pd;
-
-    /** butterflies **/
-    d += a;
-    c -= b;
-    a -= (t1 = d >> 1);
-    b += (t2 = c >> 1);
-
-    /** rotate pi/4 **/
-    a += (b * 3 + 4) >> 3;
-    b -= (a * 3 + 2) >> 2;
-    a += (b * 3 + 6) >> 3;
-
-    /** butterflies **/
-    b -= t2;
-    a += t1;
-    c += b;
-    d -= a;
-
-    *pa = a;
-    *pb = b;
-    *pc = c;
-    *pd = d;
-}
 
 /** Kron(Rotate(pi/8), [1 1; 1 -1]/sqrt(2)) **/
 /** [a b c d] => [D C A B] **/
-Void fwdOdd(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
-{
-    PixelI a, b, c, d;
-    a = *pa;
-    b = *pb;
-    c = *pc;
-    d = *pd;
-
-    /** butterflies **/
-    b -= c;
-    a += d;
-    c += (b + 1) >> 1;
-    d = ((a + 1) >> 1) - d;
-
-    /** rotate pi/8 **/
-    JxrForwardTransformMathRotateThreeEighths(&a, &b);
-    JxrForwardTransformMathRotateThreeEighths(&c, &d);
-
-    /** butterflies **/
-    d += (b) >> 1;
-    c -= (a + 1) >> 1;
-    b -= d;
-    a += c;
-
-    *pa = a;
-    *pb = b;
-    *pc = c;
-    *pd = d;
-}
 
 /*************************************************************************
   Top-level function to tranform possible part of a macroblock
