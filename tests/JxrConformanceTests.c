@@ -2993,6 +2993,27 @@ static int test_inverse_transform_plane_stage2_vectors(void)
     return memcmp(expected, actual, sizeof(expected)) == 0;
 }
 
+static int test_inverse_transform_normalization_vectors(void)
+{
+    PixelI expected[256];
+    PixelI actual[256];
+    Int sampleIndex;
+
+    for (sampleIndex = 0; sampleIndex < 256; ++sampleIndex) {
+        expected[sampleIndex] = sampleIndex - 128;
+        actual[sampleIndex] = expected[sampleIndex];
+    }
+    strNormalizeDec(actual, FALSE);
+    if (memcmp(expected, actual, sizeof(expected)) != 0) return 0;
+
+    strNormalizeDec(actual, TRUE);
+    if (actual[0] != -256 || actual[16] != -224 || actual[128] != 0 ||
+        actual[240] != 224 || actual[17] != -111) return 0;
+
+    JxrInverseTransformMathNormalizeBlock(expected, TRUE, 256, 16);
+    return memcmp(expected, actual, sizeof(expected)) == 0;
+}
+
 static int test_inverse_transform_math_vectors(void)
 {
     PixelI first, second;
@@ -3685,6 +3706,7 @@ int main(int argc, char** argv)
         { "inverse_transform_plane_buffers_vectors", test_inverse_transform_plane_buffers_vectors },
         { "inverse_transform_plane_context_vectors", test_inverse_transform_plane_context_vectors },
         { "inverse_transform_plane_stage2_vectors", test_inverse_transform_plane_stage2_vectors },
+        { "inverse_transform_normalization_vectors", test_inverse_transform_normalization_vectors },
         { "inverse_transform_math_vectors", test_inverse_transform_math_vectors },
         { "transform_math_dct2x2_vectors", test_transform_math_dct2x2_vectors },
         { "forward_transform_math_vectors", test_forward_transform_math_vectors },

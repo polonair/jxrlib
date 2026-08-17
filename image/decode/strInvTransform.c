@@ -85,17 +85,7 @@ Void strIDCT4x4Stage2(PixelI* p)
 
 Void strNormalizeDec(PixelI* p, Bool bChroma)
 {
-    int i;
-    if (!bChroma) {
-        //for (i = 0; i < 256; i += 16) {
-        //    p[i] <<= 2;
-        //}
-    }
-    else {
-        for (i = 0; i < 256; i += 16) {
-            p[i] += p[i];
-        }
-    }
+    JxrInverseTransformMathNormalizeBlock(p, bChroma, 256, 16);
 }
 
 /*****************************************************************************************
