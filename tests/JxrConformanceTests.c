@@ -7,6 +7,7 @@
 #include "strTransform.h"
 #include "JxrTransformMath.h"
 #include "../image/encode/JxrForwardTransformMath.h"
+#include "../image/encode/JxrForwardTransformStages.h"
 #include "encode.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
@@ -3264,6 +3265,39 @@ static int test_forward_transform_math_vectors(void)
     return first == -2 && second == 7 && third == 10 && fourth == -4;
 }
 
+static int test_forward_transform_stage_vectors(void)
+{
+    static const PixelI stage1Expected[16] = {
+        2, -4, -2, 0, 0, -14, 6, 0, 1, 2, -8, -1, 0, 0, 0, 0
+    };
+    PixelI stage1[16];
+    PixelI stage1Legacy[16];
+    PixelI stage2[256];
+    PixelI stage2Legacy[256];
+    Int sampleIndex;
+
+    for (sampleIndex = 0; sampleIndex < 16; ++sampleIndex) {
+        stage1[sampleIndex] = sampleIndex - 7;
+        stage1Legacy[sampleIndex] = stage1[sampleIndex];
+    }
+    JxrForwardTransformStagesApplyStage1Dct(stage1);
+    strDCT4x4Stage1(stage1Legacy);
+    if (memcmp(stage1, stage1Expected, sizeof(stage1)) != 0 ||
+        memcmp(stage1, stage1Legacy, sizeof(stage1)) != 0) return 0;
+
+    for (sampleIndex = 0; sampleIndex < 256; ++sampleIndex) {
+        stage2[sampleIndex] = sampleIndex - 128;
+        stage2Legacy[sampleIndex] = stage2[sampleIndex];
+    }
+    JxrForwardTransformStagesApplyStage2Dct(stage2);
+    strDCT4x4SecondStage(stage2Legacy);
+    if (memcmp(stage2, stage2Legacy, sizeof(stage2)) != 0) return 0;
+
+    return stage2[0] == -32 && stage2[16] == 0 && stage2[32] == -268 &&
+        stage2[48] == 0 && stage2[64] == 0 && stage2[80] == 0 &&
+        stage2[128] == -67 && stage2[240] == 0;
+}
+
 static int test_inverse_transform_corner_prediction_vectors(void)
 {
     PixelI value = 12;
@@ -3803,6 +3837,7 @@ int main(int argc, char** argv)
         { "inverse_transform_math_vectors", test_inverse_transform_math_vectors },
         { "transform_math_dct2x2_vectors", test_transform_math_dct2x2_vectors },
         { "forward_transform_math_vectors", test_forward_transform_math_vectors },
+        { "forward_transform_stage_vectors", test_forward_transform_stage_vectors },
         { "inverse_transform_corner_prediction_vectors", test_inverse_transform_corner_prediction_vectors },
         { "four_butterfly_vectors", test_four_butterfly_vectors },
         { "inverse_transform_dc_clip_vectors", test_inverse_transform_dc_clip_vectors },

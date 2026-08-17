@@ -29,6 +29,7 @@
 #include "strTransform.h"
 #include "encode.h"
 #include "JxrForwardTransformMath.h"
+#include "JxrForwardTransformStages.h"
 
 /** local functions **/
 static Void strDCT2x2alt(PixelI * a, PixelI * b, PixelI * c, PixelI * d);
@@ -62,39 +63,12 @@ static Void strDCT2x2alt(PixelI * a, PixelI * b, PixelI * c, PixelI * d);
 
 Void strDCT4x4Stage1(PixelI * p)
 {
-    /** butterfly **/
-    //FOURBUTTERFLY(p, 0, 4, 8, 12, 1, 5, 9, 13, 2, 6, 10, 14, 3, 7, 11, 15);
-    strTransformApplyFourButterfly(p, JxrTransformFirstStageFourButterflyOffsets);
-
-    /** top left corner, butterfly => butterfly **/
-    strDCT2x2up(&p[0], &p[1], &p[2], &p[3]);
-
-    /** bottom right corner, pi/8 rotation => pi/8 rotation **/
-    JxrForwardTransformMathApplyOddOdd(&p[15], &p[14], &p[13], &p[12]);
-
-    /** top right corner, butterfly => pi/8 rotation **/
-    JxrForwardTransformMathApplyOdd(&p[5], &p[4], &p[7], &p[6]);
-
-    /** bottom left corner, pi/8 rotation => butterfly **/
-    JxrForwardTransformMathApplyOdd(&p[10], &p[8], &p[11], &p[9]);
+    JxrForwardTransformStagesApplyStage1Dct(p);
 }
 
 Void strDCT4x4SecondStage(PixelI * p)
 {
-    /** butterfly **/
-    strTransformApplyFourButterfly(p, JxrTransformSecondStageFourButterflyOffsets);
-    
-    /** top left corner, butterfly => butterfly **/
-    strDCT2x2up(&p[0], &p[64], &p[16], &p[80]);
-    
-    /** bottom right corner, pi/8 rotation => pi/8 rotation **/
-    JxrForwardTransformMathApplyOddOdd(&p[160], &p[224], &p[176], &p[240]);
-    
-    /** top right corner, butterfly => pi/8 rotation **/
-    JxrForwardTransformMathApplyOdd(&p[128], &p[192], &p[144], &p[208]);
-    
-    /** bottom left corner, pi/8 rotation => butterfly **/
-    JxrForwardTransformMathApplyOdd(&p[32], &p[48], &p[96], &p[112]);
+    JxrForwardTransformStagesApplyStage2Dct(p);
 }
 
 Void strNormalizeEnc(PixelI* p, Bool bChroma)
