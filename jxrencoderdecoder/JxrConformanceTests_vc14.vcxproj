@@ -6,7 +6,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration"><ConfigurationType>Application</ConfigurationType><CharacterSet>MultiByte</CharacterSet><PlatformToolset>v140</PlatformToolset></PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <PropertyGroup><OutDir>$(Configuration)\$(ProjectName)\$(Platform)\</OutDir><IntDir>$(OutDir)</IntDir></PropertyGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'"><ClCompile><AdditionalIncludeDirectories>..\image\decode;..\image\sys;..\common\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories><PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions><RuntimeLibrary>MultiThreaded</RuntimeLibrary><WarningLevel>Level4</WarningLevel><PrecompiledHeader></PrecompiledHeader></ClCompile><Link><SubSystem>Console</SubSystem><TargetMachine>MachineX64</TargetMachine></Link></ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'"><ClCompile><AdditionalIncludeDirectories>..\image\decode;..\image\encode;..\image\sys;..\common\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories><PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions><RuntimeLibrary>MultiThreaded</RuntimeLibrary><WarningLevel>Level4</WarningLevel><PrecompiledHeader></PrecompiledHeader></ClCompile><Link><SubSystem>Console</SubSystem><TargetMachine>MachineX64</TargetMachine></Link></ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\tests\JxrConformanceTests.c" />
     <ClCompile Include="..\image\encode\JxrForwardTransformMath.c" />

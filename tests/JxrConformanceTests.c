@@ -7,6 +7,7 @@
 #include "strTransform.h"
 #include "JxrTransformMath.h"
 #include "../image/encode/JxrForwardTransformMath.h"
+#include "encode.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
 #include "JxrAdaptiveScan.h"
@@ -3195,7 +3196,37 @@ static int test_forward_transform_math_vectors(void)
     if (legacyFirst != first || legacySecond != second || legacyThird != third || legacyFourth != fourth) return 0;
     first = -10; second = 5; third = 7; fourth = -3;
     JxrForwardTransformMathApplyDct2x2Down(&first, &second, &third, &fourth);
-    return first == -1 && second == -2 && third == -1 && fourth == -6;
+    if (first != -1 || second != -2 || third != -1 || fourth != -6) return 0;
+
+    first = 10; second = 20;
+    JxrForwardTransformMathApplyPre2(&first, &second);
+    if (first != 1 || second != 17) return 0;
+    legacyFirst = 10; legacySecond = 20;
+    strPre2(&legacyFirst, &legacySecond);
+    if (legacyFirst != first || legacySecond != second) return 0;
+    first = -10; second = 5;
+    JxrForwardTransformMathApplyPre2(&first, &second);
+    if (first != -14 || second != 10) return 0;
+
+    first = 10; second = 20; third = 30; fourth = 40;
+    JxrForwardTransformMathApplyPre2x2(&first, &second, &third, &fourth);
+    if (first != 0 || second != 9 || third != 20 || fourth != 30) return 0;
+    legacyFirst = 10; legacySecond = 20; legacyThird = 30; legacyFourth = 40;
+    strPre2x2(&legacyFirst, &legacySecond, &legacyThird, &legacyFourth);
+    if (legacyFirst != first || legacySecond != second || legacyThird != third || legacyFourth != fourth) return 0;
+    first = -10; second = 5; third = 7; fourth = -3;
+    JxrForwardTransformMathApplyPre2x2(&first, &second, &third, &fourth);
+    if (first != -14 || second != 9 || third != 11 || fourth != -7) return 0;
+
+    first = 10; second = 20; third = 30; fourth = 40;
+    JxrForwardTransformMathApplyPre4(&first, &second, &third, &fourth);
+    if (first != 0 || second != 1 || third != 34 || fourth != 35) return 0;
+    legacyFirst = 10; legacySecond = 20; legacyThird = 30; legacyFourth = 40;
+    strPre4(&legacyFirst, &legacySecond, &legacyThird, &legacyFourth);
+    if (legacyFirst != first || legacySecond != second || legacyThird != third || legacyFourth != fourth) return 0;
+    first = -10; second = 5; third = 7; fourth = -3;
+    JxrForwardTransformMathApplyPre4(&first, &second, &third, &fourth);
+    return first == -7 && second == 2 && third == 7 && fourth == -1;
 }
 
 static int test_inverse_transform_corner_prediction_vectors(void)

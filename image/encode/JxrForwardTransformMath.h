@@ -15,5 +15,16 @@ Void JxrForwardTransformMathApplyDct2x2Down(
     PixelI* second,
     PixelI* third,
     PixelI* fourth);
+Void JxrForwardTransformMathApplyPre2(PixelI* first, PixelI* second);
+Void JxrForwardTransformMathApplyPre2x2(
+    PixelI* first,
+    PixelI* second,
+    PixelI* third,
+    PixelI* fourth);
+Void JxrForwardTransformMathApplyPre4(
+    PixelI* first,
+    PixelI* second,
+    PixelI* third,
+    PixelI* fourth);
 
 #endif

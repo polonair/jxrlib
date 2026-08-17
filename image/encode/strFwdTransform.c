@@ -118,81 +118,18 @@ Void strDCT2x2dnEnc(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
 /** 2-point pre for boundaries **/
 Void strPre2(PixelI * pa, PixelI * pb)
 {
-    PixelI a, b;
-    a = *pa;
-    b = *pb;
-
-    /** rotate **/
-    b -= ((a + 2) >> 2);
-    a -= ((b + 1) >> 1);
-
-    a -= (b >> 5);
-    a -= (b >> 9);
-    a -= (b >> 13);
-
-    b -= ((a + 2) >> 2);
-
-    *pa = a;
-    *pb = b;
+    JxrForwardTransformMathApplyPre2(pa, pb);
 }
 
 Void strPre2x2(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
 {
-    PixelI a, b, c, d;
-    a = *pa;
-    b = *pb;
-    c = *pc;
-    d = *pd;
-
-    /** butterflies **/
-    a += d;
-    b += c;
-    d -= (a + 1) >> 1;
-    c -= (b + 1) >> 1;
-
-    /** rotate **/
-    b -= ((a + 2) >> 2);
-    a -= ((b + 1) >> 1);
-    a -= (b >> 5);
-    a -= (b >> 9);
-    a -= (b >> 13);
-    b -= ((a + 2) >> 2);
-
-    /** butterflies **/
-    d += (a + 1) >> 1;
-    c += (b + 1) >> 1;
-    a -= d;
-    b -= c;
-
-    *pa = a;
-    *pb = b;
-    *pc = c;
-    *pd = d;
+    JxrForwardTransformMathApplyPre2x2(pa, pb, pc, pd);
 }
 
 /** 4-point pre for boundaries **/
 Void strPre4(PixelI *pa, PixelI *pb, PixelI *pc, PixelI *pd)
 {
-    PixelI a, b, c, d;
-    a = *pa;
-    b = *pb;
-    c = *pc;
-    d = *pd;
-
-    a += d, b += c;
-    d -= ((a + 1) >> 1), c -= ((b + 1) >> 1);
-    
-    JxrForwardTransformMathRotateHalf(&c, &d);
-    
-    strHSTenc1_edge(&a, &d); strHSTenc1_edge(&b, &c);
-    
-    d += ((a + 1) >> 1), c += ((b + 1) >> 1);
-    a -= d, b -= c;
-
-    *pa = a;
-    *pb = b;
-    *pc = c;
-    *pd = d;
+    JxrForwardTransformMathApplyPre4(pa, pb, pc, pd);
 }
 
 /*****************************************************************************************
