@@ -1,11 +1,11 @@
 #include "strTransform.h"
 #include "strcodec.h"
 #include "decode.h"
-#include "JxrInverseTransformNormalCodecSetup.h"
+#include "JxrInverseTransformAlternateCodecSetup.h"
 
-Void JxrInverseTransformNormalCodecSetupInitialize(
-    JxrInverseTransformNormalCodecSetup* setup,
-    const CWMImageStrCodec* codec)
+Void JxrInverseTransformAlternateCodecSetupInitialize(
+    JxrInverseTransformAlternateCodecSetup* setup,
+    CWMImageStrCodec* codec)
 {
     JxrInverseTransformMacroblockGeometryInitialize(&setup->geometry,
         codec->WMISCP.olOverlap, codec->m_param.cfColorFormat,
@@ -14,11 +14,10 @@ Void JxrInverseTransformNormalCodecSetupInitialize(
     JxrInverseTransformPlanePlanInitialize(&setup->planePlan,
         setup->geometry.colorFormat, setup->geometry.channelCount,
         setup->geometry.thumbnailScale);
+    JxrHardTileCodecStateAdapterUpdate(codec, &setup->geometry,
+        &setup->hardTileState, &setup->boundaryContext);
     JxrInversePostProcessParametersInitialize(&setup->postProcessParameters,
         codec->WMII.cPostProcStrength, setup->geometry.overlap,
         setup->geometry.channelCount, codec->pTile[codec->cTileColumn].pQuantizerLP,
         codec->pTile[codec->cTileColumn].pQuantizerDC, codec->MBInfo.iQIndexLP);
-    JxrInverseHighPassParametersInitialize(&setup->highPassParameters,
-        codec->WMISCP.sbSubband, codec->m_param.cNumChannels,
-        codec->pTile[codec->cTileColumn].pQuantizerHP, codec->MBInfo.iQIndexHP);
 }

@@ -2,6 +2,8 @@
 #define JXR_INVERSE_TRANSFORM_NORMAL_CODEC_SETUP_H
 
 #include "JxrInverseHighPassParameters.h"
+#include "JxrInversePostProcessParameters.h"
+#include "JxrInverseTransformMacroblockGeometry.h"
 #include "JxrInverseTransformPlanePlan.h"
 
 typedef struct JxrInverseTransformNormalCodecSetup {
