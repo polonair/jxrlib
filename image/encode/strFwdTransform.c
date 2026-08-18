@@ -31,6 +31,8 @@
 #include "JxrForwardTransformMath.h"
 #include "JxrForwardTransformStages.h"
 #include "JxrForwardHardTileCodecStateAdapter.h"
+#include "JxrForwardTransformMacroblockGeometry.h"
+#include "JxrForwardTransformBoundaryContext.h"
 
 /** local functions **/
 static Void strDCT2x2alt(PixelI * a, PixelI * b, PixelI * c, PixelI * d);
@@ -152,47 +154,44 @@ Void strPre4x4Stage2Split(PixelI* p0, PixelI* p1)
 *************************************************************************/
 Void transformMacroblock(CWMImageStrCodec * pSC)
 {
-    OVERLAP olOverlap = pSC->WMISCP.olOverlap;
-    COLORFORMAT cfColorFormat = pSC->m_param.cfColorFormat;
-    Bool left = (pSC->cColumn == 0), right = (pSC->cColumn == pSC->cmbWidth);
-    Bool top = (pSC->cRow == 0), bottom = (pSC->cRow == pSC->cmbHeight);
-    Bool leftORright = (left || right), topORbottom = (top || bottom);
-    Bool topORleft = (left || top);// rightORbottom = (right || bottom);
-    Bool leftAdjacentColumn = (pSC->cColumn == 1), rightAdjacentColumn = (pSC->cColumn == pSC->cmbWidth - 1);
-    // Bool topAdjacentRow =  (pSC->cRow == 1), bottomAdjacentRow = (pSC->cRow == pSC->cmbHeight - 1);
+    JxrForwardTransformMacroblockGeometry geometry;
+    JxrForwardHardTileBoundaryState hardTileState;
+    JxrForwardTransformBoundaryContext boundaries;
     PixelI * p = NULL;// * pt = NULL;
     Int i, j;
-    Int iNumChromaFullPlanes = (Int)((YUV_420 == cfColorFormat || YUV_422 == cfColorFormat) ?
-        1 : pSC->m_param.cNumChannels);
 
-    JxrForwardHardTileCodecStateAdapterUpdate(pSC);
+    JxrForwardHardTileCodecStateAdapterUpdate(pSC, &hardTileState);
+    JxrForwardTransformMacroblockGeometryInitialize(&geometry,
+        pSC->WMISCP.olOverlap, pSC->m_param.cfColorFormat, pSC->cColumn, pSC->cRow,
+        pSC->cmbWidth, pSC->cmbHeight, pSC->m_param.cNumChannels);
+    JxrForwardTransformBoundaryContextInitialize(&boundaries, &geometry, &hardTileState);
 
     //================================================================
     // 400_Y, 444_YUV
-    for(i = 0; i < iNumChromaFullPlanes; ++i)
+    for(i = 0; i < (Int)geometry.fullResolutionPlaneCount; ++i)
     {
         PixelI* const p0 = pSC->p0MBbuffer[i];//(0 == i ? pSC->pY0 : (1 == i ? pSC->pU0 : pSC->pV0));
         PixelI* const p1 = pSC->p1MBbuffer[i];//(0 == i ? pSC->pY1 : (1 == i ? pSC->pU1 : pSC->pV1));
 
         //================================
         // first level overlap
-        if(OL_NONE != olOverlap)
+        if(OL_NONE != geometry.overlap)
         {
             /* Corner operations */
-            if ((top || pSC->bHoriTileBoundary) && (left || pSC->bVertTileBoundary))
+            if (boundaries.hasTopBoundary && boundaries.hasLeftBoundary)
                 strPre4(p1 + 0, p1 + 1, p1 + 2, p1 + 3);
-            if ((top || pSC->bHoriTileBoundary) && (right || pSC->bVertTileBoundary))
+            if (boundaries.hasTopBoundary && boundaries.hasRightBoundary)
                 strPre4(p1 - 59, p1 - 60, p1 - 57, p1 - 58);
-            if ((bottom || pSC->bHoriTileBoundary) && (left || pSC->bVertTileBoundary))
+            if (boundaries.hasBottomBoundary && boundaries.hasLeftBoundary)
                 strPre4(p0 + 48 + 10, p0 + 48 + 11, p0 + 48 + 8, p0 + 48 + 9);
-            if ((bottom || pSC->bHoriTileBoundary) && (right || pSC->bVertTileBoundary))
+            if (boundaries.hasBottomBoundary && boundaries.hasRightBoundary)
                 strPre4(p0 - 1, p0 - 2, p0 - 3, p0 - 4);
-            if(!right && !bottom)
+            if(!geometry.isRight && !geometry.isBottom)
             {
-                if (top || pSC->bHoriTileBoundary)
+                if (boundaries.hasTopBoundary)
                 {
 
-                    for (j = ((left || pSC->bVertTileBoundary) ? 0 : -64); j < 192; j += 64)
+                    for (j = (boundaries.hasLeftBoundary ? 0 : -64); j < 192; j += 64)
                     {
                         p = p1 + j;
                         strPre4(p + 5, p + 4, p + 64, p + 65);
@@ -202,15 +201,15 @@ Void transformMacroblock(CWMImageStrCodec * pSC)
                 }
                 else
                 {
-                    for (j = ((left || pSC->bVertTileBoundary) ? 0 : -64); j < 192; j += 64)
+                    for (j = (boundaries.hasLeftBoundary ? 0 : -64); j < 192; j += 64)
                     {
                         strPre4x4Stage1Split(p0 + 48 + j, p1 + j, 0);
                     }
                 }
 
-                if (left || pSC->bVertTileBoundary)
+                if (boundaries.hasLeftBoundary)
                 {
-                    if (!top && !pSC->bHoriTileBoundary)
+                    if (!geometry.isTop && !boundaries.isHorizontalTileBoundary)
                     {
                         strPre4(p0 + 58, p0 + 56, p1 + 0, p1 + 2);
                         strPre4(p0 + 59, p0 + 57, p1 + 1, p1 + 3);
@@ -243,9 +242,9 @@ Void transformMacroblock(CWMImageStrCodec * pSC)
                 strPre4x4Stage1(p1 + 160, 0);
             }
             
-            if (bottom || pSC->bHoriTileBoundary)
+            if (boundaries.hasBottomBoundary)
             {
-                for (j = ((left || pSC->bVertTileBoundary) ? 48 : -16); j < (right ? -16 : 240); j += 64)
+                for (j = (boundaries.hasLeftBoundary ? 48 : -16); j < (geometry.isRight ? -16 : 240); j += 64)
                 {
                     p = p0 + j;
                     strPre4(p + 15, p + 14, p + 74, p + 75);
@@ -254,9 +253,9 @@ Void transformMacroblock(CWMImageStrCodec * pSC)
                 }
             }
 
-            if ((right || pSC->bVertTileBoundary) && !bottom)
+            if (boundaries.hasRightBoundary && !geometry.isBottom)
             {
-                if (!top && !pSC->bHoriTileBoundary)
+                if (!geometry.isTop && !boundaries.isHorizontalTileBoundary)
                 {
                     strPre4(p0 - 1, p0 - 3, p1 - 59, p1 - 57);
                     strPre4(p0 - 2, p0 - 4, p1 - 60, p1 - 58);
@@ -273,17 +272,17 @@ Void transformMacroblock(CWMImageStrCodec * pSC)
 
         //================================
         // first level transform
-        if (!top)
+        if (!geometry.isTop)
         {
-            for (j = (left ? 48 : -16); j < (right ? 48 : 240); j += 64)
+            for (j = (geometry.isLeft ? 48 : -16); j < (geometry.isRight ? 48 : 240); j += 64)
             {
                 strDCT4x4Stage1(p0 + j);
             }
         }
 
-        if (!bottom)
+        if (!geometry.isBottom)
         {
-            for (j = (left ? 0 : -64); j < (right ? 0 : 192); j += 64)
+            for (j = (geometry.isLeft ? 0 : -64); j < (geometry.isRight ? 0 : 192); j += 64)
             {
                 strDCT4x4Stage1(p1 + j + 0);
                 strDCT4x4Stage1(p1 + j + 16);
@@ -293,42 +292,42 @@ Void transformMacroblock(CWMImageStrCodec * pSC)
         
         //================================
         // second level overlap
-        if (OL_TWO == olOverlap)
+        if (OL_TWO == geometry.overlap)
         {
             /* Corner operations */
-            if ((top || pSC->bHoriTileBoundary) && (left || pSC->bVertTileBoundary))
+            if (boundaries.hasTopBoundary && boundaries.hasLeftBoundary)
                 strPre4(p1 + 0, p1 + 64, p1 + 0 + 16, p1 + 64 + 16);
-            if ((top || pSC->bHoriTileBoundary) && (right || pSC->bVertTileBoundary))
+            if (boundaries.hasTopBoundary && boundaries.hasRightBoundary)
                 strPre4(p1 - 128, p1 - 64, p1 - 128 + 16, p1 - 64 + 16); 
-            if ((bottom || pSC->bHoriTileBoundary) && (left || pSC->bVertTileBoundary))
+            if (boundaries.hasBottomBoundary && boundaries.hasLeftBoundary)
                 strPre4(p0 + 32, p0 + 96, p0 + 32 + 16, p0 + 96 + 16);
-            if ((bottom || pSC->bHoriTileBoundary) && (right || pSC->bVertTileBoundary))
+            if (boundaries.hasBottomBoundary && boundaries.hasRightBoundary)
                 strPre4(p0 - 96, p0 - 32, p0 - 96 + 16, p0 - 32 + 16);
-            if ((leftORright || pSC->bVertTileBoundary) && (!topORbottom && !pSC->bHoriTileBoundary))
+            if (boundaries.hasLeftOrRightBoundary && (!boundaries.hasTopOrBottomBoundary))
             {
-                if (left || pSC->bVertTileBoundary) {
+                if (boundaries.hasLeftBoundary) {
                     j = 0;
                     strPre4(p0 + j + 32, p0 + j +  48, p1 + j +  0, p1 + j + 16);
                     strPre4(p0 + j + 96, p0 + j + 112, p1 + j + 64, p1 + j + 80);
                 }
-                if (right || pSC->bVertTileBoundary) {
+                if (boundaries.hasRightBoundary) {
                     j = -128;
                     strPre4(p0 + j + 32, p0 + j +  48, p1 + j +  0, p1 + j + 16);
                     strPre4(p0 + j + 96, p0 + j + 112, p1 + j + 64, p1 + j + 80);
                 }
             }
 
-            if (!leftORright && !pSC->bVertTileBoundary)
+            if (!boundaries.hasLeftOrRightBoundary)
             {
-                if (topORbottom || pSC->bHoriTileBoundary)
+                if (boundaries.hasTopOrBottomBoundary)
                 {
-                    if (top || pSC->bHoriTileBoundary) {
+                    if (boundaries.hasTopBoundary) {
                         p = p1;
                         strPre4(p - 128, p - 64, p +  0, p + 64);
                         strPre4(p - 112, p - 48, p + 16, p + 80);
                         p = NULL;
                     }
-                    if (bottom || pSC->bHoriTileBoundary) {
+                    if (boundaries.hasBottomBoundary) {
                         p = p0 + 32;
                         strPre4(p - 128, p - 64, p +  0, p + 64);
                         strPre4(p - 112, p - 48, p + 16, p + 80);
@@ -344,7 +343,7 @@ Void transformMacroblock(CWMImageStrCodec * pSC)
 
         //================================
         // second level transform
-        if (!topORleft){
+        if (!geometry.isTopOrLeft){
             if (pSC->m_param.bScaledArith) {
                 strNormalizeEnc(p0 - 256, (i != 0));
             }
@@ -354,30 +353,30 @@ Void transformMacroblock(CWMImageStrCodec * pSC)
 
     //================================================================
     // 420_UV
-    for(i = 0; i < (YUV_420 == cfColorFormat? 2 : 0); ++i)
+    for(i = 0; i < (YUV_420 == geometry.colorFormat? 2 : 0); ++i)
     {
         PixelI* const p0 = pSC->p0MBbuffer[1 + i];//(0 == i ? pSC->pU0 : pSC->pV0);
         PixelI* const p1 = pSC->p1MBbuffer[1 + i];//(0 == i ? pSC->pU1 : pSC->pV1);
 
         //================================
         // first level overlap (420_UV)
-        if (OL_NONE != olOverlap)
+        if (OL_NONE != geometry.overlap)
         {
             /* Corner operations */
-            if ((top || pSC->bHoriTileBoundary) && (left || pSC->bVertTileBoundary))
+            if (boundaries.hasTopBoundary && boundaries.hasLeftBoundary)
                 strPre4(p1 + 0, p1 + 1, p1 + 2, p1 + 3);
-            if ((top || pSC->bHoriTileBoundary) && (right || pSC->bVertTileBoundary))
+            if (boundaries.hasTopBoundary && boundaries.hasRightBoundary)
                 strPre4(p1 - 27, p1 - 28, p1 - 25, p1 - 26);
-            if ((bottom || pSC->bHoriTileBoundary) && (left || pSC->bVertTileBoundary))
+            if (boundaries.hasBottomBoundary && boundaries.hasLeftBoundary)
                 strPre4(p0 + 16 + 10, p0 + 16 + 11, p0 + 16 + 8, p0 + 16 + 9);
-            if ((bottom || pSC->bHoriTileBoundary) && (right || pSC->bVertTileBoundary))
+            if (boundaries.hasBottomBoundary && boundaries.hasRightBoundary)
                 strPre4(p0 - 1, p0 - 2, p0 - 3, p0 - 4);
-            if(!right && !bottom)
+            if(!geometry.isRight && !geometry.isBottom)
             {
-                if (top || pSC->bHoriTileBoundary)
+                if (boundaries.hasTopBoundary)
                 {
 
-                    for (j = ((left || pSC->bVertTileBoundary) ? 0 : -32); j < 32; j += 32)
+                    for (j = (boundaries.hasLeftBoundary ? 0 : -32); j < 32; j += 32)
                     {
                         p = p1 + j;
                         strPre4(p + 5, p + 4, p + 32, p + 33);
@@ -387,15 +386,15 @@ Void transformMacroblock(CWMImageStrCodec * pSC)
                 }
                 else
                 {
-                    for (j = ((left || pSC->bVertTileBoundary) ? 0: -32); j < 32; j += 32)
+                    for (j = (boundaries.hasLeftBoundary ? 0: -32); j < 32; j += 32)
                     {
                         strPre4x4Stage1Split(p0 + 16 + j, p1 + j, 32);
                     }
                 }
 
-                if (left || pSC->bVertTileBoundary)
+                if (boundaries.hasLeftBoundary)
                 {
-                    if (!top && !pSC->bHoriTileBoundary)
+                    if (!geometry.isTop && !boundaries.isHorizontalTileBoundary)
                     {
                         strPre4(p0 + 26, p0 + 24, p1 + 0, p1 + 2);
                         strPre4(p0 + 27, p0 + 25, p1 + 1, p1 + 3);
@@ -404,7 +403,7 @@ Void transformMacroblock(CWMImageStrCodec * pSC)
                     strPre4(p1 + 10, p1 + 8, p1 + 16, p1 + 18);
                     strPre4(p1 + 11, p1 + 9, p1 + 17, p1 + 19);
                 }
-                else if (!pSC->bVertTileBoundary)
+                else if (!boundaries.isVerticalTileBoundary)
                 {
                     strPre4x4Stage1(p1 - 32, 32);
                 }
@@ -412,9 +411,9 @@ Void transformMacroblock(CWMImageStrCodec * pSC)
                 strPre4x4Stage1(p1, 32);
             }
 
-            if (bottom || pSC->bHoriTileBoundary)
+            if (boundaries.hasBottomBoundary)
             {
-                for (j = ((left || pSC->bVertTileBoundary) ? 16: -16); j < (right ? -16: 32); j += 32)
+                for (j = (boundaries.hasLeftBoundary ? 16: -16); j < (geometry.isRight ? -16: 32); j += 32)
                 {
                     p = p0 + j;
                     strPre4(p + 15, p + 14, p + 42, p + 43);
@@ -423,9 +422,9 @@ Void transformMacroblock(CWMImageStrCodec * pSC)
                 }
             }
 
-            if ((right || pSC->bVertTileBoundary) && !bottom)
+            if (boundaries.hasRightBoundary && !geometry.isBottom)
             {
-                if (!top && !pSC->bHoriTileBoundary)
+                if (!geometry.isTop && !boundaries.isHorizontalTileBoundary)
                 {
                     strPre4(p0 - 1, p0 - 3, p1 - 27, p1 - 25);
                     strPre4(p0 - 2, p0 - 4, p1 - 28, p1 - 26);
@@ -438,17 +437,17 @@ Void transformMacroblock(CWMImageStrCodec * pSC)
 
         //================================
         // first level transform (420_UV)
-        if (!top)
+        if (!geometry.isTop)
         {
-            for (j = (left ? 16 : -16); j < (right ? 16 : 48); j += 32)
+            for (j = (geometry.isLeft ? 16 : -16); j < (geometry.isRight ? 16 : 48); j += 32)
             {
                 strDCT4x4Stage1(p0 + j);
             }
         }
 
-        if (!bottom)
+        if (!geometry.isBottom)
         {
-            for (j = (left ? 0 : -32); j < (right ? 0 : 32); j += 32)
+            for (j = (geometry.isLeft ? 0 : -32); j < (geometry.isRight ? 0 : 32); j += 32)
             {
                 strDCT4x4Stage1(p1 + j);
             }
@@ -456,61 +455,61 @@ Void transformMacroblock(CWMImageStrCodec * pSC)
         
         //================================
         // second level overlap (420_UV)
-        if (OL_TWO == olOverlap)
+        if (OL_TWO == geometry.overlap)
         {
-            if ((leftAdjacentColumn || pSC->bOneMBRightVertTB) && (top || pSC->bHoriTileBoundary))
+            if (boundaries.isLeftAdjacentToVerticalBoundary && boundaries.hasTopBoundary)
                 strTransformSubtractCornerPrediction(p1 - 64 + 0, *(p1 - 64 + 32));
 
-            if ((rightAdjacentColumn || pSC->bOneMBLeftVertTB) && (top || pSC->bHoriTileBoundary))
+            if (boundaries.isRightAdjacentToVerticalBoundary && boundaries.hasTopBoundary)
                 pSC->iPredBefore[i][0] = *(p1 + 0);
-            if ((right || pSC->bVertTileBoundary) && (top || pSC->bHoriTileBoundary))
+            if (boundaries.hasRightBoundary && boundaries.hasTopBoundary)
                 strTransformSubtractCornerPrediction(p1 - 64 + 32, pSC->iPredBefore[i][0]);
 
-            if ((leftAdjacentColumn || pSC->bOneMBRightVertTB) && (bottom || pSC->bHoriTileBoundary))
+            if (boundaries.isLeftAdjacentToVerticalBoundary && boundaries.hasBottomBoundary)
                 strTransformSubtractCornerPrediction(p0 - 64 + 16, *(p0 - 64 + 48));
 
-            if ((rightAdjacentColumn || pSC->bOneMBLeftVertTB) && (bottom || pSC->bHoriTileBoundary))
+            if (boundaries.isRightAdjacentToVerticalBoundary && boundaries.hasBottomBoundary)
                 pSC->iPredBefore[i][1] = *(p0 + 16);
-            if ((right || pSC->bVertTileBoundary) && (bottom || pSC->bHoriTileBoundary))
+            if (boundaries.hasRightBoundary && boundaries.hasBottomBoundary)
                 strTransformSubtractCornerPrediction(p0 - 64 + 48, pSC->iPredBefore[i][1]);
 
-            if ((leftORright || pSC->bVertTileBoundary) && !topORbottom && !pSC->bHoriTileBoundary)
+            if (boundaries.hasLeftOrRightBoundary && !boundaries.hasTopOrBottomBoundary)
             {
-                if (left || pSC->bVertTileBoundary)
+                if (boundaries.hasLeftBoundary)
                     strPre2(p0 + 0 + 16, p1 + 0);
-                if (right || pSC->bVertTileBoundary)
+                if (boundaries.hasRightBoundary)
                     strPre2(p0 + -32 + 16, p1 + -32);
             }
 
-            if (!leftORright)
+            if (!geometry.isLeftOrRight)
             {
-                if ((topORbottom || pSC->bHoriTileBoundary) && !pSC->bVertTileBoundary)
+                if (boundaries.hasTopOrBottomBoundary && !boundaries.isVerticalTileBoundary)
                 {
-                    if (top || pSC->bHoriTileBoundary)
+                    if (boundaries.hasTopBoundary)
                         strPre2(p1 - 32, p1);
-                    if (bottom || pSC->bHoriTileBoundary)
+                    if (boundaries.hasBottomBoundary)
                         strPre2(p0 + 16 - 32, p0 + 16);
                 }
-                else if (!topORbottom && !pSC->bHoriTileBoundary && !pSC->bVertTileBoundary)
+                else if (!boundaries.hasTopOrBottomBoundary && !boundaries.isVerticalTileBoundary)
                     strPre2x2(p0 - 16, p0 + 16, p1 - 32, p1);
             }
-            if ((leftAdjacentColumn || pSC->bOneMBRightVertTB) && (top || pSC->bHoriTileBoundary))
+            if (boundaries.isLeftAdjacentToVerticalBoundary && boundaries.hasTopBoundary)
                 strTransformAddCornerPrediction(p1 - 64 + 0, *(p1 - 64 + 32));
-            if ((rightAdjacentColumn || pSC->bOneMBLeftVertTB) && (top || pSC->bHoriTileBoundary))
+            if (boundaries.isRightAdjacentToVerticalBoundary && boundaries.hasTopBoundary)
                 pSC->iPredAfter[i][0] = *(p1 + 0);
-            if ((right || pSC->bVertTileBoundary) && (top || pSC->bHoriTileBoundary))
+            if (boundaries.hasRightBoundary && boundaries.hasTopBoundary)
                 strTransformAddCornerPrediction(p1 - 64 + 32, pSC->iPredAfter[i][0]);
-            if ((leftAdjacentColumn || pSC->bOneMBRightVertTB) && (bottom || pSC->bHoriTileBoundary))
+            if (boundaries.isLeftAdjacentToVerticalBoundary && boundaries.hasBottomBoundary)
                 strTransformAddCornerPrediction(p0 - 64 + 16, *(p0 - 64 + 48));
-            if ((rightAdjacentColumn || pSC->bOneMBLeftVertTB) && (bottom || pSC->bHoriTileBoundary))
+            if (boundaries.isRightAdjacentToVerticalBoundary && boundaries.hasBottomBoundary)
                 pSC->iPredAfter[i][1] = *(p0 + 16);
-            if ((right || pSC->bVertTileBoundary) && (bottom || pSC->bHoriTileBoundary))
+            if (boundaries.hasRightBoundary && boundaries.hasBottomBoundary)
                 strTransformAddCornerPrediction(p0 - 64 + 48, pSC->iPredAfter[i][1]);
         }
 
         //================================
         // second level transform (420_UV)
-        if (!topORleft)
+        if (!geometry.isTopOrLeft)
         {
             if (!pSC->m_param.bScaledArith) {
                 strDCT2x2dn(p0 - 64, p0 - 32, p0 - 48, p0 - 16);
@@ -523,30 +522,30 @@ Void transformMacroblock(CWMImageStrCodec * pSC)
 
     //================================================================
     //  422_UV
-    for(i = 0; i < (YUV_422 == cfColorFormat? 2 : 0); ++i)
+    for(i = 0; i < (YUV_422 == geometry.colorFormat? 2 : 0); ++i)
     {
         PixelI* const p0 = pSC->p0MBbuffer[1 + i];//(0 == i ? pSC->pU0 : pSC->pV0);
         PixelI* const p1 = pSC->p1MBbuffer[1 + i];//(0 == i ? pSC->pU1 : pSC->pV1);
 
         //================================
         // first level overlap (422_UV)
-        if (OL_NONE != olOverlap)
+        if (OL_NONE != geometry.overlap)
         {
             /* Corner operations */
-            if ((top || pSC->bHoriTileBoundary) && (left || pSC->bVertTileBoundary))
+            if (boundaries.hasTopBoundary && boundaries.hasLeftBoundary)
                 strPre4(p1 + 0, p1 + 1, p1 + 2, p1 + 3);
-            if ((top || pSC->bHoriTileBoundary) && (right || pSC->bVertTileBoundary))
+            if (boundaries.hasTopBoundary && boundaries.hasRightBoundary)
                 strPre4(p1 - 59, p1 - 60, p1 - 57, p1 - 58);
-            if ((bottom || pSC->bHoriTileBoundary) && (left || pSC->bVertTileBoundary))
+            if (boundaries.hasBottomBoundary && boundaries.hasLeftBoundary)
                 strPre4(p0 + 48 + 10, p0 + 48 + 11, p0 + 48 + 8, p0 + 48 + 9);
-            if ((bottom || pSC->bHoriTileBoundary) && (right || pSC->bVertTileBoundary))
+            if (boundaries.hasBottomBoundary && boundaries.hasRightBoundary)
                 strPre4(p0 - 1, p0 - 2, p0 - 3, p0 - 4);
-            if(!right && !bottom)
+            if(!geometry.isRight && !geometry.isBottom)
             {
-                if (top || pSC->bHoriTileBoundary)
+                if (boundaries.hasTopBoundary)
                 {
 
-                    for (j = ((left || pSC->bVertTileBoundary) ? 0 : -64); j < 64; j += 64)
+                    for (j = (boundaries.hasLeftBoundary ? 0 : -64); j < 64; j += 64)
                     {
                         p = p1 + j;
                         strPre4(p + 5, p + 4, p + 64, p + 65);
@@ -556,15 +555,15 @@ Void transformMacroblock(CWMImageStrCodec * pSC)
                 }
                 else
                 {
-                    for (j = ((left || pSC->bVertTileBoundary) ? 0: -64); j < 64; j += 64)
+                    for (j = (boundaries.hasLeftBoundary ? 0: -64); j < 64; j += 64)
                     {
                         strPre4x4Stage1Split(p0 + 48 + j, p1 + j, 0);
                     }
                 }
 
-                if (left || pSC->bVertTileBoundary)
+                if (boundaries.hasLeftBoundary)
                 {
-                    if (!top && !pSC->bHoriTileBoundary)
+                    if (!geometry.isTop && !boundaries.isHorizontalTileBoundary)
                     {
                         strPre4(p0 + 58, p0 + 56, p1 + 0, p1 + 2);
                         strPre4(p0 + 59, p0 + 57, p1 + 1, p1 + 3);
@@ -578,7 +577,7 @@ Void transformMacroblock(CWMImageStrCodec * pSC)
                         p = NULL;
                     }
                 }
-                else if (!pSC->bVertTileBoundary)
+                else if (!boundaries.isVerticalTileBoundary)
                 {
                     for (j = -64; j < -16; j += 16)
                     {
@@ -591,9 +590,9 @@ Void transformMacroblock(CWMImageStrCodec * pSC)
                 strPre4x4Stage1(p1 + 32, 0);
             }
 
-            if (bottom || pSC->bHoriTileBoundary)
+            if (boundaries.hasBottomBoundary)
             {
-                for (j = ((left || pSC->bVertTileBoundary) ? 48: -16); j < (right ? -16: 112); j += 64)
+                for (j = (boundaries.hasLeftBoundary ? 48: -16); j < (geometry.isRight ? -16: 112); j += 64)
                 {
                     p = p0 + j;
                     strPre4(p + 15, p + 14, p + 74, p + 75);
@@ -602,9 +601,9 @@ Void transformMacroblock(CWMImageStrCodec * pSC)
                 }
             }
 
-            if ((right || pSC->bVertTileBoundary) && !bottom)
+            if (boundaries.hasRightBoundary && !geometry.isBottom)
             {
-                if (!top && !pSC->bHoriTileBoundary)
+                if (!geometry.isTop && !boundaries.isHorizontalTileBoundary)
                 {
                     strPre4(p0 - 1, p0 - 3, p1 - 59, p1 - 57);
                     strPre4(p0 - 2, p0 - 4, p1 - 60, p1 - 58);
@@ -622,17 +621,17 @@ Void transformMacroblock(CWMImageStrCodec * pSC)
 
         //================================
         // first level transform (422_UV)
-        if (!top)
+        if (!geometry.isTop)
         {
-            for (j = (left ? 48 : -16); j < (right ? 48 : 112); j += 64)
+            for (j = (geometry.isLeft ? 48 : -16); j < (geometry.isRight ? 48 : 112); j += 64)
             {
                 strDCT4x4Stage1(p0 + j);
             }
         }
 
-        if (!bottom)
+        if (!geometry.isBottom)
         {
-            for (j = (left ? 0 : -64); j < (right ? 0 : 64); j += 64)
+            for (j = (geometry.isLeft ? 0 : -64); j < (geometry.isRight ? 0 : 64); j += 64)
             {
                 strDCT4x4Stage1(p1 + j + 0);
                 strDCT4x4Stage1(p1 + j + 16);
@@ -642,47 +641,47 @@ Void transformMacroblock(CWMImageStrCodec * pSC)
         
         //================================
         // second level overlap (422_UV)
-        if (OL_TWO == olOverlap)
+        if (OL_TWO == geometry.overlap)
         {
-            if ((leftAdjacentColumn || pSC->bOneMBRightVertTB) && (top || pSC->bHoriTileBoundary))
+            if (boundaries.isLeftAdjacentToVerticalBoundary && boundaries.hasTopBoundary)
                 strTransformSubtractCornerPrediction(p1 - 128 + 0, *(p1 - 128 + 64));
 
-            if ((rightAdjacentColumn || pSC->bOneMBLeftVertTB) && (top || pSC->bHoriTileBoundary))
+            if (boundaries.isRightAdjacentToVerticalBoundary && boundaries.hasTopBoundary)
                 pSC->iPredBefore[i][0] = *(p1 + 0);
-            if ((right || pSC->bVertTileBoundary) && (top || pSC->bHoriTileBoundary))
+            if (boundaries.hasRightBoundary && boundaries.hasTopBoundary)
                 strTransformSubtractCornerPrediction(p1 - 128 + 64, pSC->iPredBefore[i][0]);
 
-            if ((leftAdjacentColumn || pSC->bOneMBRightVertTB) && (bottom || pSC->bHoriTileBoundary))
+            if (boundaries.isLeftAdjacentToVerticalBoundary && boundaries.hasBottomBoundary)
                 strTransformSubtractCornerPrediction(p0 - 128 + 48, *(p0 - 128 + 112));
 
-            if ((rightAdjacentColumn || pSC->bOneMBLeftVertTB) && (bottom || pSC->bHoriTileBoundary))
+            if (boundaries.isRightAdjacentToVerticalBoundary && boundaries.hasBottomBoundary)
                 pSC->iPredBefore[i][1] = *(p0 + 48);
-            if ((right || pSC->bVertTileBoundary) && (bottom || pSC->bHoriTileBoundary))
+            if (boundaries.hasRightBoundary && boundaries.hasBottomBoundary)
                 strTransformSubtractCornerPrediction(p0 - 128 + 112, pSC->iPredBefore[i][1]);
 
-            if (!bottom)
+            if (!geometry.isBottom)
             {
-                if (leftORright || pSC->bVertTileBoundary)
+                if (boundaries.hasLeftOrRightBoundary)
                 {
-                    if (!top && !pSC->bHoriTileBoundary)
+                    if (!geometry.isTop && !boundaries.isHorizontalTileBoundary)
                     {
-                        if (left || pSC->bVertTileBoundary)
+                        if (boundaries.hasLeftBoundary)
                             strPre2(p0 + 48 + 0, p1 + 0);
 
-                        if (right || pSC->bVertTileBoundary)
+                        if (boundaries.hasRightBoundary)
                             strPre2(p0 + 48 + -64, p1 + -64);
                     }
 
-                    if (left || pSC->bVertTileBoundary)
+                    if (boundaries.hasLeftBoundary)
                         strPre2(p1 + 16, p1 + 16 + 16);
 
-                    if (right || pSC->bVertTileBoundary)
+                    if (boundaries.hasRightBoundary)
                         strPre2(p1 + -48, p1 + -48 + 16);
                 }
 
-                if (!leftORright && !pSC->bVertTileBoundary)
+                if (!boundaries.hasLeftOrRightBoundary)
                 {
-                    if (top || pSC->bHoriTileBoundary)
+                    if (boundaries.hasTopBoundary)
                         strPre2(p1 - 64, p1);
                     else
                         strPre2x2(p0 - 16, p0 + 48, p1 - 64, p1);
@@ -691,29 +690,29 @@ Void transformMacroblock(CWMImageStrCodec * pSC)
                 }
             }
 
-            if ((bottom || pSC->bHoriTileBoundary) && (!leftORright && !pSC->bVertTileBoundary))
+            if (boundaries.hasBottomBoundary && (!boundaries.hasLeftOrRightBoundary))
                 strPre2(p0 - 16, p0 + 48);
 
-            if ((leftAdjacentColumn || pSC->bOneMBRightVertTB) && (top || pSC->bHoriTileBoundary))
+            if (boundaries.isLeftAdjacentToVerticalBoundary && boundaries.hasTopBoundary)
                 strTransformAddCornerPrediction(p1 - 128 + 0, *(p1 - 128 + 64));
 
-            if ((rightAdjacentColumn || pSC->bOneMBLeftVertTB) && (top || pSC->bHoriTileBoundary))
+            if (boundaries.isRightAdjacentToVerticalBoundary && boundaries.hasTopBoundary)
                 pSC->iPredAfter[i][0] = *(p1 + 0);
-            if ((right || pSC->bVertTileBoundary) && (top || pSC->bHoriTileBoundary))
+            if (boundaries.hasRightBoundary && boundaries.hasTopBoundary)
                 strTransformAddCornerPrediction(p1 - 128 + 64, pSC->iPredAfter[i][0]);
 
-            if ((leftAdjacentColumn || pSC->bOneMBRightVertTB) && (bottom || pSC->bHoriTileBoundary))
+            if (boundaries.isLeftAdjacentToVerticalBoundary && boundaries.hasBottomBoundary)
                 strTransformAddCornerPrediction(p0 - 128 + 48, *(p0 - 128 + 112));
 
-            if ((rightAdjacentColumn || pSC->bOneMBLeftVertTB) && (bottom || pSC->bHoriTileBoundary))
+            if (boundaries.isRightAdjacentToVerticalBoundary && boundaries.hasBottomBoundary)
                 pSC->iPredAfter[i][1] = *(p0 + 48);
-            if ((right || pSC->bVertTileBoundary) && (bottom || pSC->bHoriTileBoundary))
+            if (boundaries.hasRightBoundary && boundaries.hasBottomBoundary)
                 strTransformAddCornerPrediction(p0 - 128 + 112, pSC->iPredAfter[i][1]);
         }
 
         //================================
         // second level transform (422_UV)
-        if (!topORleft)
+        if (!geometry.isTopOrLeft)
         {
             if (!pSC->m_param.bScaledArith) {
                 strDCT2x2dn(p0 - 128, p0 - 64, p0 - 112, p0 - 48);

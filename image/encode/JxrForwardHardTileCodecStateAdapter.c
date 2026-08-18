@@ -1,7 +1,9 @@
 #include "JxrForwardHardTileCodecStateAdapter.h"
 #include "JxrForwardHardTileBoundaryState.h"
 
-Void JxrForwardHardTileCodecStateAdapterUpdate(CWMImageStrCodec* codec)
+Void JxrForwardHardTileCodecStateAdapterUpdate(
+    CWMImageStrCodec* codec,
+    JxrForwardHardTileBoundaryState* state)
 {
     JxrForwardHardTileBoundaryConfiguration configuration;
     JxrForwardHardTileBoundaryState previous;
@@ -33,4 +35,5 @@ Void JxrForwardHardTileCodecStateAdapterUpdate(CWMImageStrCodec* codec)
     codec->bHoriTileBoundary = result.isHorizontalBoundary;
     codec->bOneMBLeftVertTB = result.isOneMacroblockLeftOfVerticalBoundary;
     codec->bOneMBRightVertTB = result.isOneMacroblockRightOfVerticalBoundary;
+    *state = result;
 }

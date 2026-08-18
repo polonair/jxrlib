@@ -9,6 +9,8 @@
 #include "../image/encode/JxrForwardTransformMath.h"
 #include "../image/encode/JxrForwardTransformStages.h"
 #include "../image/encode/JxrForwardHardTileBoundaryState.h"
+#include "../image/encode/JxrForwardTransformMacroblockGeometry.h"
+#include "../image/encode/JxrForwardTransformBoundaryContext.h"
 #include "encode.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
@@ -3393,6 +3395,63 @@ static int test_forward_hard_tile_boundary_state_vectors(void)
         next.previousMacroblockX == 4 && next.previousMacroblockY == 4;
 }
 
+static int test_forward_transform_macroblock_geometry_vectors(void)
+{
+    JxrForwardTransformMacroblockGeometry geometry;
+
+    JxrForwardTransformMacroblockGeometryInitialize(&geometry,
+        OL_TWO, YUV_420, 0, 0, 4, 7, 3);
+    if (geometry.overlap != OL_TWO || geometry.colorFormat != YUV_420 ||
+        !geometry.isLeft || geometry.isRight || !geometry.isTop || geometry.isBottom ||
+        !geometry.isTopOrBottom || !geometry.isLeftOrRight || !geometry.isTopOrLeft ||
+        geometry.isLeftAdjacentColumn || geometry.isRightAdjacentColumn ||
+        geometry.fullResolutionPlaneCount != 1) return 0;
+
+    JxrForwardTransformMacroblockGeometryInitialize(&geometry,
+        OL_ONE, YUV_444, 3, 7, 4, 7, 4);
+    if (geometry.overlap != OL_ONE || geometry.colorFormat != YUV_444 ||
+        geometry.isLeft || geometry.isRight || geometry.isTop || !geometry.isBottom ||
+        !geometry.isTopOrBottom || geometry.isLeftOrRight || geometry.isTopOrLeft ||
+        geometry.isLeftAdjacentColumn || !geometry.isRightAdjacentColumn ||
+        geometry.fullResolutionPlaneCount != 4) return 0;
+
+    JxrForwardTransformMacroblockGeometryInitialize(&geometry,
+        OL_NONE, YUV_422, 4, 2, 4, 7, 3);
+    return geometry.isRight && !geometry.isBottom && geometry.isLeftOrRight &&
+        !geometry.isRightAdjacentColumn && geometry.fullResolutionPlaneCount == 1;
+}
+
+static int test_forward_transform_boundary_context_vectors(void)
+{
+    JxrForwardTransformMacroblockGeometry geometry;
+    JxrForwardHardTileBoundaryState hardTileState;
+    JxrForwardTransformBoundaryContext context;
+
+    memset(&hardTileState, 0, sizeof(hardTileState));
+    JxrForwardTransformMacroblockGeometryInitialize(&geometry,
+        OL_NONE, YUV_444, 2, 3, 4, 7, 3);
+    JxrForwardTransformBoundaryContextInitialize(&context, &geometry, &hardTileState);
+    if (context.isVerticalTileBoundary || context.isHorizontalTileBoundary ||
+        context.hasTopBoundary || context.hasBottomBoundary ||
+        context.hasLeftBoundary || context.hasRightBoundary ||
+        context.hasTopOrBottomBoundary || context.hasLeftOrRightBoundary ||
+        context.isLeftAdjacentToVerticalBoundary ||
+        context.isRightAdjacentToVerticalBoundary) return 0;
+
+    hardTileState.isVerticalBoundary = TRUE;
+    hardTileState.isHorizontalBoundary = TRUE;
+    hardTileState.isOneMacroblockRightOfVerticalBoundary = TRUE;
+    JxrForwardTransformMacroblockGeometryInitialize(&geometry,
+        OL_TWO, YUV_444, 3, 2, 4, 7, 3);
+    JxrForwardTransformBoundaryContextInitialize(&context, &geometry, &hardTileState);
+    return context.isVerticalTileBoundary && context.isHorizontalTileBoundary &&
+        context.hasTopBoundary && context.hasBottomBoundary &&
+        context.hasLeftBoundary && context.hasRightBoundary &&
+        context.hasTopOrBottomBoundary && context.hasLeftOrRightBoundary &&
+        context.isLeftAdjacentToVerticalBoundary &&
+        context.isRightAdjacentToVerticalBoundary;
+}
+
 static int test_inverse_transform_corner_prediction_vectors(void)
 {
     PixelI value = 12;
@@ -3936,6 +3995,8 @@ int main(int argc, char** argv)
         { "forward_transform_prestage_vectors", test_forward_transform_prestage_vectors },
         { "forward_transform_prestage2_vectors", test_forward_transform_prestage2_vectors },
         { "forward_hard_tile_boundary_state_vectors", test_forward_hard_tile_boundary_state_vectors },
+        { "forward_transform_macroblock_geometry_vectors", test_forward_transform_macroblock_geometry_vectors },
+        { "forward_transform_boundary_context_vectors", test_forward_transform_boundary_context_vectors },
         { "inverse_transform_corner_prediction_vectors", test_inverse_transform_corner_prediction_vectors },
         { "four_butterfly_vectors", test_four_butterfly_vectors },
         { "inverse_transform_dc_clip_vectors", test_inverse_transform_dc_clip_vectors },
