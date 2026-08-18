@@ -30,6 +30,7 @@
 #include "encode.h"
 #include "JxrForwardTransformMath.h"
 #include "JxrForwardTransformStages.h"
+#include "JxrForwardHardTileCodecStateAdapter.h"
 
 /** local functions **/
 static Void strDCT2x2alt(PixelI * a, PixelI * b, PixelI * c, PixelI * d);
@@ -164,42 +165,7 @@ Void transformMacroblock(CWMImageStrCodec * pSC)
     Int iNumChromaFullPlanes = (Int)((YUV_420 == cfColorFormat || YUV_422 == cfColorFormat) ?
         1 : pSC->m_param.cNumChannels);
 
-    if (pSC->WMISCP.bUseHardTileBoundaries) {
-        //Add tile location information
-        if (pSC->cColumn == 0) {
-            pSC->bVertTileBoundary = FALSE;
-            pSC->tileY = 0;
-        }
-        pSC->bOneMBLeftVertTB = pSC->bOneMBRightVertTB = FALSE;
-        if(pSC->tileY > 0 && pSC->tileY <= pSC->WMISCP.cNumOfSliceMinus1H && (pSC->cColumn - 1) == pSC->WMISCP.uiTileY[pSC->tileY])
-            pSC->bOneMBRightVertTB = TRUE;
-        if(pSC->tileY < pSC->WMISCP.cNumOfSliceMinus1H && pSC->cColumn == pSC->WMISCP.uiTileY[pSC->tileY + 1]) {
-            pSC->bVertTileBoundary = TRUE;
-            pSC->tileY++;
-        }
-        else 
-            pSC->bVertTileBoundary = FALSE;
-        if(pSC->tileY < pSC->WMISCP.cNumOfSliceMinus1H && (pSC->cColumn + 1) == pSC->WMISCP.uiTileY[pSC->tileY + 1])
-            pSC->bOneMBLeftVertTB = TRUE;
-
-        if (pSC->cRow == 0) {
-            pSC->bHoriTileBoundary = FALSE;
-            pSC->tileX = 0;
-        }
-        else if(pSC->mbY != pSC->cRow && pSC->tileX < pSC->WMISCP.cNumOfSliceMinus1V && pSC->cRow == pSC->WMISCP.uiTileX[pSC->tileX + 1]) {
-            pSC->bHoriTileBoundary = TRUE;
-            pSC->tileX++;
-        }
-        else if(pSC->mbY != pSC->cRow)
-            pSC->bHoriTileBoundary = FALSE;
-    }
-    else {
-        pSC->bVertTileBoundary = FALSE;
-        pSC->bHoriTileBoundary = FALSE;
-        pSC->bOneMBLeftVertTB = FALSE;
-        pSC->bOneMBRightVertTB = FALSE;
-    }
-    pSC->mbX = pSC->cColumn, pSC->mbY = pSC->cRow;
+    JxrForwardHardTileCodecStateAdapterUpdate(pSC);
 
     //================================================================
     // 400_Y, 444_YUV

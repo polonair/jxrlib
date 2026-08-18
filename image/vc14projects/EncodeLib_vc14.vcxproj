@@ -172,6 +172,8 @@
     <ClCompile Include="..\encode\strFwdTransform.c" />
     <ClCompile Include="..\encode\JxrForwardTransformMath.c" />
     <ClCompile Include="..\encode\JxrForwardTransformStages.c" />
+    <ClCompile Include="..\encode\JxrForwardHardTileBoundaryState.c" />
+    <ClCompile Include="..\encode\JxrForwardHardTileCodecStateAdapter.c" />
     <ClCompile Include="..\encode\strPredQuantEnc.c" />
   </ItemGroup>
   <ItemGroup>

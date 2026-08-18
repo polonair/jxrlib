@@ -8,6 +8,7 @@
 #include "JxrTransformMath.h"
 #include "../image/encode/JxrForwardTransformMath.h"
 #include "../image/encode/JxrForwardTransformStages.h"
+#include "../image/encode/JxrForwardHardTileBoundaryState.h"
 #include "encode.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
@@ -3348,6 +3349,50 @@ static int test_forward_transform_prestage2_vectors(void)
         secondStage[144] == -43 && secondStage[224] == -31;
 }
 
+static int test_forward_hard_tile_boundary_state_vectors(void)
+{
+    const U32 verticalColumns[2] = { 0, 2 };
+    const U32 horizontalRows[2] = { 0, 3 };
+    JxrForwardHardTileBoundaryConfiguration configuration;
+    JxrForwardHardTileBoundaryState state;
+    JxrForwardHardTileBoundaryState next;
+
+    memset(&configuration, 0, sizeof(configuration));
+    memset(&state, 0, sizeof(state));
+    configuration.enabled = TRUE;
+    configuration.verticalSliceCountMinusOne = 1;
+    configuration.horizontalSliceCountMinusOne = 1;
+    configuration.verticalSliceColumns = verticalColumns;
+    configuration.horizontalSliceRows = horizontalRows;
+
+    JxrForwardHardTileBoundaryStateCalculate(&next, &state, &configuration, 0, 0);
+    if (next.tileX != 0 || next.tileY != 0 || next.isVerticalBoundary ||
+        next.isHorizontalBoundary || next.previousMacroblockX != 0 || next.previousMacroblockY != 0) return 0;
+    state = next;
+    JxrForwardHardTileBoundaryStateCalculate(&next, &state, &configuration, 1, 0);
+    if (!next.isOneMacroblockLeftOfVerticalBoundary || next.isVerticalBoundary || next.tileY != 0) return 0;
+    state = next;
+    JxrForwardHardTileBoundaryStateCalculate(&next, &state, &configuration, 2, 0);
+    if (!next.isVerticalBoundary || next.tileY != 1 ||
+        next.isOneMacroblockLeftOfVerticalBoundary || next.isOneMacroblockRightOfVerticalBoundary) return 0;
+    state = next;
+    JxrForwardHardTileBoundaryStateCalculate(&next, &state, &configuration, 3, 0);
+    if (!next.isOneMacroblockRightOfVerticalBoundary || next.isVerticalBoundary || next.tileY != 1) return 0;
+    state = next;
+    JxrForwardHardTileBoundaryStateCalculate(&next, &state, &configuration, 0, 2);
+    if (next.isHorizontalBoundary || next.tileX != 0) return 0;
+    state = next;
+    JxrForwardHardTileBoundaryStateCalculate(&next, &state, &configuration, 0, 3);
+    if (!next.isHorizontalBoundary || next.tileX != 1) return 0;
+
+    configuration.enabled = FALSE;
+    state = next;
+    JxrForwardHardTileBoundaryStateCalculate(&next, &state, &configuration, 4, 4);
+    return !next.isVerticalBoundary && !next.isHorizontalBoundary &&
+        !next.isOneMacroblockLeftOfVerticalBoundary && !next.isOneMacroblockRightOfVerticalBoundary &&
+        next.previousMacroblockX == 4 && next.previousMacroblockY == 4;
+}
+
 static int test_inverse_transform_corner_prediction_vectors(void)
 {
     PixelI value = 12;
@@ -3890,6 +3935,7 @@ int main(int argc, char** argv)
         { "forward_transform_stage_vectors", test_forward_transform_stage_vectors },
         { "forward_transform_prestage_vectors", test_forward_transform_prestage_vectors },
         { "forward_transform_prestage2_vectors", test_forward_transform_prestage2_vectors },
+        { "forward_hard_tile_boundary_state_vectors", test_forward_hard_tile_boundary_state_vectors },
         { "inverse_transform_corner_prediction_vectors", test_inverse_transform_corner_prediction_vectors },
         { "four_butterfly_vectors", test_four_butterfly_vectors },
         { "inverse_transform_dc_clip_vectors", test_inverse_transform_dc_clip_vectors },
