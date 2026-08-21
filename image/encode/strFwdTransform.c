@@ -28,52 +28,11 @@
 
 #include "strTransform.h"
 #include "encode.h"
-#include "JxrForwardHardTileCodecStateAdapter.h"
-#include "JxrForwardTransformMacroblockGeometry.h"
-#include "JxrForwardTransformBoundaryContext.h"
-#include "JxrForwardTransformFullResolutionPlane.h"
-#include "JxrForwardTransformChroma420Plane.h"
-#include "JxrForwardTransformChroma422Plane.h"
+#include "JxrForwardTransformEncoder.h"
 
 /** Top-level forward transform orchestration. **/
 
 Void transformMacroblock(CWMImageStrCodec * pSC)
 {
-    JxrForwardTransformMacroblockGeometry geometry;
-    JxrForwardHardTileBoundaryState hardTileState;
-    JxrForwardTransformBoundaryContext boundaries;
-    Int i;
-
-    JxrForwardHardTileCodecStateAdapterUpdate(pSC, &hardTileState);
-    JxrForwardTransformMacroblockGeometryInitialize(&geometry,
-        pSC->WMISCP.olOverlap, pSC->m_param.cfColorFormat, pSC->cColumn, pSC->cRow,
-        pSC->cmbWidth, pSC->cmbHeight, pSC->m_param.cNumChannels);
-    JxrForwardTransformBoundaryContextInitialize(&boundaries, &geometry, &hardTileState);
-
-    //================================================================
-    // 400_Y, 444_YUV
-    for(i = 0; i < (Int)geometry.fullResolutionPlaneCount; ++i)
-    {
-        JxrForwardTransformFullResolutionPlaneApply(pSC->p0MBbuffer[i], pSC->p1MBbuffer[i],
-            i != 0, &geometry, &boundaries, pSC->m_param.bScaledArith);
-    }
-
-    //================================================================
-    // 420_UV
-    for(i = 0; i < (YUV_420 == geometry.colorFormat ? 2 : 0); ++i)
-    {
-        JxrForwardTransformChroma420PlaneApply(pSC->p0MBbuffer[1 + i], pSC->p1MBbuffer[1 + i],
-            pSC->iPredBefore[i], pSC->iPredAfter[i], &geometry, &boundaries,
-            pSC->m_param.bScaledArith);
-    }
-
-    //================================================================
-    // 422_UV
-    for(i = 0; i < (YUV_422 == geometry.colorFormat ? 2 : 0); ++i)
-    {
-        JxrForwardTransformChroma422PlaneApply(pSC->p0MBbuffer[1 + i], pSC->p1MBbuffer[1 + i],
-            pSC->iPredBefore[i], pSC->iPredAfter[i], &geometry, &boundaries,
-            pSC->m_param.bScaledArith);
-    }
+    JxrForwardTransformEncoderProcessMacroblock(pSC);
 }
-

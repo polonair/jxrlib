@@ -14,6 +14,7 @@
 #include "../image/encode/JxrForwardTransformFullResolutionPlane.h"
 #include "../image/encode/JxrForwardTransformChroma420Plane.h"
 #include "../image/encode/JxrForwardTransformChroma422Plane.h"
+#include "../image/encode/JxrForwardTransformCodecSetup.h"
 #include "encode.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
@@ -3415,6 +3416,36 @@ static int test_forward_transform_boundary_context_vectors(void)
         context.isRightAdjacentToVerticalBoundary;
 }
 
+static int test_forward_transform_codec_setup_vectors(void)
+{
+    CWMImageStrCodec codec;
+    JxrForwardTransformCodecSetup setup;
+
+    memset(&codec, 0, sizeof(codec));
+    codec.WMISCP.olOverlap = OL_TWO;
+    codec.m_param.cfColorFormat = YUV_420;
+    codec.m_param.cNumChannels = 3;
+    codec.m_param.bScaledArith = TRUE;
+    codec.cColumn = 0;
+    codec.cRow = 0;
+    codec.cmbWidth = 4;
+    codec.cmbHeight = 7;
+    codec.bVertTileBoundary = TRUE;
+    codec.bHoriTileBoundary = TRUE;
+
+    JxrForwardTransformCodecSetupInitialize(&setup, &codec);
+
+    return setup.geometry.overlap == OL_TWO &&
+        setup.geometry.colorFormat == YUV_420 &&
+        setup.geometry.fullResolutionPlaneCount == 1 &&
+        setup.geometry.isLeft && setup.geometry.isTop &&
+        setup.boundaries.hasLeftBoundary && setup.boundaries.hasTopBoundary &&
+        !setup.hardTileState.isVerticalBoundary &&
+        !setup.hardTileState.isHorizontalBoundary &&
+        setup.usesScaledArithmetic &&
+        !codec.bVertTileBoundary && !codec.bHoriTileBoundary;
+}
+
 static int test_forward_full_resolution_plane_vectors(void)
 {
     PixelI samples[1408];
@@ -4061,6 +4092,7 @@ int main(int argc, char** argv)
         { "forward_hard_tile_boundary_state_vectors", test_forward_hard_tile_boundary_state_vectors },
         { "forward_transform_macroblock_geometry_vectors", test_forward_transform_macroblock_geometry_vectors },
         { "forward_transform_boundary_context_vectors", test_forward_transform_boundary_context_vectors },
+        { "forward_transform_codec_setup_vectors", test_forward_transform_codec_setup_vectors },
         { "forward_full_resolution_plane_vectors", test_forward_full_resolution_plane_vectors },
         { "forward_chroma_420_plane_vectors", test_forward_chroma_420_plane_vectors },
         { "forward_chroma_422_plane_vectors", test_forward_chroma_422_plane_vectors },

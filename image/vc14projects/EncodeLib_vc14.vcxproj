@@ -179,6 +179,8 @@
     <ClCompile Include="..\encode\JxrForwardTransformFullResolutionPlane.c" />
     <ClCompile Include="..\encode\JxrForwardTransformChroma420Plane.c" />
     <ClCompile Include="..\encode\JxrForwardTransformChroma422Plane.c" />
+    <ClCompile Include="..\encode\JxrForwardTransformCodecSetup.c" />
+    <ClCompile Include="..\encode\JxrForwardTransformEncoder.c" />
     <ClCompile Include="..\encode\strPredQuantEnc.c" />
   </ItemGroup>
   <ItemGroup>
