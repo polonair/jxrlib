@@ -42,6 +42,7 @@
 #include "JxrEncoderPacketStreamInitializer.h"
 #include "JxrEncoderQuantizerInitializer.h"
 #include "JxrEncoderChromaResamplingSetup.h"
+#include "JxrEncoderTileStateInitializer.h"
 #include <math.h>
 #include "perfTimer.h"
 
@@ -323,22 +324,8 @@ Int StrEncInit(CWMImageStrCodec* pSC)
 {
     if (JxrEncoderChromaResamplingSetupInitialize(pSC) != ICERR_OK)
         return ICERR_ERROR;
-    pSC->cTileColumn = pSC->cTileRow = 0;
-
-    if(allocateTileInfo(pSC) != ICERR_OK)
+    if (JxrEncoderTileStateInitializerInitialize(pSC) != ICERR_OK)
         return ICERR_ERROR;
-
-    if (JxrEncoderQuantizerInitializerInitialize(pSC) != ICERR_OK)
-        return ICERR_ERROR;
-
-    if(allocatePredInfo(pSC) != ICERR_OK){
-        return ICERR_ERROR;
-    }
-
-    if(pSC->WMISCP.cNumOfSliceMinus1V >= MAX_TILES || AllocateCodingContextEnc (pSC, pSC->WMISCP.cNumOfSliceMinus1V + 1, pSC->WMISCP.uiTrimFlexBits) != ICERR_OK){
-        return ICERR_ERROR;
-    }
-    
     if (pSC->m_bSecondary) {
         pSC->pIOHeader = pSC->m_pNextSC->pIOHeader;
         pSC->m_ppBitIO = pSC->m_pNextSC->m_ppBitIO;
