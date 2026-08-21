@@ -34,6 +34,7 @@
 #include "JxrForwardTransformMacroblockGeometry.h"
 #include "JxrForwardTransformBoundaryContext.h"
 #include "JxrForwardTransformFullResolutionPlane.h"
+#include "JxrForwardTransformChroma420Plane.h"
 
 /** local functions **/
 static Void strDCT2x2alt(PixelI * a, PixelI * b, PixelI * c, PixelI * d);
@@ -177,171 +178,11 @@ Void transformMacroblock(CWMImageStrCodec * pSC)
 
     //================================================================
     // 420_UV
-    for(i = 0; i < (YUV_420 == geometry.colorFormat? 2 : 0); ++i)
+    for(i = 0; i < (YUV_420 == geometry.colorFormat ? 2 : 0); ++i)
     {
-        PixelI* const p0 = pSC->p0MBbuffer[1 + i];//(0 == i ? pSC->pU0 : pSC->pV0);
-        PixelI* const p1 = pSC->p1MBbuffer[1 + i];//(0 == i ? pSC->pU1 : pSC->pV1);
-
-        //================================
-        // first level overlap (420_UV)
-        if (OL_NONE != geometry.overlap)
-        {
-            /* Corner operations */
-            if (boundaries.hasTopBoundary && boundaries.hasLeftBoundary)
-                strPre4(p1 + 0, p1 + 1, p1 + 2, p1 + 3);
-            if (boundaries.hasTopBoundary && boundaries.hasRightBoundary)
-                strPre4(p1 - 27, p1 - 28, p1 - 25, p1 - 26);
-            if (boundaries.hasBottomBoundary && boundaries.hasLeftBoundary)
-                strPre4(p0 + 16 + 10, p0 + 16 + 11, p0 + 16 + 8, p0 + 16 + 9);
-            if (boundaries.hasBottomBoundary && boundaries.hasRightBoundary)
-                strPre4(p0 - 1, p0 - 2, p0 - 3, p0 - 4);
-            if(!geometry.isRight && !geometry.isBottom)
-            {
-                if (boundaries.hasTopBoundary)
-                {
-
-                    for (j = (boundaries.hasLeftBoundary ? 0 : -32); j < 32; j += 32)
-                    {
-                        p = p1 + j;
-                        strPre4(p + 5, p + 4, p + 32, p + 33);
-                        strPre4(p + 7, p + 6, p + 34, p + 35);
-                        p = NULL;
-                    }
-                }
-                else
-                {
-                    for (j = (boundaries.hasLeftBoundary ? 0: -32); j < 32; j += 32)
-                    {
-                        strPre4x4Stage1Split(p0 + 16 + j, p1 + j, 32);
-                    }
-                }
-
-                if (boundaries.hasLeftBoundary)
-                {
-                    if (!geometry.isTop && !boundaries.isHorizontalTileBoundary)
-                    {
-                        strPre4(p0 + 26, p0 + 24, p1 + 0, p1 + 2);
-                        strPre4(p0 + 27, p0 + 25, p1 + 1, p1 + 3);
-                    }
-
-                    strPre4(p1 + 10, p1 + 8, p1 + 16, p1 + 18);
-                    strPre4(p1 + 11, p1 + 9, p1 + 17, p1 + 19);
-                }
-                else if (!boundaries.isVerticalTileBoundary)
-                {
-                    strPre4x4Stage1(p1 - 32, 32);
-                }
-
-                strPre4x4Stage1(p1, 32);
-            }
-
-            if (boundaries.hasBottomBoundary)
-            {
-                for (j = (boundaries.hasLeftBoundary ? 16: -16); j < (geometry.isRight ? -16: 32); j += 32)
-                {
-                    p = p0 + j;
-                    strPre4(p + 15, p + 14, p + 42, p + 43);
-                    strPre4(p + 13, p + 12, p + 40, p + 41);
-                    p = NULL;
-                }
-            }
-
-            if (boundaries.hasRightBoundary && !geometry.isBottom)
-            {
-                if (!geometry.isTop && !boundaries.isHorizontalTileBoundary)
-                {
-                    strPre4(p0 - 1, p0 - 3, p1 - 27, p1 - 25);
-                    strPre4(p0 - 2, p0 - 4, p1 - 28, p1 - 26);
-                }
-
-                strPre4(p1 - 17, p1 - 19, p1 - 11, p1 -  9);
-                strPre4(p1 - 18, p1 - 20, p1 - 12, p1 - 10);
-            }
-        }    
-
-        //================================
-        // first level transform (420_UV)
-        if (!geometry.isTop)
-        {
-            for (j = (geometry.isLeft ? 16 : -16); j < (geometry.isRight ? 16 : 48); j += 32)
-            {
-                strDCT4x4Stage1(p0 + j);
-            }
-        }
-
-        if (!geometry.isBottom)
-        {
-            for (j = (geometry.isLeft ? 0 : -32); j < (geometry.isRight ? 0 : 32); j += 32)
-            {
-                strDCT4x4Stage1(p1 + j);
-            }
-        }
-        
-        //================================
-        // second level overlap (420_UV)
-        if (OL_TWO == geometry.overlap)
-        {
-            if (boundaries.isLeftAdjacentToVerticalBoundary && boundaries.hasTopBoundary)
-                strTransformSubtractCornerPrediction(p1 - 64 + 0, *(p1 - 64 + 32));
-
-            if (boundaries.isRightAdjacentToVerticalBoundary && boundaries.hasTopBoundary)
-                pSC->iPredBefore[i][0] = *(p1 + 0);
-            if (boundaries.hasRightBoundary && boundaries.hasTopBoundary)
-                strTransformSubtractCornerPrediction(p1 - 64 + 32, pSC->iPredBefore[i][0]);
-
-            if (boundaries.isLeftAdjacentToVerticalBoundary && boundaries.hasBottomBoundary)
-                strTransformSubtractCornerPrediction(p0 - 64 + 16, *(p0 - 64 + 48));
-
-            if (boundaries.isRightAdjacentToVerticalBoundary && boundaries.hasBottomBoundary)
-                pSC->iPredBefore[i][1] = *(p0 + 16);
-            if (boundaries.hasRightBoundary && boundaries.hasBottomBoundary)
-                strTransformSubtractCornerPrediction(p0 - 64 + 48, pSC->iPredBefore[i][1]);
-
-            if (boundaries.hasLeftOrRightBoundary && !boundaries.hasTopOrBottomBoundary)
-            {
-                if (boundaries.hasLeftBoundary)
-                    strPre2(p0 + 0 + 16, p1 + 0);
-                if (boundaries.hasRightBoundary)
-                    strPre2(p0 + -32 + 16, p1 + -32);
-            }
-
-            if (!geometry.isLeftOrRight)
-            {
-                if (boundaries.hasTopOrBottomBoundary && !boundaries.isVerticalTileBoundary)
-                {
-                    if (boundaries.hasTopBoundary)
-                        strPre2(p1 - 32, p1);
-                    if (boundaries.hasBottomBoundary)
-                        strPre2(p0 + 16 - 32, p0 + 16);
-                }
-                else if (!boundaries.hasTopOrBottomBoundary && !boundaries.isVerticalTileBoundary)
-                    strPre2x2(p0 - 16, p0 + 16, p1 - 32, p1);
-            }
-            if (boundaries.isLeftAdjacentToVerticalBoundary && boundaries.hasTopBoundary)
-                strTransformAddCornerPrediction(p1 - 64 + 0, *(p1 - 64 + 32));
-            if (boundaries.isRightAdjacentToVerticalBoundary && boundaries.hasTopBoundary)
-                pSC->iPredAfter[i][0] = *(p1 + 0);
-            if (boundaries.hasRightBoundary && boundaries.hasTopBoundary)
-                strTransformAddCornerPrediction(p1 - 64 + 32, pSC->iPredAfter[i][0]);
-            if (boundaries.isLeftAdjacentToVerticalBoundary && boundaries.hasBottomBoundary)
-                strTransformAddCornerPrediction(p0 - 64 + 16, *(p0 - 64 + 48));
-            if (boundaries.isRightAdjacentToVerticalBoundary && boundaries.hasBottomBoundary)
-                pSC->iPredAfter[i][1] = *(p0 + 16);
-            if (boundaries.hasRightBoundary && boundaries.hasBottomBoundary)
-                strTransformAddCornerPrediction(p0 - 64 + 48, pSC->iPredAfter[i][1]);
-        }
-
-        //================================
-        // second level transform (420_UV)
-        if (!geometry.isTopOrLeft)
-        {
-            if (!pSC->m_param.bScaledArith) {
-                strDCT2x2dn(p0 - 64, p0 - 32, p0 - 48, p0 - 16);
-            }
-            else {
-                strDCT2x2dnEnc(p0 - 64, p0 - 32, p0 - 48, p0 - 16);
-            }
-        }
+        JxrForwardTransformChroma420PlaneApply(pSC->p0MBbuffer[1 + i], pSC->p1MBbuffer[1 + i],
+            pSC->iPredBefore[i], pSC->iPredAfter[i], &geometry, &boundaries,
+            pSC->m_param.bScaledArith);
     }
 
     //================================================================
