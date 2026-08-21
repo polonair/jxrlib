@@ -33,6 +33,7 @@
 #include "../image/encode/JxrEncoderTileStateInitializer.h"
 #include "../image/encode/JxrEncoderOutputInitializer.h"
 #include "../image/encode/JxrEncoderSampleConversion.h"
+#include "../image/encode/JxrEncoderColorTransform.h"
 #include "encode.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
@@ -3837,6 +3838,23 @@ static int test_encoder_sample_conversion_vectors(void)
         JxrEncoderSampleConversionFromSingle(0.5f, 127, 7) == 16128;
 }
 
+static int test_encoder_color_transform_vectors(void)
+{
+    PixelI red = 10;
+    PixelI green = 20;
+    PixelI blue = 30;
+    PixelI cyan = 4;
+    PixelI magenta = 7;
+    PixelI yellow = 12;
+    PixelI black = 2;
+
+    JxrEncoderColorTransformApplyRgb(&red, &green, &blue);
+    if (red != 0 || green != 20 || blue != 20) return 0;
+
+    JxrEncoderColorTransformApplyCmyk(&cyan, &magenta, &yellow, &black);
+    return cyan == 1 && magenta == 5 && yellow == 8 && black == 5;
+}
+
 static int test_forward_full_resolution_plane_vectors(void)
 {
     PixelI samples[1408];
@@ -4502,6 +4520,7 @@ int main(int argc, char** argv)
         { "encoder_tile_state_plan_vectors", test_encoder_tile_state_plan_vectors },
         { "encoder_output_plan_vectors", test_encoder_output_plan_vectors },
         { "encoder_sample_conversion_vectors", test_encoder_sample_conversion_vectors },
+        { "encoder_color_transform_vectors", test_encoder_color_transform_vectors },
         { "forward_full_resolution_plane_vectors", test_forward_full_resolution_plane_vectors },
         { "forward_chroma_420_plane_vectors", test_forward_chroma_420_plane_vectors },
         { "forward_chroma_422_plane_vectors", test_forward_chroma_422_plane_vectors },

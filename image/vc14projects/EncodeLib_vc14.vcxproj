@@ -199,6 +199,7 @@
     <ClCompile Include="..\encode\JxrEncoderTileStateInitializer.c" />
     <ClCompile Include="..\encode\JxrEncoderOutputInitializer.c" />
     <ClCompile Include="..\encode\JxrEncoderSampleConversion.c" />
+    <ClCompile Include="..\encode\JxrEncoderColorTransform.c" />
     <ClCompile Include="..\encode\strPredQuantEnc.c" />
   </ItemGroup>
   <ItemGroup>

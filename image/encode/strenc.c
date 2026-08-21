@@ -45,6 +45,7 @@
 #include "JxrEncoderTileStateInitializer.h"
 #include "JxrEncoderOutputInitializer.h"
 #include "JxrEncoderSampleConversion.h"
+#include "JxrEncoderColorTransform.h"
 #include <math.h>
 #include "perfTimer.h"
 
@@ -130,8 +131,6 @@ Int processMacroblock(CWMImageStrCodec *pSC)
 // functions to get image data from input buffer
 // this inlcudes necessary color conversion and boundary padding
 //================================================================
-#define _CC(r, g, b) (b -= r, r += ((b + 1) >> 1) - g, g += ((r + 0) >> 1))
-#define _CC_CMYK(c, m, y, k) (y -= c, c += ((y + 1) >> 1) - m, m += (c >> 1) - k, k += ((m + 1) >> 1))
 
 //================================================================
 // BitIOInfo init/term for encoding
@@ -1064,7 +1063,7 @@ Int inputMBRow(CWMImageStrCodec* pSC)
 					for(iColumn = 0; iColumn < cColumn; iColumn ++, pSrc += cPixelStride){
 						PixelI r = ((PixelI)pSrc[iR]) << cShift, g = ((PixelI)pSrc[1]) << cShift, b = ((PixelI)pSrc[iB]) << cShift;   
 
-						_CC(r, g, b); // color conversion
+						JxrEncoderColorTransformApplyRgb(&r, &g, &b); // color conversion
 				   
 						iPos = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf];
 						pU[iPos] = -r, pV[iPos] = b, pY[iPos] = g - iOffset;
@@ -1100,7 +1099,7 @@ Int inputMBRow(CWMImageStrCodec* pSC)
                         PixelI g = JxrEncoderSampleConversionFromRgbe(pSrc[1], iExp) << cShift;
                         PixelI b = JxrEncoderSampleConversionFromRgbe(pSrc[2], iExp) << cShift;
 
-                        _CC(r, g, b);
+                        JxrEncoderColorTransformApplyRgb(&r, &g, &b);
 
                         iPos = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf];
                         pU[iPos] = -r, pV[iPos] = b, pY[iPos] = g;
@@ -1117,7 +1116,7 @@ Int inputMBRow(CWMImageStrCodec* pSC)
                         PixelI y = ((PixelI)pSrc[2]) << cShift;
                         PixelI k = ((PixelI)pSrc[3]) << cShift;
 
-                        _CC_CMYK(c, m, y, k);
+                        JxrEncoderColorTransformApplyCmyk(&c, &m, &y, &k);
                         
                         iPos = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf];
                         pU[iPos] = c, pV[iPos] = -y, pK[iPos] = k, pY[iPos] = iOffset - m;
@@ -1168,7 +1167,7 @@ Int inputMBRow(CWMImageStrCodec* pSC)
                     for(iColumn = 0; iColumn < cColumn; iColumn ++, pSrc += cStride){
                         PixelI r = ((PixelI)pSrc[0] >> nLen) << cShift, g = ((PixelI)pSrc[1] >> nLen) << cShift, b = ((PixelI)pSrc[2] >> nLen) << cShift;
                         
-                        _CC(r, g, b); // color conversion
+                        JxrEncoderColorTransformApplyRgb(&r, &g, &b); // color conversion
 
                         iPos = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf];
                         pU[iPos] = -r, pV[iPos] = b, pY[iPos] = g - iOffset;
@@ -1200,7 +1199,7 @@ Int inputMBRow(CWMImageStrCodec* pSC)
                         PixelI y = ((PixelI)pSrc[2] >> nLen) << cShift;
                         PixelI k = ((PixelI)pSrc[3] >> nLen) << cShift;
 
-                        _CC_CMYK(c, m, y, k);
+                        JxrEncoderColorTransformApplyCmyk(&c, &m, &y, &k);
                         
                         iPos = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf];
                         pU[iPos] = c, pV[iPos] = -y, pK[iPos] = k, pY[iPos] = iOffset - m;
@@ -1250,7 +1249,7 @@ Int inputMBRow(CWMImageStrCodec* pSC)
                     for(iColumn = 0; iColumn < cColumn; iColumn ++, pSrc += cStride){
                         PixelI r = ((PixelI)pSrc[0] >> nLen) << cShift, g = ((PixelI)pSrc[1] >> nLen) << cShift, b = ((PixelI)pSrc[2] >> nLen) << cShift;
                         
-                        _CC(r, g, b); // color conversion
+                        JxrEncoderColorTransformApplyRgb(&r, &g, &b); // color conversion
 
                         iPos = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf];
                         pU[iPos] = -r, pV[iPos] = b, pY[iPos] = g;
@@ -1282,7 +1281,7 @@ Int inputMBRow(CWMImageStrCodec* pSC)
 							PixelI y = ((PixelI)pSrc[2] >> nLen) << cShift;
 							PixelI k = ((PixelI)pSrc[3] >> nLen) << cShift;
 	
-							_CC_CMYK(c, m, y, k);
+							JxrEncoderColorTransformApplyCmyk(&c, &m, &y, &k);
 							
 							iPos = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf];
 							pU[iPos] = c, pV[iPos] = -y, pK[iPos] = k, pY[iPos] = -m;
@@ -1306,7 +1305,7 @@ Int inputMBRow(CWMImageStrCodec* pSC)
                         PixelI g = JxrEncoderSampleConversionFromHalf(pSrc[1]) << cShift;
                         PixelI b = JxrEncoderSampleConversionFromHalf(pSrc[2]) << cShift;
                         
-                        _CC(r, g, b); // color conversion
+                        JxrEncoderColorTransformApplyRgb(&r, &g, &b); // color conversion
 
                         iPos = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf];
                         pU[iPos] = -r, pV[iPos] = b, pY[iPos] = g;
@@ -1343,7 +1342,7 @@ Int inputMBRow(CWMImageStrCodec* pSC)
                     for(iColumn = 0; iColumn < cColumn; iColumn ++, pSrc += cStride){
                         PixelI r = (pSrc[0] >> nLen) << cShift, g = (pSrc[1] >> nLen) << cShift, b = (pSrc[2] >> nLen) << cShift;
                         
-                        _CC(r, g, b); // color conversion
+                        JxrEncoderColorTransformApplyRgb(&r, &g, &b); // color conversion
 
                         iPos = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf];
                         pU[iPos] = -r, pV[iPos] = b, pY[iPos] = g - iOffset;
@@ -1379,7 +1378,7 @@ Int inputMBRow(CWMImageStrCodec* pSC)
                     for(iColumn = 0; iColumn < cColumn; iColumn ++, pSrc += cStride){
                         PixelI r = (pSrc[0] >> nLen)<< cShift, g = (pSrc[1] >> nLen)<< cShift, b = (pSrc[2] >> nLen)<< cShift;
                         
-                        _CC(r, g, b); // color conversion
+                        JxrEncoderColorTransformApplyRgb(&r, &g, &b); // color conversion
 
                         iPos = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf];
                         pU[iPos] = -r, pV[iPos] = b, pY[iPos] = g;
@@ -1417,7 +1416,7 @@ Int inputMBRow(CWMImageStrCodec* pSC)
                         PixelI g = JxrEncoderSampleConversionFromSingle(pSrc[1], nExpBias, nLen) << cShift;
                         PixelI b = JxrEncoderSampleConversionFromSingle(pSrc[2], nExpBias, nLen) << cShift;
 
-                        _CC(r, g, b); // color conversion
+                        JxrEncoderColorTransformApplyRgb(&r, &g, &b); // color conversion
 
                         iPos = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf];
                         pU[iPos] = -r, pV[iPos] = b, pY[iPos] = g;
@@ -1454,7 +1453,7 @@ Int inputMBRow(CWMImageStrCodec* pSC)
 
                 g = ((r >> 5) + ((g & 3) << 3)) << cShift, r = (r & 0x1F) << cShift;
 
-                _CC(r, g, b); // color conversion
+                JxrEncoderColorTransformApplyRgb(&r, &g, &b); // color conversion
                 
                 iPos = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf];
                 pU[iPos] = -r, pV[iPos] = b, pY[iPos] = g - iOffset;
@@ -1471,7 +1470,7 @@ Int inputMBRow(CWMImageStrCodec* pSC)
 
                 g = ((r >> 5) + ((g & 7) << 3)) << cShift, r = (r & 0x1F) << (cShift + 1);
 
-                _CC(r, g, b); // color conversion
+                JxrEncoderColorTransformApplyRgb(&r, &g, &b); // color conversion
                 
                 iPos = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf];
                 pU[iPos] = -r, pV[iPos] = b, pY[iPos] = g - iOffset;
@@ -1489,7 +1488,7 @@ Int inputMBRow(CWMImageStrCodec* pSC)
                 r = (r + ((g & 3) << 8)) << cShift, g = ((g >> 2) + ((b & 0xF) << 6)) << cShift;
                 b = ((b >> 4) + (((PixelI)pSrc[3] & 0x3F) << 4)) << cShift;
 
-                _CC(r, g, b); // color conversion
+                JxrEncoderColorTransformApplyRgb(&r, &g, &b); // color conversion
                 
                 iPos = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf];
                 pU[iPos] = -r, pV[iPos] = b, pY[iPos] = g - iOffset;
