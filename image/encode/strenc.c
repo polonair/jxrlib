@@ -39,6 +39,7 @@
 #include "JxrEncoderIndexTableWriter.h"
 #include "JxrEncoderPacketStreamAssembler.h"
 #include "JxrEncoderPacketStreamCleanup.h"
+#include "JxrEncoderPacketStreamInitializer.h"
 #include <math.h>
 #include "perfTimer.h"
 
@@ -229,83 +230,7 @@ static _FORCEINLINE PixelI forwardHalf (PixelI hHalf)
 
 Int StrIOEncInit(CWMImageStrCodec* pSC)
 {
-    pSC->m_param.bIndexTable = !(pSC->WMISCP.bfBitstreamFormat == SPATIAL && pSC->WMISCP.cNumOfSliceMinus1H + pSC->WMISCP.cNumOfSliceMinus1V == 0);
-    if(allocateBitIOInfo(pSC) != ICERR_OK){
-        return ICERR_ERROR;
-    }
-
-    attachISWrite(pSC->pIOHeader, pSC->WMISCP.pWStream);
-
-    if(pSC->cNumBitIO > 0){
-        size_t i;
-#if defined(_WINDOWS_) || defined(UNDER_CE)  // tmpnam does not exist in VS2005 WinCE CRT
-        TCHAR szPath[MAX_PATH];
-        DWORD cSize, j, k;
-#endif
-        char * pFilename;
-
-        pSC->ppWStream = (struct WMPStream **)malloc(pSC->cNumBitIO * sizeof(struct WMPStream *));
-        if(pSC->ppWStream == NULL) return ICERR_ERROR;
-        memset(pSC->ppWStream, 0, pSC->cNumBitIO * sizeof(struct WMPStream *));
-
-        if (pSC->cmbHeight * pSC->cmbWidth * pSC->WMISCP.cChannel >= JXR_ENCODER_MAX_MEMORY_SIZE_IN_WORDS) {
-#ifdef _WINDOWS_
-            pSC->ppTempFile = (TCHAR **)malloc(pSC->cNumBitIO * sizeof(TCHAR *));
-            if(pSC->ppTempFile == NULL) return ICERR_ERROR;
-            memset(pSC->ppTempFile, 0, pSC->cNumBitIO * sizeof(TCHAR *)); 
-#else
-            pSC->ppTempFile = (char **)malloc(pSC->cNumBitIO * sizeof(char *));
-            if(pSC->ppTempFile == NULL) return ICERR_ERROR;
-            memset(pSC->ppTempFile, 0, pSC->cNumBitIO * sizeof(char *));
-#endif
-        }
-
-        for(i = 0; i < pSC->cNumBitIO; i ++){
-            if (pSC->cmbHeight * pSC->cmbWidth * pSC->WMISCP.cChannel >= JXR_ENCODER_MAX_MEMORY_SIZE_IN_WORDS) {
-#if defined(_WINDOWS_) || defined(UNDER_CE)  // tmpnam does not exist in VS2005 WinCE CRT              
-                Bool bUnicode = sizeof(TCHAR) == 2;
-                pSC->ppTempFile[i] = (TCHAR *)malloc(MAX_PATH * sizeof(TCHAR));
-                if(pSC->ppTempFile[i] == NULL) return ICERR_ERROR;
-
-                pFilename = (char *)pSC->ppTempFile[i];
-
-                cSize = GetTempPath(MAX_PATH, szPath);
-                if(cSize == 0 || cSize >= MAX_PATH)
-                    return ICERR_ERROR;
-                if(!GetTempFileName(szPath, TEXT("wdp"), 0, pSC->ppTempFile[i]))
-                    return ICERR_ERROR;
-
-                if(bUnicode){ // unicode file name
-                    for(k = j = cSize = 0; cSize < MAX_PATH; cSize ++, j += 2){
-                        if(pSC->ppTempFile[i][cSize] == '\0')
-                            break;
-                        if(pFilename[j] != '\0')
-                            pFilename[k ++] = pFilename[j];
-                        if(pFilename[j + 1] != '\0')
-                            pFilename[k ++] = pFilename[j + 1];
-                    }
-                    pFilename[cSize] = '\0';
-                }
-
-#else //DPK needs to support ANSI 
-                pSC->ppTempFile[i] = (char *)malloc(FILENAME_MAX * sizeof(char));
-                if(pSC->ppTempFile[i] == NULL) return ICERR_ERROR;
-
-                if ((pFilename = tmpnam(NULL)) == NULL)
-                    return ICERR_ERROR;                
-                strcpy(pSC->ppTempFile[i], pFilename);
-#endif
-                if(CreateWS_File(pSC->ppWStream + i, pFilename, "w+b") != ICERR_OK) return ICERR_ERROR;                
-
-            }
-            else {
-                if(CreateWS_List(pSC->ppWStream + i) != ICERR_OK) return ICERR_ERROR;
-            }
-            attachISWrite(pSC->m_ppBitIO[i], pSC->ppWStream[i]);
-        }
-    }
-
-    return ICERR_OK;
+    return JxrEncoderPacketStreamInitializerInitialize(pSC);
 }
 
 Int writeIndexTableNull(CWMImageStrCodec * pSC)

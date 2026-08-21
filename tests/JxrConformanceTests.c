@@ -27,6 +27,7 @@
 #include "../image/encode/JxrEncoderIndexTableWriter.h"
 #include "../image/encode/JxrEncoderPacketStreamAssembler.h"
 #include "../image/encode/JxrEncoderPacketStreamCleanup.h"
+#include "../image/encode/JxrEncoderPacketStreamInitializer.h"
 #include "encode.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
@@ -3732,6 +3733,26 @@ static int test_encoder_packet_stream_cleanup_plan_vectors(void)
         !plan.closesPacketStreams;
 }
 
+static int test_encoder_packet_stream_initialization_plan_vectors(void)
+{
+    JxrEncoderPacketStreamInitializationPlan plan;
+
+    JxrEncoderPacketStreamInitializationPlanInitialize(&plan, SPATIAL,
+        0, 0, 0, 1, 1, 1);
+    if (plan.writesIndexTable || plan.createsPacketStreams ||
+        plan.usesTemporaryFiles) return 0;
+
+    JxrEncoderPacketStreamInitializationPlanInitialize(&plan, FREQUENCY,
+        0, 0, 1, 1, 1, 1);
+    if (!plan.writesIndexTable || !plan.createsPacketStreams ||
+        plan.usesTemporaryFiles) return 0;
+
+    JxrEncoderPacketStreamInitializationPlanInitialize(&plan, SPATIAL,
+        1, 0, 1, JXR_ENCODER_MAX_MEMORY_SIZE_IN_WORDS, 1, 1);
+    return plan.writesIndexTable && plan.createsPacketStreams &&
+        plan.usesTemporaryFiles;
+}
+
 static int test_forward_full_resolution_plane_vectors(void)
 {
     PixelI samples[1408];
@@ -4391,6 +4412,7 @@ int main(int argc, char** argv)
         { "encoder_index_table_plan_vectors", test_encoder_index_table_plan_vectors },
         { "encoder_packet_stream_plan_vectors", test_encoder_packet_stream_plan_vectors },
         { "encoder_packet_stream_cleanup_plan_vectors", test_encoder_packet_stream_cleanup_plan_vectors },
+        { "encoder_packet_stream_initialization_plan_vectors", test_encoder_packet_stream_initialization_plan_vectors },
         { "forward_full_resolution_plane_vectors", test_forward_full_resolution_plane_vectors },
         { "forward_chroma_420_plane_vectors", test_forward_chroma_420_plane_vectors },
         { "forward_chroma_422_plane_vectors", test_forward_chroma_422_plane_vectors },
