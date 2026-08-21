@@ -194,6 +194,7 @@
     <ClCompile Include="..\encode\JxrEncoderPacketStreamAssembler.c" />
     <ClCompile Include="..\encode\JxrEncoderPacketStreamCleanup.c" />
     <ClCompile Include="..\encode\JxrEncoderPacketStreamInitializer.c" />
+    <ClCompile Include="..\encode\JxrEncoderQuantizerInitializer.c" />
     <ClCompile Include="..\encode\strPredQuantEnc.c" />
   </ItemGroup>
   <ItemGroup>

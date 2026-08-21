@@ -28,6 +28,7 @@
 #include "../image/encode/JxrEncoderPacketStreamAssembler.h"
 #include "../image/encode/JxrEncoderPacketStreamCleanup.h"
 #include "../image/encode/JxrEncoderPacketStreamInitializer.h"
+#include "../image/encode/JxrEncoderQuantizerInitializer.h"
 #include "encode.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
@@ -3753,6 +3754,19 @@ static int test_encoder_packet_stream_initialization_plan_vectors(void)
         plan.usesTemporaryFiles;
 }
 
+static int test_encoder_quantizer_plan_vectors(void)
+{
+    JxrEncoderQuantizerPlan plan;
+    JxrEncoderQuantizerPlanInitialize(&plan, 0, SB_ALL);
+    if (!plan.initializesDc || !plan.initializesLp || !plan.initializesHp) return 0;
+    JxrEncoderQuantizerPlanInitialize(&plan, 7, SB_ALL);
+    if (plan.initializesDc || plan.initializesLp || plan.initializesHp) return 0;
+    JxrEncoderQuantizerPlanInitialize(&plan, 0, SB_NO_HIGHPASS);
+    if (!plan.initializesDc || !plan.initializesLp || plan.initializesHp) return 0;
+    JxrEncoderQuantizerPlanInitialize(&plan, 0, SB_DC_ONLY);
+    return plan.initializesDc && !plan.initializesLp && !plan.initializesHp;
+}
+
 static int test_forward_full_resolution_plane_vectors(void)
 {
     PixelI samples[1408];
@@ -4413,6 +4427,7 @@ int main(int argc, char** argv)
         { "encoder_packet_stream_plan_vectors", test_encoder_packet_stream_plan_vectors },
         { "encoder_packet_stream_cleanup_plan_vectors", test_encoder_packet_stream_cleanup_plan_vectors },
         { "encoder_packet_stream_initialization_plan_vectors", test_encoder_packet_stream_initialization_plan_vectors },
+        { "encoder_quantizer_plan_vectors", test_encoder_quantizer_plan_vectors },
         { "forward_full_resolution_plane_vectors", test_forward_full_resolution_plane_vectors },
         { "forward_chroma_420_plane_vectors", test_forward_chroma_420_plane_vectors },
         { "forward_chroma_422_plane_vectors", test_forward_chroma_422_plane_vectors },

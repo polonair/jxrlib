@@ -40,6 +40,7 @@
 #include "JxrEncoderPacketStreamAssembler.h"
 #include "JxrEncoderPacketStreamCleanup.h"
 #include "JxrEncoderPacketStreamInitializer.h"
+#include "JxrEncoderQuantizerInitializer.h"
 #include <math.h>
 #include "perfTimer.h"
 
@@ -321,10 +322,6 @@ Int StrEncInit(CWMImageStrCodec* pSC)
 {
     COLORFORMAT cf = pSC->m_param.cfColorFormat;
     COLORFORMAT cfE = pSC->WMII.cfColorFormat;
-    U16 iQPIndexY = 0, iQPIndexYLP = 0, iQPIndexYHP = 0;
-	U16 iQPIndexU = 0, iQPIndexULP = 0, iQPIndexUHP = 0;
-    U16 iQPIndexV = 0, iQPIndexVLP = 0, iQPIndexVHP = 0; 
-    size_t i;
     Bool b32bit = sizeof(size_t) == 4;
 
     /** color transcoding with resolution change **/
@@ -353,119 +350,8 @@ Int StrEncInit(CWMImageStrCodec* pSC)
     if(allocateTileInfo(pSC) != ICERR_OK)
         return ICERR_ERROR;
 
-    if(pSC->m_param.bTranscode == FALSE){
-        pSC->m_param.uQPMode = 0x150;   // 101010 000
-                                        // 000    == uniform (not per tile) DC, LP, HP
-                                        // 101010 == cChMode == 2 == independent (not same) DC, LP, HP
-
-        /** lossless or Y component lossless condition: all subbands present, uniform quantization with QPIndex 1 **/
-        pSC->m_param.bScaledArith = !((pSC->m_param.uQPMode & 7) == 0 && 
-									  1 == pSC->WMISCP.uiDefaultQPIndex <= 1 && 
-									  pSC->WMISCP.sbSubband == SB_ALL && 
-									  pSC->m_bUVResolutionChange == FALSE) &&
-                                     !pSC->WMISCP.bUnscaledArith;
-        if (BD_32 == pSC->WMII.bdBitDepth || BD_32S == pSC->WMII.bdBitDepth || BD_32F == pSC->WMII.bdBitDepth) {
-            pSC->m_param.bScaledArith = FALSE;
-        }
-        pSC->m_param.uQPMode |= 0x600;  // don't use DC QP for LP, LP QP for HP
-
-        // default QPs
-        iQPIndexY = pSC->m_param.bAlphaChannel && pSC->m_param.cNumChannels == 1?
-            pSC->WMISCP.uiDefaultQPIndexAlpha : pSC->WMISCP.uiDefaultQPIndex;
-
-		// determine the U,V index
-        iQPIndexU = pSC->WMISCP.uiDefaultQPIndexU!=0? 
-			pSC->WMISCP.uiDefaultQPIndexU: iQPIndexY; 
-        iQPIndexV = pSC->WMISCP.uiDefaultQPIndexV!=0? 
-			pSC->WMISCP.uiDefaultQPIndexV: iQPIndexY; 
-
-		// determine the QPIndexYLP
-        iQPIndexYLP = pSC->m_param.bAlphaChannel && pSC->m_param.cNumChannels == 1 ?
-            pSC->WMISCP.uiDefaultQPIndexAlpha :
-            (pSC->WMISCP.uiDefaultQPIndexYLP == 0 ? 
-			 pSC->WMISCP.uiDefaultQPIndex : pSC->WMISCP.uiDefaultQPIndexYLP); // default to QPIndex if not set
-
-		// determine the QPIndexYHP
-        iQPIndexYHP = pSC->m_param.bAlphaChannel && pSC->m_param.cNumChannels == 1 ?
-            pSC->WMISCP.uiDefaultQPIndexAlpha :
-            (pSC->WMISCP.uiDefaultQPIndexYHP == 0 ? 
-			 pSC->WMISCP.uiDefaultQPIndex : pSC->WMISCP.uiDefaultQPIndexYHP); // default to QPIndex if not set
-
-		// determine the U,V LP index
-        iQPIndexULP = pSC->WMISCP.uiDefaultQPIndexULP!=0? 
-			pSC->WMISCP.uiDefaultQPIndexULP: iQPIndexU; 
-        iQPIndexVLP = pSC->WMISCP.uiDefaultQPIndexVLP!=0? 
-			pSC->WMISCP.uiDefaultQPIndexVLP: iQPIndexV; 
-
-		// determine the U,V HP index
-        iQPIndexUHP = pSC->WMISCP.uiDefaultQPIndexUHP!=0? 
-			pSC->WMISCP.uiDefaultQPIndexUHP: iQPIndexU; 
-        iQPIndexVHP = pSC->WMISCP.uiDefaultQPIndexVHP!=0? 
-			pSC->WMISCP.uiDefaultQPIndexVHP: iQPIndexV; 
-
-		// clamp the QPIndex - 0 is lossless mode
-        if(iQPIndexY < 2)
-            iQPIndexY = 0;
-        if (iQPIndexYLP < 2)
-            iQPIndexYLP = 0;
-        if (iQPIndexYHP < 2)
-            iQPIndexYHP = 0;
-		if(iQPIndexU < 2)
-            iQPIndexU = 0;
-        if (iQPIndexULP < 2)
-            iQPIndexULP = 0;
-        if (iQPIndexUHP < 2)
-            iQPIndexUHP = 0;
-		if(iQPIndexV < 2)
-            iQPIndexV = 0;
-		if (iQPIndexVLP < 2)
-            iQPIndexVLP = 0;
-		if (iQPIndexVHP < 2)
-            iQPIndexVHP = 0;
-    }
-
-    if((pSC->m_param.uQPMode & 1) == 0){ // DC frame uniform quantization
-        if(allocateQuantizer(pSC->pTile[0].pQuantizerDC, pSC->m_param.cNumChannels, 1) != ICERR_OK)
-            return ICERR_ERROR;
-        setUniformQuantizer(pSC, 0);
-        for(i = 0; i < pSC->m_param.cNumChannels; i ++)
-            if(pSC->m_param.bTranscode)
-                pSC->pTile[0].pQuantizerDC[i]->iIndex = pSC->m_param.uiQPIndexDC[i];
-            else
-                pSC->pTile[0].pQuantizerDC[i]->iIndex = pSC->m_param.uiQPIndexDC[i] = (U8)(((i == 0 ? iQPIndexY : (i == 1) ? iQPIndexU: iQPIndexV)) & 0xff);
-        formatQuantizer(pSC->pTile[0].pQuantizerDC, (pSC->m_param.uQPMode >> 3) & 3, pSC->m_param.cNumChannels, 0, TRUE, pSC->m_param.bScaledArith);
-
-        for(i = 0; i < pSC->m_param.cNumChannels; i ++)
-            pSC->pTile[0].pQuantizerDC[i]->iOffset = (pSC->pTile[0].pQuantizerDC[i]->iQP >> 1);
-    }
-
-    if(pSC->WMISCP.sbSubband != SB_DC_ONLY){
-        if((pSC->m_param.uQPMode & 2) == 0){ // LP frame uniform quantization
-            if(allocateQuantizer(pSC->pTile[0].pQuantizerLP, pSC->m_param.cNumChannels, 1) != ICERR_OK)
-                return ICERR_ERROR;
-            setUniformQuantizer(pSC, 1);
-            for(i = 0; i < pSC->m_param.cNumChannels; i ++)
-                if(pSC->m_param.bTranscode)
-                    pSC->pTile[0].pQuantizerLP[i]->iIndex = pSC->m_param.uiQPIndexLP[i];
-                else
-                    pSC->pTile[0].pQuantizerLP[i]->iIndex = pSC->m_param.uiQPIndexLP[i] = (U8)(((i == 0 ? iQPIndexYLP : (i == 1) ? iQPIndexULP: iQPIndexVLP)) & 0xff);
-            formatQuantizer(pSC->pTile[0].pQuantizerLP, (pSC->m_param.uQPMode >> 5) & 3, pSC->m_param.cNumChannels, 0, TRUE, pSC->m_param.bScaledArith);
-        }
-
-        if(pSC->WMISCP.sbSubband != SB_NO_HIGHPASS){
-            if((pSC->m_param.uQPMode & 4) == 0){ // HP frame uniform quantization
-                if(allocateQuantizer(pSC->pTile[0].pQuantizerHP, pSC->m_param.cNumChannels, 1) != ICERR_OK)
-                    return ICERR_ERROR;
-                setUniformQuantizer(pSC, 2);
-                for(i = 0; i < pSC->m_param.cNumChannels; i ++)
-                    if(pSC->m_param.bTranscode)
-                        pSC->pTile[0].pQuantizerHP[i]->iIndex = pSC->m_param.uiQPIndexHP[i];
-                    else
-                        pSC->pTile[0].pQuantizerHP[i]->iIndex = pSC->m_param.uiQPIndexHP[i] = (U8)(((i == 0 ? iQPIndexYHP : (i == 1) ? iQPIndexUHP: iQPIndexVHP)) & 0xff);
-                formatQuantizer(pSC->pTile[0].pQuantizerHP, (pSC->m_param.uQPMode >> 7) & 3, pSC->m_param.cNumChannels, 0, FALSE, pSC->m_param.bScaledArith);
-            }
-        }
-    }
+    if (JxrEncoderQuantizerInitializerInitialize(pSC) != ICERR_OK)
+        return ICERR_ERROR;
 
     if(allocatePredInfo(pSC) != ICERR_OK){
         return ICERR_ERROR;
