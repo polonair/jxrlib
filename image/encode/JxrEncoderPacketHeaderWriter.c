@@ -1,6 +1,7 @@
 #include "JxrEncoderPacketHeaderWriter.h"
 
 #include "encode.h"
+#include "JxrEncoderTileHeaderWriter.h"
 
 Void JxrEncoderPacketHeaderPlanInitialize(
     JxrEncoderPacketHeaderPlan* plan,
@@ -36,9 +37,9 @@ static Void JxrEncoderPacketHeaderWriterWriteSpatial(
     writePacketHeader(codingContext->m_pIODC, 0, packetId);
     if (plan->writesTrimFlexbits)
         putBit16(codingContext->m_pIODC, codingContext->m_iTrimFlexBits, 4);
-    writeTileHeaderDC(codec, codingContext->m_pIODC);
-    writeTileHeaderLP(codec, codingContext->m_pIODC);
-    writeTileHeaderHP(codec, codingContext->m_pIODC);
+    JxrEncoderTileHeaderWriterWriteDc(codec, codingContext->m_pIODC);
+    JxrEncoderTileHeaderWriterWriteLp(codec, codingContext->m_pIODC);
+    JxrEncoderTileHeaderWriterWriteHp(codec, codingContext->m_pIODC);
 }
 
 static Void JxrEncoderPacketHeaderWriterWriteFrequency(
@@ -48,15 +49,15 @@ static Void JxrEncoderPacketHeaderWriterWriteFrequency(
     U8 packetId)
 {
     writePacketHeader(codingContext->m_pIODC, 1, packetId);
-    writeTileHeaderDC(codec, codingContext->m_pIODC);
+    JxrEncoderTileHeaderWriterWriteDc(codec, codingContext->m_pIODC);
 
     if (plan->writesLowpassHeader) {
         writePacketHeader(codingContext->m_pIOLP, 2, packetId);
-        writeTileHeaderLP(codec, codingContext->m_pIOLP);
+        JxrEncoderTileHeaderWriterWriteLp(codec, codingContext->m_pIOLP);
     }
     if (plan->writesHighpassHeader) {
         writePacketHeader(codingContext->m_pIOAC, 3, packetId);
-        writeTileHeaderHP(codec, codingContext->m_pIOAC);
+        JxrEncoderTileHeaderWriterWriteHp(codec, codingContext->m_pIOAC);
     }
     if (plan->writesFlexbitsPacket) {
         writePacketHeader(codingContext->m_pIOFL, 4, packetId);

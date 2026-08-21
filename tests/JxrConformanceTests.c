@@ -21,6 +21,7 @@
 #include "../image/encode/JxrEncoderSubbandPipeline.h"
 #include "../image/encode/JxrEncoderPacketHeaderWriter.h"
 #include "../image/encode/JxrEncoderSliceFinalizer.h"
+#include "../image/encode/JxrEncoderTileHeaderWriter.h"
 #include "encode.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
@@ -3606,6 +3607,31 @@ static int test_encoder_slice_finalization_plan_vectors(void)
     return plan.updatesPacketIndex && plan.resetsCodingContexts;
 }
 
+static int test_encoder_tile_header_plan_vectors(void)
+{
+    JxrEncoderTileHeaderPlan plan;
+
+    JxrEncoderTileHeaderPlanInitialize(&plan, 0, SB_ALL);
+    if (plan.writesDcQuantizer || plan.writesLpQuantizer ||
+        plan.writesHpQuantizer) return 0;
+
+    JxrEncoderTileHeaderPlanInitialize(&plan, 7, SB_ALL);
+    if (!plan.writesDcQuantizer || !plan.writesLpQuantizer ||
+        !plan.writesHpQuantizer) return 0;
+
+    JxrEncoderTileHeaderPlanInitialize(&plan, 7, SB_NO_HIGHPASS);
+    if (!plan.writesDcQuantizer || !plan.writesLpQuantizer ||
+        plan.writesHpQuantizer) return 0;
+
+    JxrEncoderTileHeaderPlanInitialize(&plan, 7, SB_DC_ONLY);
+    if (!plan.writesDcQuantizer || plan.writesLpQuantizer ||
+        plan.writesHpQuantizer) return 0;
+
+    JxrEncoderTileHeaderPlanInitialize(&plan, 2, SB_ALL);
+    return !plan.writesDcQuantizer && plan.writesLpQuantizer &&
+        !plan.writesHpQuantizer;
+}
+
 static int test_forward_full_resolution_plane_vectors(void)
 {
     PixelI samples[1408];
@@ -4259,6 +4285,7 @@ int main(int argc, char** argv)
         { "encoder_subband_plan_vectors", test_encoder_subband_plan_vectors },
         { "encoder_packet_header_plan_vectors", test_encoder_packet_header_plan_vectors },
         { "encoder_slice_finalization_plan_vectors", test_encoder_slice_finalization_plan_vectors },
+        { "encoder_tile_header_plan_vectors", test_encoder_tile_header_plan_vectors },
         { "forward_full_resolution_plane_vectors", test_forward_full_resolution_plane_vectors },
         { "forward_chroma_420_plane_vectors", test_forward_chroma_420_plane_vectors },
         { "forward_chroma_422_plane_vectors", test_forward_chroma_422_plane_vectors },
