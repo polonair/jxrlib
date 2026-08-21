@@ -29,6 +29,7 @@
 #include "../image/encode/JxrEncoderPacketStreamCleanup.h"
 #include "../image/encode/JxrEncoderPacketStreamInitializer.h"
 #include "../image/encode/JxrEncoderQuantizerInitializer.h"
+#include "../image/encode/JxrEncoderChromaResamplingSetup.h"
 #include "encode.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
@@ -3767,6 +3768,28 @@ static int test_encoder_quantizer_plan_vectors(void)
     return plan.initializesDc && !plan.initializesLp && !plan.initializesHp;
 }
 
+static int test_encoder_chroma_resampling_plan_vectors(void)
+{
+    JxrEncoderChromaResamplingPlan plan;
+
+    JxrEncoderChromaResamplingPlanInitialize(&plan, CF_RGB, YUV_420, FALSE, 4, FALSE);
+    if (!plan.changesUvResolution || !plan.allocationIsSafe ||
+        plan.residualRowStride != 288 || plan.residualSampleCount != 1408) return 0;
+
+    JxrEncoderChromaResamplingPlanInitialize(&plan, YUV_422, YUV_420, FALSE, 2, FALSE);
+    if (!plan.changesUvResolution || plan.residualRowStride != 160 ||
+        plan.residualSampleCount != 576) return 0;
+
+    JxrEncoderChromaResamplingPlanInitialize(&plan, YUV_420, YUV_420, FALSE, 4, FALSE);
+    if (plan.changesUvResolution || plan.residualSampleCount != 0) return 0;
+
+    JxrEncoderChromaResamplingPlanInitialize(&plan, YUV_444, YUV_420, TRUE, 4, FALSE);
+    if (plan.changesUvResolution) return 0;
+
+    JxrEncoderChromaResamplingPlanInitialize(&plan, CF_RGB, YUV_420, FALSE, 0x00e40000, TRUE);
+    return plan.changesUvResolution && !plan.allocationIsSafe;
+}
+
 static int test_forward_full_resolution_plane_vectors(void)
 {
     PixelI samples[1408];
@@ -4428,6 +4451,7 @@ int main(int argc, char** argv)
         { "encoder_packet_stream_cleanup_plan_vectors", test_encoder_packet_stream_cleanup_plan_vectors },
         { "encoder_packet_stream_initialization_plan_vectors", test_encoder_packet_stream_initialization_plan_vectors },
         { "encoder_quantizer_plan_vectors", test_encoder_quantizer_plan_vectors },
+        { "encoder_chroma_resampling_plan_vectors", test_encoder_chroma_resampling_plan_vectors },
         { "forward_full_resolution_plane_vectors", test_forward_full_resolution_plane_vectors },
         { "forward_chroma_420_plane_vectors", test_forward_chroma_420_plane_vectors },
         { "forward_chroma_422_plane_vectors", test_forward_chroma_422_plane_vectors },

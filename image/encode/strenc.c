@@ -41,6 +41,7 @@
 #include "JxrEncoderPacketStreamCleanup.h"
 #include "JxrEncoderPacketStreamInitializer.h"
 #include "JxrEncoderQuantizerInitializer.h"
+#include "JxrEncoderChromaResamplingSetup.h"
 #include <math.h>
 #include "perfTimer.h"
 
@@ -320,31 +321,8 @@ Int WriteWMIHeader(CWMImageStrCodec * pSC)
 
 Int StrEncInit(CWMImageStrCodec* pSC)
 {
-    COLORFORMAT cf = pSC->m_param.cfColorFormat;
-    COLORFORMAT cfE = pSC->WMII.cfColorFormat;
-    Bool b32bit = sizeof(size_t) == 4;
-
-    /** color transcoding with resolution change **/
-    pSC->m_bUVResolutionChange = (((cfE == CF_RGB || cfE == YUV_444 || cfE == CMYK || cfE == CF_RGBE) && 
-								   (cf == YUV_422 || cf == YUV_420))
-								  || (cfE == YUV_422 && cf == YUV_420)) && !pSC->WMISCP.bYUVData;
-
-    if(pSC->m_bUVResolutionChange){
-        size_t cSize = ((cfE == YUV_422 ? 128 : 256) + (cf == YUV_420 ? 32 : 0)) * pSC->cmbWidth + 256;
-
-        if(b32bit){ // integer overlow/underflow check for 32-bit system
-            if(((pSC->cmbWidth >> 16) * ((cfE == YUV_422 ? 128 : 256) + (cf == YUV_420 ? 32 : 0))) & 0xffff0000)
-                return ICERR_ERROR;
-            if(cSize >= 0x3fffffff)
-                return ICERR_ERROR;
-        }
-        pSC->pResU = (PixelI *)malloc(cSize * sizeof(PixelI));
-        pSC->pResV = (PixelI *)malloc(cSize * sizeof(PixelI));
-        if(pSC->pResU == NULL || pSC->pResV == NULL){
-            return ICERR_ERROR;
-        }
-    }
-
+    if (JxrEncoderChromaResamplingSetupInitialize(pSC) != ICERR_OK)
+        return ICERR_ERROR;
     pSC->cTileColumn = pSC->cTileRow = 0;
 
     if(allocateTileInfo(pSC) != ICERR_OK)
