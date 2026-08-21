@@ -38,6 +38,7 @@
 Int EncodeMacroblockDC(CWMImageStrCodec*, CCodingContext *, Int, Int);
 Int EncodeMacroblockLowpass(CWMImageStrCodec*, CCodingContext *, Int, Int);
 Int EncodeMacroblockHighpass(CWMImageStrCodec*, CCodingContext *, Int, Int);
+Int encodeMB(CWMImageStrCodec*, Int, Int);
 
 Int quantizeMacroblock(CWMImageStrCodec *);
 Void transformMacroblock(CWMImageStrCodec *);

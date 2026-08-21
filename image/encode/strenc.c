@@ -29,6 +29,7 @@
 #include "JXRTrace.h"
 #include "encode.h"
 #include "strTransform.h"
+#include "JxrEncoderMacroblockProcessor.h"
 #include <math.h>
 #include "perfTimer.h"
 
@@ -293,32 +294,7 @@ Int encodeMB(CWMImageStrCodec * pSC, Int iMBX, Int iMBY)
 *************************************************************************/
 Int processMacroblock(CWMImageStrCodec *pSC)
 {
-    Bool topORleft = (pSC->cColumn == 0 || pSC->cRow == 0);
-    ERR_CODE result = ICERR_OK;
-    size_t j, jend = (pSC->m_pNextSC != NULL);
-
-    for (j = 0; j <= jend; j++) {
-        transformMacroblock(pSC);
-        if (pSC->cColumn < pSC->cmbWidth && pSC->cRow < pSC->cmbHeight)
-            JXRTraceDumpStage("encoder", "transform_coefficients", pSC, (Int)pSC->cColumn, (Int)pSC->cRow, JXRTraceCoefficients);
-        if(!topORleft){
-            getTilePos(pSC, (Int)pSC->cColumn - 1, (Int)pSC->cRow - 1);
-            if(jend){
-                pSC->m_pNextSC->cTileRow = pSC->cTileRow;
-                pSC->m_pNextSC->cTileColumn = pSC->cTileColumn;
-            }
-            if ((result = encodeMB(pSC, (Int)pSC->cColumn - 1, (Int)pSC->cRow - 1)) != ICERR_OK)
-                return result;
-        }
-
-        if (jend) {
-            pSC->m_pNextSC->cRow = pSC->cRow;
-            pSC->m_pNextSC->cColumn = pSC->cColumn;
-            pSC = pSC->m_pNextSC;
-        }
-    }
-
-    return ICERR_OK;
+    return JxrEncoderMacroblockProcessorProcess(pSC);
 }
 
 /*************************************************************************

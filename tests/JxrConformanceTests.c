@@ -17,6 +17,7 @@
 #include "../image/encode/JxrForwardTransformCodecSetup.h"
 #include "../image/encode/JxrForwardTransformPlanePlan.h"
 #include "../image/encode/JxrForwardTransformPlaneContext.h"
+#include "../image/encode/JxrEncoderMacroblockProcessor.h"
 #include "encode.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
@@ -3491,6 +3492,26 @@ static int test_forward_transform_plane_context_vectors(void)
         context.channelIndex == 1 && context.isChroma;
 }
 
+static int test_encoder_macroblock_process_state_vectors(void)
+{
+    CWMImageStrCodec primaryCodec;
+    CWMImageStrCodec secondaryCodec;
+    JxrEncoderMacroblockProcessState state;
+
+    memset(&primaryCodec, 0, sizeof(primaryCodec));
+    JxrEncoderMacroblockProcessStateInitialize(&state, &primaryCodec);
+    if (state.encodesPreviousMacroblock || state.processesSecondaryCodec ||
+        state.previousMacroblockX != -1 || state.previousMacroblockY != -1) return 0;
+
+    memset(&secondaryCodec, 0, sizeof(secondaryCodec));
+    primaryCodec.cColumn = 5;
+    primaryCodec.cRow = 3;
+    primaryCodec.m_pNextSC = &secondaryCodec;
+    JxrEncoderMacroblockProcessStateInitialize(&state, &primaryCodec);
+    return state.encodesPreviousMacroblock && state.processesSecondaryCodec &&
+        state.previousMacroblockX == 4 && state.previousMacroblockY == 2;
+}
+
 static int test_forward_full_resolution_plane_vectors(void)
 {
     PixelI samples[1408];
@@ -4140,6 +4161,7 @@ int main(int argc, char** argv)
         { "forward_transform_codec_setup_vectors", test_forward_transform_codec_setup_vectors },
         { "forward_transform_plane_plan_vectors", test_forward_transform_plane_plan_vectors },
         { "forward_transform_plane_context_vectors", test_forward_transform_plane_context_vectors },
+        { "encoder_macroblock_process_state_vectors", test_encoder_macroblock_process_state_vectors },
         { "forward_full_resolution_plane_vectors", test_forward_full_resolution_plane_vectors },
         { "forward_chroma_420_plane_vectors", test_forward_chroma_420_plane_vectors },
         { "forward_chroma_422_plane_vectors", test_forward_chroma_422_plane_vectors },
