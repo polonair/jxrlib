@@ -32,6 +32,7 @@
 #include "../image/encode/JxrEncoderChromaResamplingSetup.h"
 #include "../image/encode/JxrEncoderTileStateInitializer.h"
 #include "../image/encode/JxrEncoderOutputInitializer.h"
+#include "../image/encode/JxrEncoderSampleConversion.h"
 #include "encode.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
@@ -3819,6 +3820,23 @@ static int test_encoder_output_plan_vectors(void)
         !plan.writesMainHeader;
 }
 
+static int test_encoder_sample_conversion_vectors(void)
+{
+    if (JxrEncoderSampleConversionFromRgbe(0x80, 0) != 0 ||
+        JxrEncoderSampleConversionFromRgbe(0x80, 1) != 0x80 ||
+        JxrEncoderSampleConversionFromRgbe(0x40, 2) != 0x81 ||
+        JxrEncoderSampleConversionFromRgbe(0x80, 2) != 0x100) return 0;
+
+    if (JxrEncoderSampleConversionFromHalf(0) != 0 ||
+        JxrEncoderSampleConversionFromHalf(5) != 5 ||
+        JxrEncoderSampleConversionFromHalf(-5) != -32763) return 0;
+
+    return JxrEncoderSampleConversionFromSingle(0.0f, 127, 7) == 0 &&
+        JxrEncoderSampleConversionFromSingle(1.0f, 127, 7) == 16256 &&
+        JxrEncoderSampleConversionFromSingle(-1.0f, 127, 7) == -16256 &&
+        JxrEncoderSampleConversionFromSingle(0.5f, 127, 7) == 16128;
+}
+
 static int test_forward_full_resolution_plane_vectors(void)
 {
     PixelI samples[1408];
@@ -4483,6 +4501,7 @@ int main(int argc, char** argv)
         { "encoder_chroma_resampling_plan_vectors", test_encoder_chroma_resampling_plan_vectors },
         { "encoder_tile_state_plan_vectors", test_encoder_tile_state_plan_vectors },
         { "encoder_output_plan_vectors", test_encoder_output_plan_vectors },
+        { "encoder_sample_conversion_vectors", test_encoder_sample_conversion_vectors },
         { "forward_full_resolution_plane_vectors", test_forward_full_resolution_plane_vectors },
         { "forward_chroma_420_plane_vectors", test_forward_chroma_420_plane_vectors },
         { "forward_chroma_422_plane_vectors", test_forward_chroma_422_plane_vectors },

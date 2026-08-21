@@ -44,6 +44,7 @@
 #include "JxrEncoderChromaResamplingSetup.h"
 #include "JxrEncoderTileStateInitializer.h"
 #include "JxrEncoderOutputInitializer.h"
+#include "JxrEncoderSampleConversion.h"
 #include <math.h>
 #include "perfTimer.h"
 
@@ -123,103 +124,6 @@ Int processMacroblock(CWMImageStrCodec *pSC)
 {
     return JxrEncoderMacroblockProcessorProcess(pSC);
 }
-
-/*************************************************************************
-  forwardRGBE: forward conversion from RGBE to RGB
-*************************************************************************/
-static _FORCEINLINE PixelI forwardRGBE (PixelI RGB, PixelI E)
-{
-    PixelI iResult = 0, iAppend = 1;
-
-    if (E == 0)
-        return 0;
-
-    assert (E!=0);
-
-    E--;
-    while (((RGB & 0x80) == 0) && (E > 0)) {
-        RGB = (RGB << 1) + iAppend;
-        iAppend = 0;
-        E--;    
-    }
-
-    // result will always be one of 3 cases
-    // E  RGB       convert to
-    // 0  [0.x]      [0   x]
-    // 0  [1.x]      [1   x]
-    // e  [1.x]      [e+1 x]
-    if (E == 0) {
-        iResult = RGB;
-    }
-    else {
-        E++;
-        iResult = (RGB & 0x7f) + (E << 7);
-    }
-
-    return iResult;
-}
-
-/*************************************************************************
-  convert float-32 into float with (c, lm)!!
-*************************************************************************/
-static _FORCEINLINE PixelI float2pixel (float f, const char _c, const unsigned char _lm)
-{
-    union uif
-    {
-        I32   i;
-        float f;
-    } x;
-
-    PixelI _h, e, e1, m, s;
-
-    if (f == 0)
-    {
-        _h = 0;
-    }
-    else
-    {
-        x.f = f;
-
-        e = (x.i >> 23) & 0x000000ff;//here set e as e, not s! e includes s: [s e] 9 bits [31..23]
-        m = (x.i & 0x007fffff) | 0x800000; // actual mantissa, with normalizer
-        if (e == 0) { // denormal-land
-            m ^= 0x800000;  // actual mantissa, removing normalizer
-            e++; // actual exponent -126
-        }
-
-        e1 = e - 127 + _c;  // this is basically a division or quantization to a different exponent
-                            // note: _c cannot be greater than 127, so e1 cannot be greater than e
-        //assert (_c <= 127);
-        if (e1 <= 1) {  // denormal-land
-            if (e1 < 1)
-                m >>= (1 - e1);  // shift mantissa right to make exponent 1
-            e1 = 1;
-            if ((m & 0x800000) == 0) // if denormal, set e1 to zero else to 1
-                e1 = 0;
-        }
-        m &= 0x007fffff;
-
-        //for float-22:	    
-        _h = (e1 << _lm) + ((m + (1 << (23 - _lm - 1))) >> (23 - _lm));//take 23-bit m, shift (23-lm), get lm-bit m for float22
-        s = ((PixelI) x.i) >> 31;
-        //padding to int-32: 
-        _h = (_h ^ s) - s;	
-    }
-
-    return _h;
-}
-
-/*************************************************************************
-  convert Half-16 to internal format, only need to handle sign bit
-*************************************************************************/
-static _FORCEINLINE PixelI forwardHalf (PixelI hHalf)
-{
-    PixelI s;
-    s = hHalf >> 31;
-    hHalf = ((hHalf & 0x7fff) ^ s) - s;
-    return hHalf;
-}
-
 
 //================================================================
 // Color Conversion 
@@ -1027,7 +931,7 @@ Int inputMBRowAlpha(CWMImageStrCodec* pSC)
                 const I16 * pSrc = (I16 *)pSrc0;
 
                 for(iColumn = 0; iColumn < cColumn; iColumn ++, pSrc += cStride)
-                    pA[((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf]] = forwardHalf (pSrc[iAlphaPos]) << cShift;
+                    pA[((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf]] = JxrEncoderSampleConversionFromHalf(pSrc[iAlphaPos]) << cShift;
             }
             else if(bdExt == BD_32S){
                 const size_t cStride = (pSC->WMII.cBitsPerUnit >> 3) / sizeof(I32);
@@ -1044,7 +948,7 @@ Int inputMBRowAlpha(CWMImageStrCodec* pSC)
                 const float * pSrc = (float *)pSrc0;
             
                 for(iColumn = 0; iColumn < cColumn; iColumn ++, pSrc += cStride)
-                    pA[((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf]] = float2pixel (pSrc[iAlphaPos], nExpBias, nLen) << cShift;
+                    pA[((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf]] = JxrEncoderSampleConversionFromSingle(pSrc[iAlphaPos], nExpBias, nLen) << cShift;
             }
             else // not supported
                 return ICERR_ERROR;
@@ -1192,9 +1096,9 @@ Int inputMBRow(CWMImageStrCodec* pSC)
                 case CF_RGBE:
                     for(iColumn = 0; iColumn < cColumn; iColumn ++, pSrc += cPixelStride){
                         PixelI iExp = (PixelI)pSrc[3];
-                        PixelI r = forwardRGBE (pSrc[0], iExp) << cShift;
-                        PixelI g = forwardRGBE (pSrc[1], iExp) << cShift;
-                        PixelI b = forwardRGBE (pSrc[2], iExp) << cShift;
+                        PixelI r = JxrEncoderSampleConversionFromRgbe(pSrc[0], iExp) << cShift;
+                        PixelI g = JxrEncoderSampleConversionFromRgbe(pSrc[1], iExp) << cShift;
+                        PixelI b = JxrEncoderSampleConversionFromRgbe(pSrc[2], iExp) << cShift;
 
                         _CC(r, g, b);
 
@@ -1398,9 +1302,9 @@ Int inputMBRow(CWMImageStrCodec* pSC)
             switch(cfExt){
                 case CF_RGB:
                     for(iColumn = 0; iColumn < cColumn; iColumn ++, pSrc += cStride){
-                        PixelI r = forwardHalf (pSrc[0]) << cShift;
-                        PixelI g = forwardHalf (pSrc[1]) << cShift;
-                        PixelI b = forwardHalf (pSrc[2]) << cShift;
+                        PixelI r = JxrEncoderSampleConversionFromHalf(pSrc[0]) << cShift;
+                        PixelI g = JxrEncoderSampleConversionFromHalf(pSrc[1]) << cShift;
+                        PixelI b = JxrEncoderSampleConversionFromHalf(pSrc[2]) << cShift;
                         
                         _CC(r, g, b); // color conversion
 
@@ -1419,7 +1323,7 @@ Int inputMBRow(CWMImageStrCodec* pSC)
 						for(iColumn = 0; iColumn < cColumn; iColumn ++, pSrc += cStride){
 							iPos = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf];
 							for(iChannel = 0; iChannel < cChannel; iChannel ++)
-								pSC->p1MBbuffer[iChannel][iPos] = forwardHalf (pSrc[iChannel]) << cShift;
+								pSC->p1MBbuffer[iChannel][iPos] = JxrEncoderSampleConversionFromHalf(pSrc[iChannel]) << cShift;
 						}
 					}
 					break;
@@ -1509,9 +1413,9 @@ Int inputMBRow(CWMImageStrCodec* pSC)
             switch(cfExt){
                 case CF_RGB:
                     for(iColumn = 0; iColumn < cColumn; iColumn ++, pSrc += cStride){
-                        PixelI r = float2pixel (pSrc[0], nExpBias, nLen) << cShift;
-                        PixelI g = float2pixel (pSrc[1], nExpBias, nLen) << cShift;
-                        PixelI b = float2pixel (pSrc[2], nExpBias, nLen) << cShift;
+                        PixelI r = JxrEncoderSampleConversionFromSingle(pSrc[0], nExpBias, nLen) << cShift;
+                        PixelI g = JxrEncoderSampleConversionFromSingle(pSrc[1], nExpBias, nLen) << cShift;
+                        PixelI b = JxrEncoderSampleConversionFromSingle(pSrc[2], nExpBias, nLen) << cShift;
 
                         _CC(r, g, b); // color conversion
 
@@ -1530,7 +1434,7 @@ Int inputMBRow(CWMImageStrCodec* pSC)
 						for(iColumn = 0; iColumn < cColumn; iColumn ++, pSrc += cStride){
 							iPos = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf];
 							for(iChannel = 0; iChannel < cChannel; iChannel ++)
-								pSC->p1MBbuffer[iChannel][iPos] = float2pixel (pSrc[iChannel], nExpBias, nLen) << cShift;
+								pSC->p1MBbuffer[iChannel][iPos] = JxrEncoderSampleConversionFromSingle(pSrc[iChannel], nExpBias, nLen) << cShift;
 						}
 					}
 					break;
