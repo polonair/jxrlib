@@ -36,6 +36,7 @@
 #include "JxrEncoderTileHeaderWriter.h"
 #include "JxrEncoderImagePlaneHeaderWriter.h"
 #include "JxrEncoderMainHeaderWriter.h"
+#include "JxrEncoderIndexTableWriter.h"
 #include <math.h>
 #include "perfTimer.h"
 
@@ -62,7 +63,6 @@ Int inputMBRow(CWMImageStrCodec *);
 void StrEncOpt(CWMImageStrCodec* pSC);
 #endif // OPT defined
 
-#define MINIMUM_PACKET_LENGTH 4  // as long as packet header - skipped if data is not accessed (happens only for flexbits)
 
 Void writeQuantizer(CWMIQuantizer * pQuantizer[MAX_CHANNELS], BitIOInfo * pIO, U8 cChMode, size_t cChannel, size_t iPos)
 {
@@ -307,105 +307,21 @@ Int StrIOEncInit(CWMImageStrCodec* pSC)
     return ICERR_OK;
 }
 
-#define PUTBITS putBit16
-/*************************************************************************
-    Write variable length byte aligned integer
-*************************************************************************/
-static Void PutVLWordEsc(BitIOInfo* pIO, Int iEscape, size_t s)
-{
-    if (iEscape) {
-        assert(iEscape <= 0xff && iEscape > 0xfc); // fd,fe,ff are the only valid escapes
-        PUTBITS(pIO, iEscape, 8);
-    }
-    else if (s < 0xfb00) {
-        PUTBITS(pIO, (U32) s, 16);
-    }
-    else {
-        size_t t = s >> 16;
-        if ((t >> 16) == 0) {
-            PUTBITS(pIO, 0xfb, 8);
-        }
-        else {
-            t >>= 16;
-            PUTBITS(pIO, 0xfc, 8);
-            PUTBITS(pIO, (U32)(t >> 16) & 0xffff, 16);
-            PUTBITS(pIO, (U32) t & 0xffff, 16);
-        }
-        PUTBITS(pIO, (U32) t & 0xffff, 16);
-        PUTBITS(pIO, (U32) s & 0xffff, 16);
-    }
-}
-
-/*************************************************************************
-    Write index table at start (null index table)
-*************************************************************************/
 Int writeIndexTableNull(CWMImageStrCodec * pSC)
 {
-    if(pSC->cNumBitIO == 0){
-        BitIOInfo* pIO = pSC->pIOHeader;
-        fillToByte(pIO);
-
-        /* Profile / Level info */
-        PutVLWordEsc(pIO, 0, 4);    // 4 bytes
-        PUTBITS(pIO, 111, 8);       // default profile idc
-        PUTBITS(pIO, 255, 8);       // default level idc
-        PUTBITS(pIO, 1, 16);        // LAST_FLAG
-    }
-
-    return ICERR_OK;
+    return JxrEncoderIndexTableWriterWriteNull(pSC);
 }
 
-/*************************************************************************
-    Write index table
-*************************************************************************/
 Int writeIndexTable(CWMImageStrCodec * pSC)
 {
-    if(pSC->cNumBitIO > 0){
-        BitIOInfo* pIO = pSC->pIOHeader;
-        size_t *pTable = pSC->pIndexTable, iSize[4] = { 0 };
-        I32 iEntry = (I32)pSC->cNumBitIO * (pSC->WMISCP.cNumOfSliceMinus1H + 1), i, k, l;
-        
-        // write index table header [0x0001] - 2 bytes
-        PUTBITS(pIO, 1, 16);
-
-        for(i = pSC->WMISCP.cNumOfSliceMinus1H; i>= 0 && pSC->bTileExtraction == FALSE; i --){
-            for(k = 0; k < (int)pSC->cNumBitIO; ){
-                for(l = 0; l < (pSC->WMISCP.bfBitstreamFormat == FREQUENCY && pSC->WMISCP.bProgressiveMode ? pSC->cSB : 1); l ++, k ++)
-                {
-                if (i > 0)
-                pTable[pSC->cNumBitIO * i + k] -= pSC->pIndexTable[pSC->cNumBitIO * (i - 1) + k]; // packet length
-                iSize[l] += pTable[pSC->cNumBitIO * i + k];
-                }
-            }
-        }
-
-        iSize[3] = iSize[2] + iSize[1] + iSize[0];
-        iSize[2] = iSize[1] + iSize[0];
-        iSize[1] = iSize[0];
-        iSize[0] = 0;
-
-        for(i = 0; i < iEntry; ){
-        for(l = 0; l < (pSC->WMISCP.bfBitstreamFormat == FREQUENCY && pSC->WMISCP.bProgressiveMode ? pSC->cSB : 1); l ++, i ++)
-        {
-            writeIS_L1(pSC, pIO);
-            PutVLWordEsc(pIO, (pTable[i] <= MINIMUM_PACKET_LENGTH) ? 0xff : 0, iSize[l]);
-            iSize[l] += (pTable[i] <= MINIMUM_PACKET_LENGTH) ? 0 : pTable[i];
-        }
-        }
-
-        writeIS_L1(pSC, pIO);
-        PutVLWordEsc(pIO, 0xff, 0); // escape to end
-        fillToByte(pIO);
-    }
-
-    return ICERR_OK;
+    return JxrEncoderIndexTableWriterWrite(pSC);
 }
 
 Int copyTo(struct WMPStream * pSrc, struct WMPStream * pDst, size_t iBytes)
 {
     char pData[PACKETLENGTH];
 
-    if (iBytes <= MINIMUM_PACKET_LENGTH){
+    if (iBytes <= JXR_ENCODER_MINIMUM_PACKET_LENGTH){
         pSrc->Read(pSrc, pData, iBytes);
         return ICERR_OK;
     }

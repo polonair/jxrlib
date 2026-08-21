@@ -24,6 +24,7 @@
 #include "../image/encode/JxrEncoderTileHeaderWriter.h"
 #include "../image/encode/JxrEncoderImagePlaneHeaderWriter.h"
 #include "../image/encode/JxrEncoderMainHeaderWriter.h"
+#include "../image/encode/JxrEncoderIndexTableWriter.h"
 #include "encode.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
@@ -3678,6 +3679,20 @@ static int test_encoder_main_header_plan_vectors(void)
         !plan.usesHardTileSubversion && plan.tileSizeBitCount == 16;
 }
 
+static int test_encoder_index_table_plan_vectors(void)
+{
+    JxrEncoderIndexTablePlan plan;
+
+    JxrEncoderIndexTablePlanInitialize(&plan, 3, 2, SPATIAL, FALSE, 4);
+    if (plan.packetGroupCount != 1 || plan.entryCount != 9) return 0;
+
+    JxrEncoderIndexTablePlanInitialize(&plan, 12, 1, FREQUENCY, FALSE, 4);
+    if (plan.packetGroupCount != 1 || plan.entryCount != 24) return 0;
+
+    JxrEncoderIndexTablePlanInitialize(&plan, 12, 1, FREQUENCY, TRUE, 4);
+    return plan.packetGroupCount == 4 && plan.entryCount == 24;
+}
+
 static int test_forward_full_resolution_plane_vectors(void)
 {
     PixelI samples[1408];
@@ -4334,6 +4349,7 @@ int main(int argc, char** argv)
         { "encoder_tile_header_plan_vectors", test_encoder_tile_header_plan_vectors },
         { "encoder_image_plane_header_quantizer_plan_vectors", test_encoder_image_plane_header_quantizer_plan_vectors },
         { "encoder_main_header_plan_vectors", test_encoder_main_header_plan_vectors },
+        { "encoder_index_table_plan_vectors", test_encoder_index_table_plan_vectors },
         { "forward_full_resolution_plane_vectors", test_forward_full_resolution_plane_vectors },
         { "forward_chroma_420_plane_vectors", test_forward_chroma_420_plane_vectors },
         { "forward_chroma_422_plane_vectors", test_forward_chroma_422_plane_vectors },
