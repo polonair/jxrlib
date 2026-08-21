@@ -18,6 +18,7 @@
 #include "../image/encode/JxrForwardTransformPlanePlan.h"
 #include "../image/encode/JxrForwardTransformPlaneContext.h"
 #include "../image/encode/JxrEncoderMacroblockProcessor.h"
+#include "../image/encode/JxrEncoderSubbandPipeline.h"
 #include "encode.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
@@ -3512,6 +3513,26 @@ static int test_encoder_macroblock_process_state_vectors(void)
         state.previousMacroblockX == 4 && state.previousMacroblockY == 2;
 }
 
+static int test_encoder_subband_plan_vectors(void)
+{
+    JxrEncoderSubbandPlan plan;
+
+    JxrEncoderSubbandPlanInitialize(&plan, SB_ALL);
+    if (!plan.encodesLowpass || !plan.encodesHighpass) return 0;
+
+    JxrEncoderSubbandPlanInitialize(&plan, SB_NO_FLEXBITS);
+    if (!plan.encodesLowpass || !plan.encodesHighpass) return 0;
+
+    JxrEncoderSubbandPlanInitialize(&plan, SB_NO_HIGHPASS);
+    if (!plan.encodesLowpass || plan.encodesHighpass) return 0;
+
+    JxrEncoderSubbandPlanInitialize(&plan, SB_DC_ONLY);
+    if (plan.encodesLowpass || plan.encodesHighpass) return 0;
+
+    JxrEncoderSubbandPlanInitialize(&plan, SB_ISOLATED);
+    return plan.encodesLowpass && plan.encodesHighpass;
+}
+
 static int test_forward_full_resolution_plane_vectors(void)
 {
     PixelI samples[1408];
@@ -4162,6 +4183,7 @@ int main(int argc, char** argv)
         { "forward_transform_plane_plan_vectors", test_forward_transform_plane_plan_vectors },
         { "forward_transform_plane_context_vectors", test_forward_transform_plane_context_vectors },
         { "encoder_macroblock_process_state_vectors", test_encoder_macroblock_process_state_vectors },
+        { "encoder_subband_plan_vectors", test_encoder_subband_plan_vectors },
         { "forward_full_resolution_plane_vectors", test_forward_full_resolution_plane_vectors },
         { "forward_chroma_420_plane_vectors", test_forward_chroma_420_plane_vectors },
         { "forward_chroma_422_plane_vectors", test_forward_chroma_422_plane_vectors },

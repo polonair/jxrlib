@@ -30,6 +30,7 @@
 #include "encode.h"
 #include "strTransform.h"
 #include "JxrEncoderMacroblockProcessor.h"
+#include "JxrEncoderSubbandPipeline.h"
 #include <math.h>
 #include "perfTimer.h"
 
@@ -214,7 +215,6 @@ Int writeTileHeaderHP(CWMImageStrCodec * pSC, BitIOInfo * pIO)
 Int encodeMB(CWMImageStrCodec * pSC, Int iMBX, Int iMBY)
 {
     CCodingContext * pContext = &pSC->m_pCodingContext[pSC->cTileColumn];
-    size_t cbitStart;
     
     if(pSC->m_bCtxLeft && pSC->m_bCtxTop && pSC->m_bSecondary == FALSE && pSC->m_param.bTranscode == FALSE){ // write packet headers
         U8 pID = (U8)((pSC->cTileRow * (pSC->WMISCP.cNumOfSliceMinus1V + 1) + pSC->cTileColumn) & 0x1F);
@@ -246,25 +246,9 @@ Int encodeMB(CWMImageStrCodec * pSC, Int iMBX, Int iMBY)
         }
     }
     
-    cbitStart = JXRTraceBitPosition(pContext->m_pIODC, TRUE);
-    if(EncodeMacroblockDC(pSC, pContext, iMBX, iMBY) != ICERR_OK)
+    if (JxrEncoderSubbandPipelineProcess(pSC, pContext, iMBX, iMBY) != ICERR_OK)
         return ICERR_ERROR;
-    JXRTraceDumpBitRange("encoder", "dc", iMBX, iMBY, cbitStart, JXRTraceBitPosition(pContext->m_pIODC, TRUE));
-    
-    if(pSC->WMISCP.sbSubband != SB_DC_ONLY) {
-        cbitStart = JXRTraceBitPosition(pContext->m_pIOLP, TRUE);
-        if(EncodeMacroblockLowpass(pSC, pContext, iMBX, iMBY) != ICERR_OK)
-            return ICERR_ERROR;
-        JXRTraceDumpBitRange("encoder", "lp", iMBX, iMBY, cbitStart, JXRTraceBitPosition(pContext->m_pIOLP, TRUE));
-    }
 
-    if(pSC->WMISCP.sbSubband != SB_DC_ONLY && pSC->WMISCP.sbSubband != SB_NO_HIGHPASS) {
-        cbitStart = JXRTraceBitPosition(pContext->m_pIOAC, TRUE);
-        if(EncodeMacroblockHighpass(pSC, pContext, iMBX, iMBY) != ICERR_OK)
-            return ICERR_ERROR;
-        JXRTraceDumpBitRange("encoder", "hp", iMBX, iMBY, cbitStart, JXRTraceBitPosition(pContext->m_pIOAC, TRUE));
-    }
-    
     if(iMBX + 1 == (int) pSC->cmbWidth && (iMBY + 1 == (int) pSC->cmbHeight || 
         (pSC->cTileRow < pSC->WMISCP.cNumOfSliceMinus1H && iMBY == (int) pSC->WMISCP.uiTileY[pSC->cTileRow + 1] - 1)))
     { // end of a horizontal slice
