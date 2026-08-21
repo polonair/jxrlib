@@ -43,6 +43,7 @@
 #include "JxrEncoderQuantizerInitializer.h"
 #include "JxrEncoderChromaResamplingSetup.h"
 #include "JxrEncoderTileStateInitializer.h"
+#include "JxrEncoderOutputInitializer.h"
 #include <math.h>
 #include "perfTimer.h"
 
@@ -326,20 +327,8 @@ Int StrEncInit(CWMImageStrCodec* pSC)
         return ICERR_ERROR;
     if (JxrEncoderTileStateInitializerInitialize(pSC) != ICERR_OK)
         return ICERR_ERROR;
-    if (pSC->m_bSecondary) {
-        pSC->pIOHeader = pSC->m_pNextSC->pIOHeader;
-        pSC->m_ppBitIO = pSC->m_pNextSC->m_ppBitIO;
-        pSC->cNumBitIO = pSC->m_pNextSC->cNumBitIO;
-        pSC->cSB = pSC->m_pNextSC->cSB;
-        pSC->ppWStream = pSC->m_pNextSC->ppWStream;
-        pSC->pIndexTable = pSC->m_pNextSC->pIndexTable;
-        setBitIOPointers(pSC);
-    }
-    else {
-        StrIOEncInit(pSC);
-        setBitIOPointers(pSC);
-        WriteWMIHeader(pSC);
-    }
+    if (JxrEncoderOutputInitializerInitialize(pSC) != ICERR_OK)
+        return ICERR_ERROR;
 
     return ICERR_OK;
 }
