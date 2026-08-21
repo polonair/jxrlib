@@ -3166,8 +3166,6 @@ static int test_forward_transform_math_vectors(void)
     PixelI first, second;
     PixelI third, fourth;
     PixelI samples[256];
-    PixelI legacySamples[256];
-    PixelI legacyFirst, legacySecond, legacyThird, legacyFourth;
     Int sampleIndex;
 
     first = 10; second = 5;
@@ -3185,22 +3183,15 @@ static int test_forward_transform_math_vectors(void)
 
     for (sampleIndex = 0; sampleIndex < 256; ++sampleIndex) {
         samples[sampleIndex] = sampleIndex - 128;
-        legacySamples[sampleIndex] = samples[sampleIndex];
     }
     JxrForwardTransformMathNormalizeBlock(samples, FALSE, 256, 16);
     if (samples[0] != -128 || samples[16] != -112 || samples[17] != -111) return 0;
     JxrForwardTransformMathNormalizeBlock(samples, TRUE, 256, 16);
     if (samples[0] != -64 || samples[16] != -56 || samples[240] != 56 ||
         samples[17] != -111) return 0;
-    strNormalizeEnc(legacySamples, TRUE);
-    if (memcmp(samples, legacySamples, sizeof(samples)) != 0) return 0;
-
     first = 10; second = 20; third = 30; fourth = 40;
     JxrForwardTransformMathApplyDct2x2Down(&first, &second, &third, &fourth);
     if (first != 25 || second != -10 || third != -5 || fourth != 0) return 0;
-    legacyFirst = 10; legacySecond = 20; legacyThird = 30; legacyFourth = 40;
-    strDCT2x2dnEnc(&legacyFirst, &legacySecond, &legacyThird, &legacyFourth);
-    if (legacyFirst != first || legacySecond != second || legacyThird != third || legacyFourth != fourth) return 0;
     first = -10; second = 5; third = 7; fourth = -3;
     JxrForwardTransformMathApplyDct2x2Down(&first, &second, &third, &fourth);
     if (first != -1 || second != -2 || third != -1 || fourth != -6) return 0;
@@ -3208,9 +3199,6 @@ static int test_forward_transform_math_vectors(void)
     first = 10; second = 20;
     JxrForwardTransformMathApplyPre2(&first, &second);
     if (first != 1 || second != 17) return 0;
-    legacyFirst = 10; legacySecond = 20;
-    strPre2(&legacyFirst, &legacySecond);
-    if (legacyFirst != first || legacySecond != second) return 0;
     first = -10; second = 5;
     JxrForwardTransformMathApplyPre2(&first, &second);
     if (first != -14 || second != 10) return 0;
@@ -3218,9 +3206,6 @@ static int test_forward_transform_math_vectors(void)
     first = 10; second = 20; third = 30; fourth = 40;
     JxrForwardTransformMathApplyPre2x2(&first, &second, &third, &fourth);
     if (first != 0 || second != 9 || third != 20 || fourth != 30) return 0;
-    legacyFirst = 10; legacySecond = 20; legacyThird = 30; legacyFourth = 40;
-    strPre2x2(&legacyFirst, &legacySecond, &legacyThird, &legacyFourth);
-    if (legacyFirst != first || legacySecond != second || legacyThird != third || legacyFourth != fourth) return 0;
     first = -10; second = 5; third = 7; fourth = -3;
     JxrForwardTransformMathApplyPre2x2(&first, &second, &third, &fourth);
     if (first != -14 || second != 9 || third != 11 || fourth != -7) return 0;
@@ -3228,9 +3213,6 @@ static int test_forward_transform_math_vectors(void)
     first = 10; second = 20; third = 30; fourth = 40;
     JxrForwardTransformMathApplyPre4(&first, &second, &third, &fourth);
     if (first != 0 || second != 1 || third != 34 || fourth != 35) return 0;
-    legacyFirst = 10; legacySecond = 20; legacyThird = 30; legacyFourth = 40;
-    strPre4(&legacyFirst, &legacySecond, &legacyThird, &legacyFourth);
-    if (legacyFirst != first || legacySecond != second || legacyThird != third || legacyFourth != fourth) return 0;
     first = -10; second = 5; third = 7; fourth = -3;
     JxrForwardTransformMathApplyPre4(&first, &second, &third, &fourth);
     if (first != -7 || second != 2 || third != 7 || fourth != -1) return 0;
@@ -3277,27 +3259,19 @@ static int test_forward_transform_stage_vectors(void)
         2, -4, -2, 0, 0, -14, 6, 0, 1, 2, -8, -1, 0, 0, 0, 0
     };
     PixelI stage1[16];
-    PixelI stage1Legacy[16];
     PixelI stage2[256];
-    PixelI stage2Legacy[256];
     Int sampleIndex;
 
     for (sampleIndex = 0; sampleIndex < 16; ++sampleIndex) {
         stage1[sampleIndex] = sampleIndex - 7;
-        stage1Legacy[sampleIndex] = stage1[sampleIndex];
     }
     JxrForwardTransformStagesApplyStage1Dct(stage1);
-    strDCT4x4Stage1(stage1Legacy);
-    if (memcmp(stage1, stage1Expected, sizeof(stage1)) != 0 ||
-        memcmp(stage1, stage1Legacy, sizeof(stage1)) != 0) return 0;
+    if (memcmp(stage1, stage1Expected, sizeof(stage1)) != 0) return 0;
 
     for (sampleIndex = 0; sampleIndex < 256; ++sampleIndex) {
         stage2[sampleIndex] = sampleIndex - 128;
-        stage2Legacy[sampleIndex] = stage2[sampleIndex];
     }
     JxrForwardTransformStagesApplyStage2Dct(stage2);
-    strDCT4x4SecondStage(stage2Legacy);
-    if (memcmp(stage2, stage2Legacy, sizeof(stage2)) != 0) return 0;
 
     return stage2[0] == -32 && stage2[16] == 0 && stage2[32] == -268 &&
         stage2[48] == 0 && stage2[64] == 0 && stage2[80] == 0 &&
@@ -3308,20 +3282,13 @@ static int test_forward_transform_prestage_vectors(void)
 {
     PixelI firstStage[128];
     PixelI secondStage[128];
-    PixelI firstStageLegacy[128];
-    PixelI secondStageLegacy[128];
     Int sampleIndex;
 
     for (sampleIndex = 0; sampleIndex < 128; ++sampleIndex) {
         firstStage[sampleIndex] = sampleIndex - 64;
         secondStage[sampleIndex] = 96 - sampleIndex;
-        firstStageLegacy[sampleIndex] = firstStage[sampleIndex];
-        secondStageLegacy[sampleIndex] = secondStage[sampleIndex];
     }
     JxrForwardTransformStagesApplyPreStage1Split(firstStage + 16, secondStage + 16, 16);
-    strPre4x4Stage1Split(firstStageLegacy + 16, secondStageLegacy + 16, 16);
-    if (memcmp(firstStage, firstStageLegacy, sizeof(firstStage)) != 0 ||
-        memcmp(secondStage, secondStageLegacy, sizeof(secondStage)) != 0) return 0;
 
     return firstStage[28] == -80 && firstStage[29] == -49 &&
         firstStage[72] == 25 && firstStage[73] == -3 &&
@@ -3333,20 +3300,13 @@ static int test_forward_transform_prestage2_vectors(void)
 {
     PixelI firstStage[320];
     PixelI secondStage[320];
-    PixelI firstStageLegacy[320];
-    PixelI secondStageLegacy[320];
     Int sampleIndex;
 
     for (sampleIndex = 0; sampleIndex < 320; ++sampleIndex) {
         firstStage[sampleIndex] = sampleIndex - 160;
         secondStage[sampleIndex] = 192 - sampleIndex;
-        firstStageLegacy[sampleIndex] = firstStage[sampleIndex];
-        secondStageLegacy[sampleIndex] = secondStage[sampleIndex];
     }
     JxrForwardTransformStagesApplyPreStage2Split(firstStage + 144, secondStage + 144);
-    strPre4x4Stage2Split(firstStageLegacy + 144, secondStageLegacy + 144);
-    if (memcmp(firstStage, firstStageLegacy, sizeof(firstStage)) != 0 ||
-        memcmp(secondStage, secondStageLegacy, sizeof(secondStage)) != 0) return 0;
 
     return firstStage[48] == -70 && firstStage[64] == -171 &&
         firstStage[128] == -142 && firstStage[256] == 126 &&

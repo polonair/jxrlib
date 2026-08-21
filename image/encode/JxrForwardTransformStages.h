@@ -9,6 +9,9 @@ Void JxrForwardTransformStagesApplyPreStage1Split(
     PixelI* firstStage,
     PixelI* secondStage,
     Int offset);
+Void JxrForwardTransformStagesApplyPreStage1(
+    PixelI* samples,
+    Int offset);
 Void JxrForwardTransformStagesApplyPreStage2Split(
     PixelI* firstStage,
     PixelI* secondStage);
