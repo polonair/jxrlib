@@ -37,6 +37,7 @@
 #include "JxrEncoderImagePlaneHeaderWriter.h"
 #include "JxrEncoderMainHeaderWriter.h"
 #include "JxrEncoderIndexTableWriter.h"
+#include "JxrEncoderPacketStreamAssembler.h"
 #include <math.h>
 #include "perfTimer.h"
 
@@ -317,26 +318,6 @@ Int writeIndexTable(CWMImageStrCodec * pSC)
     return JxrEncoderIndexTableWriterWrite(pSC);
 }
 
-Int copyTo(struct WMPStream * pSrc, struct WMPStream * pDst, size_t iBytes)
-{
-    char pData[PACKETLENGTH];
-
-    if (iBytes <= JXR_ENCODER_MINIMUM_PACKET_LENGTH){
-        pSrc->Read(pSrc, pData, iBytes);
-        return ICERR_OK;
-    }
-
-    while(iBytes > PACKETLENGTH){
-        pSrc->Read(pSrc, pData, PACKETLENGTH);
-        pDst->Write(pDst, pData, PACKETLENGTH);
-        iBytes -= PACKETLENGTH;
-    }
-    pSrc->Read(pSrc, pData, iBytes);
-    pDst->Write(pDst, pData, iBytes);
-
-    return ICERR_OK;
-}
-
 Int StrIOEncTerm(CWMImageStrCodec* pSC)
 {
     BitIOInfo * pIO = pSC->pIOHeader;
@@ -389,40 +370,9 @@ Int StrIOEncTerm(CWMImageStrCodec* pSC)
     detachISWrite(pSC, pIO);
 
     if(pSC->cNumBitIO > 0){
-        size_t i, j, k, l;
-        struct WMPStream * pDst = pSC->WMISCP.pWStream;
-        size_t * pTable = pSC->pIndexTable;
+        size_t i;
 
-        for(i = 0; i < pSC->cNumBitIO; i ++){
-            detachISWrite(pSC, pSC->m_ppBitIO[i]);
-        }
-
-        for(i = 0; i < pSC->cNumBitIO; i ++){
-            pSC->ppWStream[i]->SetPos(pSC->ppWStream[i], 0); // seek back for read
-        }
-
-        for(l = 0; l < (size_t)(pSC->WMISCP.bfBitstreamFormat == FREQUENCY && pSC->WMISCP.bProgressiveMode ? pSC->cSB : 1); l ++){
-			for(i = 0, k = l; i <= pSC->WMISCP.cNumOfSliceMinus1H; i ++){ // loop through tiles
-				for(j = 0; j <= pSC->WMISCP.cNumOfSliceMinus1V; j ++){
-
-					if(pSC->WMISCP.bfBitstreamFormat == SPATIAL)
-						copyTo(pSC->ppWStream[j], pDst, pTable[k ++]);
-					else if (!pSC->WMISCP.bProgressiveMode){
-						copyTo(pSC->ppWStream[j * pSC->cSB + 0], pDst, pTable[k ++]);
-						if(pSC->cSB > 1)
-							copyTo(pSC->ppWStream[j * pSC->cSB + 1], pDst, pTable[k ++]);
-						if(pSC->cSB > 2)
-							copyTo(pSC->ppWStream[j * pSC->cSB + 2], pDst, pTable[k ++]);
-						if(pSC->cSB > 3)
-							copyTo(pSC->ppWStream[j * pSC->cSB + 3], pDst, pTable[k ++]);
-					}
-					else{
-						copyTo(pSC->ppWStream[j * pSC->cSB + l], pDst, pTable[k]);
-						k += pSC->cSB;
-					}
-				}
-			}
-        }
+        JxrEncoderPacketStreamAssemblerAssemble(pSC);
 
         if (pSC->cmbHeight * pSC->cmbWidth * pSC->WMISCP.cChannel >= MAX_MEMORY_SIZE_IN_WORDS){           
             for(i = 0; i < pSC->cNumBitIO; i ++){

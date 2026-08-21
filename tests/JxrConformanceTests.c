@@ -25,6 +25,7 @@
 #include "../image/encode/JxrEncoderImagePlaneHeaderWriter.h"
 #include "../image/encode/JxrEncoderMainHeaderWriter.h"
 #include "../image/encode/JxrEncoderIndexTableWriter.h"
+#include "../image/encode/JxrEncoderPacketStreamAssembler.h"
 #include "encode.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
@@ -3693,6 +3694,25 @@ static int test_encoder_index_table_plan_vectors(void)
     return plan.packetGroupCount == 4 && plan.entryCount == 24;
 }
 
+static int test_encoder_packet_stream_plan_vectors(void)
+{
+    JxrEncoderPacketStreamPlan plan;
+
+    JxrEncoderPacketStreamPlanInitialize(&plan, SPATIAL, FALSE, 1, 2, 3);
+    if (!plan.usesSpatialLayout || plan.usesProgressiveFrequencyLayout ||
+        plan.packetGroupCount != 1 || plan.horizontalTileCount != 3 ||
+        plan.verticalTileCount != 4) return 0;
+
+    JxrEncoderPacketStreamPlanInitialize(&plan, FREQUENCY, FALSE, 4, 1, 2);
+    if (plan.usesSpatialLayout || plan.usesProgressiveFrequencyLayout ||
+        plan.packetGroupCount != 1 || plan.subbandPacketCount != 4) return 0;
+
+    JxrEncoderPacketStreamPlanInitialize(&plan, FREQUENCY, TRUE, 3, 0, 0);
+    return !plan.usesSpatialLayout && plan.usesProgressiveFrequencyLayout &&
+        plan.packetGroupCount == 3 && plan.horizontalTileCount == 1 &&
+        plan.verticalTileCount == 1;
+}
+
 static int test_forward_full_resolution_plane_vectors(void)
 {
     PixelI samples[1408];
@@ -4350,6 +4370,7 @@ int main(int argc, char** argv)
         { "encoder_image_plane_header_quantizer_plan_vectors", test_encoder_image_plane_header_quantizer_plan_vectors },
         { "encoder_main_header_plan_vectors", test_encoder_main_header_plan_vectors },
         { "encoder_index_table_plan_vectors", test_encoder_index_table_plan_vectors },
+        { "encoder_packet_stream_plan_vectors", test_encoder_packet_stream_plan_vectors },
         { "forward_full_resolution_plane_vectors", test_forward_full_resolution_plane_vectors },
         { "forward_chroma_420_plane_vectors", test_forward_chroma_420_plane_vectors },
         { "forward_chroma_422_plane_vectors", test_forward_chroma_422_plane_vectors },
