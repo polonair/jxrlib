@@ -26,6 +26,7 @@
 #include "../image/encode/JxrEncoderMainHeaderWriter.h"
 #include "../image/encode/JxrEncoderIndexTableWriter.h"
 #include "../image/encode/JxrEncoderPacketStreamAssembler.h"
+#include "../image/encode/JxrEncoderPacketStreamCleanup.h"
 #include "encode.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
@@ -3713,6 +3714,24 @@ static int test_encoder_packet_stream_plan_vectors(void)
         plan.verticalTileCount == 1;
 }
 
+static int test_encoder_packet_stream_cleanup_plan_vectors(void)
+{
+    JxrEncoderPacketStreamCleanupPlan plan;
+
+    JxrEncoderPacketStreamCleanupPlanInitialize(&plan, 0, 1, 1, 1);
+    if (plan.releasesPacketResources || plan.releasesTemporaryFiles ||
+        plan.closesPacketStreams) return 0;
+
+    JxrEncoderPacketStreamCleanupPlanInitialize(&plan, 1, 1, 1, 1);
+    if (!plan.releasesPacketResources || plan.releasesTemporaryFiles ||
+        !plan.closesPacketStreams) return 0;
+
+    JxrEncoderPacketStreamCleanupPlanInitialize(&plan, 1,
+        JXR_ENCODER_MAX_MEMORY_SIZE_IN_WORDS, 1, 1);
+    return plan.releasesPacketResources && plan.releasesTemporaryFiles &&
+        !plan.closesPacketStreams;
+}
+
 static int test_forward_full_resolution_plane_vectors(void)
 {
     PixelI samples[1408];
@@ -4371,6 +4390,7 @@ int main(int argc, char** argv)
         { "encoder_main_header_plan_vectors", test_encoder_main_header_plan_vectors },
         { "encoder_index_table_plan_vectors", test_encoder_index_table_plan_vectors },
         { "encoder_packet_stream_plan_vectors", test_encoder_packet_stream_plan_vectors },
+        { "encoder_packet_stream_cleanup_plan_vectors", test_encoder_packet_stream_cleanup_plan_vectors },
         { "forward_full_resolution_plane_vectors", test_forward_full_resolution_plane_vectors },
         { "forward_chroma_420_plane_vectors", test_forward_chroma_420_plane_vectors },
         { "forward_chroma_422_plane_vectors", test_forward_chroma_422_plane_vectors },

@@ -38,6 +38,7 @@
 #include "JxrEncoderMainHeaderWriter.h"
 #include "JxrEncoderIndexTableWriter.h"
 #include "JxrEncoderPacketStreamAssembler.h"
+#include "JxrEncoderPacketStreamCleanup.h"
 #include <math.h>
 #include "perfTimer.h"
 
@@ -225,7 +226,6 @@ static _FORCEINLINE PixelI forwardHalf (PixelI hHalf)
 
 //================================================================
 // BitIOInfo init/term for encoding
-const size_t MAX_MEMORY_SIZE_IN_WORDS = 64 << 20; // 1 << 20 \approx 1 million
 
 Int StrIOEncInit(CWMImageStrCodec* pSC)
 {
@@ -248,7 +248,7 @@ Int StrIOEncInit(CWMImageStrCodec* pSC)
         if(pSC->ppWStream == NULL) return ICERR_ERROR;
         memset(pSC->ppWStream, 0, pSC->cNumBitIO * sizeof(struct WMPStream *));
 
-        if (pSC->cmbHeight * pSC->cmbWidth * pSC->WMISCP.cChannel >= MAX_MEMORY_SIZE_IN_WORDS) {
+        if (pSC->cmbHeight * pSC->cmbWidth * pSC->WMISCP.cChannel >= JXR_ENCODER_MAX_MEMORY_SIZE_IN_WORDS) {
 #ifdef _WINDOWS_
             pSC->ppTempFile = (TCHAR **)malloc(pSC->cNumBitIO * sizeof(TCHAR *));
             if(pSC->ppTempFile == NULL) return ICERR_ERROR;
@@ -261,7 +261,7 @@ Int StrIOEncInit(CWMImageStrCodec* pSC)
         }
 
         for(i = 0; i < pSC->cNumBitIO; i ++){
-            if (pSC->cmbHeight * pSC->cmbWidth * pSC->WMISCP.cChannel >= MAX_MEMORY_SIZE_IN_WORDS) {
+            if (pSC->cmbHeight * pSC->cmbWidth * pSC->WMISCP.cChannel >= JXR_ENCODER_MAX_MEMORY_SIZE_IN_WORDS) {
 #if defined(_WINDOWS_) || defined(UNDER_CE)  // tmpnam does not exist in VS2005 WinCE CRT              
                 Bool bUnicode = sizeof(TCHAR) == 2;
                 pSC->ppTempFile[i] = (TCHAR *)malloc(MAX_PATH * sizeof(TCHAR));
@@ -370,47 +370,10 @@ Int StrIOEncTerm(CWMImageStrCodec* pSC)
     detachISWrite(pSC, pIO);
 
     if(pSC->cNumBitIO > 0){
-        size_t i;
-
         JxrEncoderPacketStreamAssemblerAssemble(pSC);
 
-        if (pSC->cmbHeight * pSC->cmbWidth * pSC->WMISCP.cChannel >= MAX_MEMORY_SIZE_IN_WORDS){           
-            for(i = 0; i < pSC->cNumBitIO; i ++){
-                if(pSC->ppWStream && pSC->ppWStream[i]){
-                    if((*(pSC->ppWStream + i))->state.file.pFile){
-                        fclose((*(pSC->ppWStream + i))->state.file.pFile);
-#ifdef _WINDOWS_
-                        if(DeleteFileA((LPCSTR)pSC->ppTempFile[i]) == 0)
-                            return ICERR_ERROR;
-#else
-                        if (remove(pSC->ppTempFile[i]) == -1)
-                            return ICERR_ERROR;
-#endif
-                    }
-
-                    if (*(pSC->ppWStream + i))
-                        free(*(pSC->ppWStream + i));
-                }
-                if(pSC->ppTempFile){
-                    if(pSC->ppTempFile[i])
-                        free(pSC->ppTempFile[i]);
-                }
-            }
-
-            if(pSC->ppTempFile)
-                free(pSC->ppTempFile);
-        }
-        else{
-            for(i = 0; i < pSC->cNumBitIO; i ++){
-                if(pSC->ppWStream && pSC->ppWStream[i])
-                    pSC->ppWStream[i]->Close(pSC->ppWStream + i);
-            }
-        }
-
-        free(pSC->ppWStream);
-
-        free(pSC->m_ppBitIO);
-        free(pSC->pIndexTable);
+        if (JxrEncoderPacketStreamCleanupRelease(pSC) != ICERR_OK)
+            return ICERR_ERROR;
     }
 
     return 0;
