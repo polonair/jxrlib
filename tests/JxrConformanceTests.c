@@ -19,6 +19,7 @@
 #include "../image/encode/JxrForwardTransformPlaneContext.h"
 #include "../image/encode/JxrEncoderMacroblockProcessor.h"
 #include "../image/encode/JxrEncoderSubbandPipeline.h"
+#include "../image/encode/JxrEncoderPacketHeaderWriter.h"
 #include "encode.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
@@ -3533,6 +3534,42 @@ static int test_encoder_subband_plan_vectors(void)
     return plan.encodesLowpass && plan.encodesHighpass;
 }
 
+static int test_encoder_packet_header_plan_vectors(void)
+{
+    JxrEncoderPacketHeaderPlan plan;
+
+    JxrEncoderPacketHeaderPlanInitialize(&plan, SPATIAL, 1, TRUE,
+        TRUE, TRUE, FALSE, FALSE);
+    if (!plan.writesHeaders || !plan.usesSpatialLayout ||
+        !plan.writesLowpassHeader || !plan.writesHighpassHeader ||
+        plan.writesFlexbitsPacket || !plan.writesTrimFlexbits) return 0;
+
+    JxrEncoderPacketHeaderPlanInitialize(&plan, FREQUENCY, 1, TRUE,
+        TRUE, TRUE, FALSE, FALSE);
+    if (!plan.writesHeaders || plan.usesSpatialLayout ||
+        plan.writesLowpassHeader || plan.writesHighpassHeader ||
+        plan.writesFlexbitsPacket || plan.writesTrimFlexbits) return 0;
+
+    JxrEncoderPacketHeaderPlanInitialize(&plan, FREQUENCY, 3, FALSE,
+        TRUE, TRUE, FALSE, FALSE);
+    if (!plan.writesLowpassHeader || !plan.writesHighpassHeader ||
+        plan.writesFlexbitsPacket || plan.writesTrimFlexbits) return 0;
+
+    JxrEncoderPacketHeaderPlanInitialize(&plan, FREQUENCY, 4, TRUE,
+        TRUE, TRUE, FALSE, FALSE);
+    if (!plan.writesFlexbitsPacket || !plan.writesTrimFlexbits) return 0;
+
+    JxrEncoderPacketHeaderPlanInitialize(&plan, SPATIAL, 4, TRUE,
+        FALSE, TRUE, FALSE, FALSE);
+    if (plan.writesHeaders) return 0;
+    JxrEncoderPacketHeaderPlanInitialize(&plan, SPATIAL, 4, TRUE,
+        TRUE, TRUE, TRUE, FALSE);
+    if (plan.writesHeaders) return 0;
+    JxrEncoderPacketHeaderPlanInitialize(&plan, SPATIAL, 4, TRUE,
+        TRUE, TRUE, FALSE, TRUE);
+    return !plan.writesHeaders;
+}
+
 static int test_forward_full_resolution_plane_vectors(void)
 {
     PixelI samples[1408];
@@ -4184,6 +4221,7 @@ int main(int argc, char** argv)
         { "forward_transform_plane_context_vectors", test_forward_transform_plane_context_vectors },
         { "encoder_macroblock_process_state_vectors", test_encoder_macroblock_process_state_vectors },
         { "encoder_subband_plan_vectors", test_encoder_subband_plan_vectors },
+        { "encoder_packet_header_plan_vectors", test_encoder_packet_header_plan_vectors },
         { "forward_full_resolution_plane_vectors", test_forward_full_resolution_plane_vectors },
         { "forward_chroma_420_plane_vectors", test_forward_chroma_420_plane_vectors },
         { "forward_chroma_422_plane_vectors", test_forward_chroma_422_plane_vectors },

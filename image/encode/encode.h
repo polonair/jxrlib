@@ -39,6 +39,10 @@ Int EncodeMacroblockDC(CWMImageStrCodec*, CCodingContext *, Int, Int);
 Int EncodeMacroblockLowpass(CWMImageStrCodec*, CCodingContext *, Int, Int);
 Int EncodeMacroblockHighpass(CWMImageStrCodec*, CCodingContext *, Int, Int);
 Int encodeMB(CWMImageStrCodec*, Int, Int);
+Void writePacketHeader(BitIOInfo*, U8, U8);
+Int writeTileHeaderDC(CWMImageStrCodec*, BitIOInfo*);
+Int writeTileHeaderLP(CWMImageStrCodec*, BitIOInfo*);
+Int writeTileHeaderHP(CWMImageStrCodec*, BitIOInfo*);
 
 Int quantizeMacroblock(CWMImageStrCodec *);
 Void transformMacroblock(CWMImageStrCodec *);

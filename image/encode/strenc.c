@@ -31,6 +31,7 @@
 #include "strTransform.h"
 #include "JxrEncoderMacroblockProcessor.h"
 #include "JxrEncoderSubbandPipeline.h"
+#include "JxrEncoderPacketHeaderWriter.h"
 #include <math.h>
 #include "perfTimer.h"
 
@@ -216,36 +217,8 @@ Int encodeMB(CWMImageStrCodec * pSC, Int iMBX, Int iMBY)
 {
     CCodingContext * pContext = &pSC->m_pCodingContext[pSC->cTileColumn];
     
-    if(pSC->m_bCtxLeft && pSC->m_bCtxTop && pSC->m_bSecondary == FALSE && pSC->m_param.bTranscode == FALSE){ // write packet headers
-        U8 pID = (U8)((pSC->cTileRow * (pSC->WMISCP.cNumOfSliceMinus1V + 1) + pSC->cTileColumn) & 0x1F);
-        
-        if(pSC->WMISCP.bfBitstreamFormat == SPATIAL) {
-            writePacketHeader(pContext->m_pIODC, 0, pID);
-            if (pSC->m_param.bTrimFlexbitsFlag)
-                putBit16(pContext->m_pIODC, pContext->m_iTrimFlexBits, 4);
-            writeTileHeaderDC(pSC, pContext->m_pIODC);
-            writeTileHeaderLP(pSC, pContext->m_pIODC);
-            writeTileHeaderHP(pSC, pContext->m_pIODC);
-        }
-        else{
-            writePacketHeader(pContext->m_pIODC, 1, pID);
-            writeTileHeaderDC(pSC, pContext->m_pIODC);
-            if(pSC->cSB > 1){
-                writePacketHeader(pContext->m_pIOLP, 2, pID);
-                writeTileHeaderLP(pSC, pContext->m_pIOLP);
-            }
-            if(pSC->cSB > 2){
-                writePacketHeader(pContext->m_pIOAC, 3, pID);
-                writeTileHeaderHP(pSC, pContext->m_pIOAC);
-            }
-            if(pSC->cSB > 3) {
-                writePacketHeader(pContext->m_pIOFL, 4, pID);
-                if (pSC->m_param.bTrimFlexbitsFlag)
-                    putBit16(pContext->m_pIOFL, pContext->m_iTrimFlexBits, 4);
-            }
-        }
-    }
-    
+    JxrEncoderPacketHeaderWriterWrite(pSC, pContext);
+
     if (JxrEncoderSubbandPipelineProcess(pSC, pContext, iMBX, iMBY) != ICERR_OK)
         return ICERR_ERROR;
 

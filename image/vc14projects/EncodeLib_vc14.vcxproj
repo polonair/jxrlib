@@ -185,6 +185,7 @@
     <ClCompile Include="..\encode\JxrForwardTransformPlaneContext.c" />
     <ClCompile Include="..\encode\JxrEncoderMacroblockProcessor.c" />
     <ClCompile Include="..\encode\JxrEncoderSubbandPipeline.c" />
+    <ClCompile Include="..\encode\JxrEncoderPacketHeaderWriter.c" />
     <ClCompile Include="..\encode\strPredQuantEnc.c" />
   </ItemGroup>
   <ItemGroup>
