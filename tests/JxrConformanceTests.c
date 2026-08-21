@@ -15,6 +15,8 @@
 #include "../image/encode/JxrForwardTransformChroma420Plane.h"
 #include "../image/encode/JxrForwardTransformChroma422Plane.h"
 #include "../image/encode/JxrForwardTransformCodecSetup.h"
+#include "../image/encode/JxrForwardTransformPlanePlan.h"
+#include "../image/encode/JxrForwardTransformPlaneContext.h"
 #include "encode.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
@@ -3446,6 +3448,49 @@ static int test_forward_transform_codec_setup_vectors(void)
         !codec.bVertTileBoundary && !codec.bHoriTileBoundary;
 }
 
+static int test_forward_transform_plane_plan_vectors(void)
+{
+    JxrForwardTransformPlanePlan plan;
+
+    JxrForwardTransformPlanePlanInitialize(&plan, YUV_444, 3);
+    if (plan.fullResolutionChannelCount != 3 ||
+        plan.chroma420ChannelCount != 0 || plan.chroma422ChannelCount != 0) return 0;
+
+    JxrForwardTransformPlanePlanInitialize(&plan, YUV_420, 1);
+    if (plan.fullResolutionChannelCount != 1 ||
+        plan.chroma420ChannelCount != 2 || plan.chroma422ChannelCount != 0) return 0;
+
+    JxrForwardTransformPlanePlanInitialize(&plan, YUV_422, 1);
+    return plan.fullResolutionChannelCount == 1 &&
+        plan.chroma420ChannelCount == 0 && plan.chroma422ChannelCount == 2;
+}
+
+static int test_forward_transform_plane_context_vectors(void)
+{
+    PixelI first0, first1, first2;
+    PixelI second0, second1, second2;
+    PixelI* firstPlanes[3] = { &first0, &first1, &first2 };
+    PixelI* secondPlanes[3] = { &second0, &second1, &second2 };
+    PixelI predictionBefore[MAX_CHANNELS][2];
+    PixelI predictionAfter[MAX_CHANNELS][2];
+    JxrForwardTransformPlaneContext context;
+
+    memset(predictionBefore, 0, sizeof(predictionBefore));
+    memset(predictionAfter, 0, sizeof(predictionAfter));
+    JxrForwardTransformPlaneContextInitializeFullResolution(&context,
+        firstPlanes, secondPlanes, 2);
+    if (context.firstStage != &first2 || context.secondStage != &second2 ||
+        context.predictionBefore != NULL || context.predictionAfter != NULL ||
+        context.channelIndex != 2 || context.isChroma) return 0;
+
+    JxrForwardTransformPlaneContextInitializeChroma(&context,
+        firstPlanes, secondPlanes, predictionBefore, predictionAfter, 1);
+    return context.firstStage == &first2 && context.secondStage == &second2 &&
+        context.predictionBefore == predictionBefore[1] &&
+        context.predictionAfter == predictionAfter[1] &&
+        context.channelIndex == 1 && context.isChroma;
+}
+
 static int test_forward_full_resolution_plane_vectors(void)
 {
     PixelI samples[1408];
@@ -4093,6 +4138,8 @@ int main(int argc, char** argv)
         { "forward_transform_macroblock_geometry_vectors", test_forward_transform_macroblock_geometry_vectors },
         { "forward_transform_boundary_context_vectors", test_forward_transform_boundary_context_vectors },
         { "forward_transform_codec_setup_vectors", test_forward_transform_codec_setup_vectors },
+        { "forward_transform_plane_plan_vectors", test_forward_transform_plane_plan_vectors },
+        { "forward_transform_plane_context_vectors", test_forward_transform_plane_context_vectors },
         { "forward_full_resolution_plane_vectors", test_forward_full_resolution_plane_vectors },
         { "forward_chroma_420_plane_vectors", test_forward_chroma_420_plane_vectors },
         { "forward_chroma_422_plane_vectors", test_forward_chroma_422_plane_vectors },

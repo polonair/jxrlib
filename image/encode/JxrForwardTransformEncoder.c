@@ -4,38 +4,46 @@
 #include "JxrForwardTransformChroma422Plane.h"
 #include "JxrForwardTransformCodecSetup.h"
 #include "JxrForwardTransformFullResolutionPlane.h"
+#include "JxrForwardTransformPlaneContext.h"
 
 Void JxrForwardTransformEncoderProcessMacroblock(CWMImageStrCodec* codec)
 {
     JxrForwardTransformCodecSetup setup;
+    JxrForwardTransformPlaneContext plane;
     Int channelIndex;
 
     JxrForwardTransformCodecSetupInitialize(&setup, codec);
 
     for (channelIndex = 0;
-        channelIndex < (Int)setup.geometry.fullResolutionPlaneCount;
+        channelIndex < (Int)setup.planePlan.fullResolutionChannelCount;
         ++channelIndex) {
+        JxrForwardTransformPlaneContextInitializeFullResolution(&plane,
+            codec->p0MBbuffer, codec->p1MBbuffer, channelIndex);
         JxrForwardTransformFullResolutionPlaneApply(
-            codec->p0MBbuffer[channelIndex], codec->p1MBbuffer[channelIndex],
-            channelIndex != 0, &setup.geometry, &setup.boundaries,
+            plane.firstStage, plane.secondStage, plane.channelIndex != 0,
+            &setup.geometry, &setup.boundaries,
             setup.usesScaledArithmetic);
     }
 
     for (channelIndex = 0;
-        channelIndex < (setup.geometry.colorFormat == YUV_420 ? 2 : 0);
+        channelIndex < (Int)setup.planePlan.chroma420ChannelCount;
         ++channelIndex) {
+        JxrForwardTransformPlaneContextInitializeChroma(&plane,
+            codec->p0MBbuffer, codec->p1MBbuffer,
+            codec->iPredBefore, codec->iPredAfter, channelIndex);
         JxrForwardTransformChroma420PlaneApply(
-            codec->p0MBbuffer[1 + channelIndex], codec->p1MBbuffer[1 + channelIndex],
-            codec->iPredBefore[channelIndex], codec->iPredAfter[channelIndex],
+            plane.firstStage, plane.secondStage, plane.predictionBefore, plane.predictionAfter,
             &setup.geometry, &setup.boundaries, setup.usesScaledArithmetic);
     }
 
     for (channelIndex = 0;
-        channelIndex < (setup.geometry.colorFormat == YUV_422 ? 2 : 0);
+        channelIndex < (Int)setup.planePlan.chroma422ChannelCount;
         ++channelIndex) {
+        JxrForwardTransformPlaneContextInitializeChroma(&plane,
+            codec->p0MBbuffer, codec->p1MBbuffer,
+            codec->iPredBefore, codec->iPredAfter, channelIndex);
         JxrForwardTransformChroma422PlaneApply(
-            codec->p0MBbuffer[1 + channelIndex], codec->p1MBbuffer[1 + channelIndex],
-            codec->iPredBefore[channelIndex], codec->iPredAfter[channelIndex],
+            plane.firstStage, plane.secondStage, plane.predictionBefore, plane.predictionAfter,
             &setup.geometry, &setup.boundaries, setup.usesScaledArithmetic);
     }
 }

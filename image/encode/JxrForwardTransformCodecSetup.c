@@ -13,5 +13,7 @@ Void JxrForwardTransformCodecSetupInitialize(
         codec->m_param.cNumChannels);
     JxrForwardTransformBoundaryContextInitialize(&setup->boundaries,
         &setup->geometry, &setup->hardTileState);
+    JxrForwardTransformPlanePlanInitialize(&setup->planePlan,
+        setup->geometry.colorFormat, setup->geometry.fullResolutionPlaneCount);
     setup->usesScaledArithmetic = codec->m_param.bScaledArith;
 }
