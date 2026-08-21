@@ -22,6 +22,7 @@
 #include "../image/encode/JxrEncoderPacketHeaderWriter.h"
 #include "../image/encode/JxrEncoderSliceFinalizer.h"
 #include "../image/encode/JxrEncoderTileHeaderWriter.h"
+#include "../image/encode/JxrEncoderImagePlaneHeaderWriter.h"
 #include "encode.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
@@ -3632,6 +3633,33 @@ static int test_encoder_tile_header_plan_vectors(void)
         !plan.writesHpQuantizer;
 }
 
+static int test_encoder_image_plane_header_quantizer_plan_vectors(void)
+{
+    JxrEncoderImagePlaneHeaderQuantizerPlan plan;
+
+    JxrEncoderImagePlaneHeaderQuantizerPlanInitialize(&plan, 0, SB_ALL);
+    if (!plan.writesDcFrameQuantizer || !plan.writesLowpassSyntax ||
+        !plan.lowpassUsesDcQuantizer || plan.writesLpFrameQuantizer ||
+        !plan.writesHighpassSyntax || !plan.highpassUsesLpQuantizer ||
+        plan.writesHpFrameQuantizer) return 0;
+
+    JxrEncoderImagePlaneHeaderQuantizerPlanInitialize(&plan, 0x604, SB_ALL);
+    if (!plan.writesDcFrameQuantizer || plan.lowpassUsesDcQuantizer ||
+        !plan.writesLpFrameQuantizer || plan.highpassUsesLpQuantizer ||
+        plan.writesHpFrameQuantizer) return 0;
+
+    JxrEncoderImagePlaneHeaderQuantizerPlanInitialize(&plan, 0x600, SB_ALL);
+    if (!plan.writesDcFrameQuantizer || plan.lowpassUsesDcQuantizer ||
+        !plan.writesLpFrameQuantizer || plan.highpassUsesLpQuantizer ||
+        !plan.writesHpFrameQuantizer) return 0;
+
+    JxrEncoderImagePlaneHeaderQuantizerPlanInitialize(&plan, 0, SB_NO_HIGHPASS);
+    if (!plan.writesLowpassSyntax || plan.writesHighpassSyntax) return 0;
+
+    JxrEncoderImagePlaneHeaderQuantizerPlanInitialize(&plan, 0, SB_DC_ONLY);
+    return !plan.writesLowpassSyntax && !plan.writesHighpassSyntax;
+}
+
 static int test_forward_full_resolution_plane_vectors(void)
 {
     PixelI samples[1408];
@@ -4286,6 +4314,7 @@ int main(int argc, char** argv)
         { "encoder_packet_header_plan_vectors", test_encoder_packet_header_plan_vectors },
         { "encoder_slice_finalization_plan_vectors", test_encoder_slice_finalization_plan_vectors },
         { "encoder_tile_header_plan_vectors", test_encoder_tile_header_plan_vectors },
+        { "encoder_image_plane_header_quantizer_plan_vectors", test_encoder_image_plane_header_quantizer_plan_vectors },
         { "forward_full_resolution_plane_vectors", test_forward_full_resolution_plane_vectors },
         { "forward_chroma_420_plane_vectors", test_forward_chroma_420_plane_vectors },
         { "forward_chroma_422_plane_vectors", test_forward_chroma_422_plane_vectors },

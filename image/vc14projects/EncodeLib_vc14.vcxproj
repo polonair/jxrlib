@@ -188,6 +188,7 @@
     <ClCompile Include="..\encode\JxrEncoderPacketHeaderWriter.c" />
     <ClCompile Include="..\encode\JxrEncoderSliceFinalizer.c" />
     <ClCompile Include="..\encode\JxrEncoderTileHeaderWriter.c" />
+    <ClCompile Include="..\encode\JxrEncoderImagePlaneHeaderWriter.c" />
     <ClCompile Include="..\encode\strPredQuantEnc.c" />
   </ItemGroup>
   <ItemGroup>

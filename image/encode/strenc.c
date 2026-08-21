@@ -34,6 +34,7 @@
 #include "JxrEncoderPacketHeaderWriter.h"
 #include "JxrEncoderSliceFinalizer.h"
 #include "JxrEncoderTileHeaderWriter.h"
+#include "JxrEncoderImagePlaneHeaderWriter.h"
 #include <math.h>
 #include "perfTimer.h"
 
@@ -553,83 +554,9 @@ Int StrIOEncTerm(CWMImageStrCodec* pSC)
 *************************************************************************/
 Int WriteImagePlaneHeader(CWMImageStrCodec * pSC)
 {
-    CWMImageInfo * pII = &pSC->WMII;
-    CWMIStrCodecParam * pSCP = &pSC->WMISCP;
-    BitIOInfo* pIO = pSC->pIOHeader;
-
-    PUTBITS(pIO, (Int) pSC->m_param.cfColorFormat, 3); // internal color format
-    PUTBITS(pIO, (Int) pSC->m_param.bScaledArith, 1); // lossless mode
-
-// subbands
-    PUTBITS(pIO, (U32)pSCP->sbSubband, 4);
-
-// color parameters
-    switch (pSC->m_param.cfColorFormat) {
-        case YUV_420:
-        case YUV_422:
-        case YUV_444:
-            PUTBITS(pIO, 0, 4);
-            PUTBITS(pIO, 0, 4);
-            break;
-        case NCOMPONENT:
-            PUTBITS(pIO, (Int) pSC->m_param.cNumChannels - 1, 4);
-            PUTBITS(pIO, 0, 4);
-            break;
-        default:
-            break;
-    }
-
-// float and 32s additional parameters
-    switch (pII->bdBitDepth) {
-        case BD_16:
-        case BD_16S:
-            PUTBITS(pIO, pSCP->nLenMantissaOrShift, 8);
-            break;
-        case BD_32:
-        case BD_32S:
-            if(pSCP->nLenMantissaOrShift == 0)
-                pSCP->nLenMantissaOrShift = 10;//default
-            PUTBITS(pIO, pSCP->nLenMantissaOrShift, 8);
-            break;
-        case BD_32F:
-            if(pSCP->nLenMantissaOrShift == 0)
-                pSCP->nLenMantissaOrShift = 13;//default
-            PUTBITS(pIO, pSCP->nLenMantissaOrShift, 8);//float conversion parameters
-            PUTBITS(pIO, pSCP->nExpBias, 8);
-            break;
-        default:
-            break;
-    }
-
-        // quantization
-    PUTBITS(pIO, (pSC->m_param.uQPMode & 1) == 1 ? 0 : 1, 1); // DC frame uniform quantization?
-    if((pSC->m_param.uQPMode & 1) == 0)
-        writeQuantizer(pSC->pTile[0].pQuantizerDC, pIO, (pSC->m_param.uQPMode >> 3) & 3, pSC->m_param.cNumChannels, 0);
-    if(pSC->WMISCP.sbSubband != SB_DC_ONLY){
-        PUTBITS(pIO, (pSC->m_param.uQPMode & 0x200) == 0 ? 1 : 0, 1); // use DC quantization?
-        if((pSC->m_param.uQPMode & 0x200) != 0){
-            PUTBITS(pIO, (pSC->m_param.uQPMode & 2) == 2 ? 0 : 1, 1); // LP frame uniform quantization?
-            if((pSC->m_param.uQPMode & 2) == 0)
-                writeQuantizer(pSC->pTile[0].pQuantizerLP, pIO, (pSC->m_param.uQPMode >> 5) & 3,  pSC->m_param.cNumChannels, 0);
-        }
-
-        if(pSC->WMISCP.sbSubband != SB_NO_HIGHPASS){
-            PUTBITS(pIO, (pSC->m_param.uQPMode & 0x400) == 0 ? 1 : 0, 1); // use LP quantization?
-            if((pSC->m_param.uQPMode & 0x400) != 0){
-                PUTBITS(pIO, (pSC->m_param.uQPMode & 4) == 4 ? 0 : 1, 1); // HP frame uniform quantization?
-                if((pSC->m_param.uQPMode & 4) == 0)
-                    writeQuantizer(pSC->pTile[0].pQuantizerHP, pIO, (pSC->m_param.uQPMode >> 7) & 3,  pSC->m_param.cNumChannels, 0);
-            }
-        }
-    }
-
-    fillToByte(pIO);  // remove this later
-    return ICERR_OK;
+    return JxrEncoderImagePlaneHeaderWriterWrite(pSC);
 }
 
-/*************************************************************************
-    Write header to buffer
-*************************************************************************/
 Int WriteWMIHeader(CWMImageStrCodec * pSC)
 {
     CWMImageInfo * pII = &pSC->WMII;
