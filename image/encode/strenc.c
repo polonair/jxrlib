@@ -32,6 +32,7 @@
 #include "JxrEncoderMacroblockProcessor.h"
 #include "JxrEncoderSubbandPipeline.h"
 #include "JxrEncoderPacketHeaderWriter.h"
+#include "JxrEncoderSliceFinalizer.h"
 #include <math.h>
 #include "perfTimer.h"
 
@@ -222,26 +223,7 @@ Int encodeMB(CWMImageStrCodec * pSC, Int iMBX, Int iMBY)
     if (JxrEncoderSubbandPipelineProcess(pSC, pContext, iMBX, iMBY) != ICERR_OK)
         return ICERR_ERROR;
 
-    if(iMBX + 1 == (int) pSC->cmbWidth && (iMBY + 1 == (int) pSC->cmbHeight || 
-        (pSC->cTileRow < pSC->WMISCP.cNumOfSliceMinus1H && iMBY == (int) pSC->WMISCP.uiTileY[pSC->cTileRow + 1] - 1)))
-    { // end of a horizontal slice
-        size_t k, l;
-
-        // get sizes of each packet and update index table
-        if (pSC->m_pNextSC == NULL || pSC->m_bSecondary) {
-            for(k = 0; k < pSC->cNumBitIO; k ++){
-                fillToByte(pSC->m_ppBitIO[k]);
-                pSC->ppWStream[k]->GetPos(pSC->ppWStream[k], &l);
-                pSC->pIndexTable[pSC->cNumBitIO * pSC->cTileRow + k] = l + getSizeWrite(pSC->m_ppBitIO[k]); // offset
-            }
-        }
-        
-        // reset coding contexts
-        if(iMBY + 1 != (int) pSC->cmbHeight){
-            for(k = 0; k <= pSC->WMISCP.cNumOfSliceMinus1V; k ++)
-                ResetCodingContextEnc(&pSC->m_pCodingContext[k]);
-        }
-    }
+    JxrEncoderSliceFinalizerFinalize(pSC, iMBX, iMBY);
 
     return ICERR_OK;
 }

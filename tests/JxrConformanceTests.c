@@ -20,6 +20,7 @@
 #include "../image/encode/JxrEncoderMacroblockProcessor.h"
 #include "../image/encode/JxrEncoderSubbandPipeline.h"
 #include "../image/encode/JxrEncoderPacketHeaderWriter.h"
+#include "../image/encode/JxrEncoderSliceFinalizer.h"
 #include "encode.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
@@ -3570,6 +3571,41 @@ static int test_encoder_packet_header_plan_vectors(void)
     return !plan.writesHeaders;
 }
 
+static int test_encoder_slice_finalization_plan_vectors(void)
+{
+    CWMImageStrCodec codec;
+    CWMImageStrCodec secondaryCodec;
+    JxrEncoderSliceFinalizationPlan plan;
+
+    memset(&codec, 0, sizeof(codec));
+    codec.cmbWidth = 4;
+    codec.cmbHeight = 5;
+    codec.cTileRow = 0;
+    codec.WMISCP.cNumOfSliceMinus1H = 1;
+    codec.WMISCP.uiTileY[1] = 3;
+
+    JxrEncoderSliceFinalizationPlanInitialize(&plan, &codec, 2, 2);
+    if (plan.completesHorizontalSlice || plan.updatesPacketIndex ||
+        plan.resetsCodingContexts) return 0;
+
+    JxrEncoderSliceFinalizationPlanInitialize(&plan, &codec, 3, 4);
+    if (!plan.completesHorizontalSlice || !plan.updatesPacketIndex ||
+        plan.resetsCodingContexts) return 0;
+
+    JxrEncoderSliceFinalizationPlanInitialize(&plan, &codec, 3, 2);
+    if (!plan.completesHorizontalSlice || !plan.updatesPacketIndex ||
+        !plan.resetsCodingContexts) return 0;
+
+    memset(&secondaryCodec, 0, sizeof(secondaryCodec));
+    codec.m_pNextSC = &secondaryCodec;
+    JxrEncoderSliceFinalizationPlanInitialize(&plan, &codec, 3, 2);
+    if (plan.updatesPacketIndex) return 0;
+
+    codec.m_bSecondary = TRUE;
+    JxrEncoderSliceFinalizationPlanInitialize(&plan, &codec, 3, 2);
+    return plan.updatesPacketIndex && plan.resetsCodingContexts;
+}
+
 static int test_forward_full_resolution_plane_vectors(void)
 {
     PixelI samples[1408];
@@ -4222,6 +4258,7 @@ int main(int argc, char** argv)
         { "encoder_macroblock_process_state_vectors", test_encoder_macroblock_process_state_vectors },
         { "encoder_subband_plan_vectors", test_encoder_subband_plan_vectors },
         { "encoder_packet_header_plan_vectors", test_encoder_packet_header_plan_vectors },
+        { "encoder_slice_finalization_plan_vectors", test_encoder_slice_finalization_plan_vectors },
         { "forward_full_resolution_plane_vectors", test_forward_full_resolution_plane_vectors },
         { "forward_chroma_420_plane_vectors", test_forward_chroma_420_plane_vectors },
         { "forward_chroma_422_plane_vectors", test_forward_chroma_422_plane_vectors },
