@@ -13,6 +13,7 @@
 #include "../image/encode/JxrForwardTransformBoundaryContext.h"
 #include "../image/encode/JxrForwardTransformFullResolutionPlane.h"
 #include "../image/encode/JxrForwardTransformChroma420Plane.h"
+#include "../image/encode/JxrForwardTransformChroma422Plane.h"
 #include "encode.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
@@ -3520,6 +3521,41 @@ static int test_forward_chroma_420_plane_vectors(void)
         predictionAfter[0] == 0 && predictionAfter[1] == 0;
 }
 
+static int test_forward_chroma_422_plane_vectors(void)
+{
+    PixelI samples[1024];
+    PixelI predictionBefore[2] = { 0, 0 };
+    PixelI predictionAfter[2] = { 0, 0 };
+    JxrForwardTransformMacroblockGeometry geometry;
+    JxrForwardHardTileBoundaryState hardTileState;
+    JxrForwardTransformBoundaryContext boundaries;
+    Int index;
+
+    memset(samples, 0, sizeof(samples));
+    memset(&hardTileState, 0, sizeof(hardTileState));
+    JxrForwardTransformMacroblockGeometryInitialize(&geometry,
+        OL_TWO, YUV_422, 2, 2, 4, 4, 3);
+    JxrForwardTransformBoundaryContextInitialize(&boundaries, &geometry, &hardTileState);
+    JxrForwardTransformChroma422PlaneApply(samples + 384, samples + 640,
+        predictionBefore, predictionAfter, &geometry, &boundaries, TRUE);
+    for (index = 0; index < (Int)(sizeof(samples) / sizeof(samples[0])); ++index)
+        if (samples[index] != 0) return 0;
+
+    hardTileState.isVerticalBoundary = TRUE;
+    hardTileState.isHorizontalBoundary = TRUE;
+    hardTileState.isOneMacroblockLeftOfVerticalBoundary = TRUE;
+    JxrForwardTransformMacroblockGeometryInitialize(&geometry,
+        OL_TWO, YUV_422, 0, 0, 4, 4, 3);
+    JxrForwardTransformBoundaryContextInitialize(&boundaries, &geometry, &hardTileState);
+    JxrForwardTransformChroma422PlaneApply(samples + 384, samples + 640,
+        predictionBefore, predictionAfter, &geometry, &boundaries, FALSE);
+    for (index = 0; index < (Int)(sizeof(samples) / sizeof(samples[0])); ++index)
+        if (samples[index] != 0) return 0;
+
+    return predictionBefore[0] == 0 && predictionBefore[1] == 0 &&
+        predictionAfter[0] == 0 && predictionAfter[1] == 0;
+}
+
 static int test_inverse_transform_corner_prediction_vectors(void)
 {
     PixelI value = 12;
@@ -4067,6 +4103,7 @@ int main(int argc, char** argv)
         { "forward_transform_boundary_context_vectors", test_forward_transform_boundary_context_vectors },
         { "forward_full_resolution_plane_vectors", test_forward_full_resolution_plane_vectors },
         { "forward_chroma_420_plane_vectors", test_forward_chroma_420_plane_vectors },
+        { "forward_chroma_422_plane_vectors", test_forward_chroma_422_plane_vectors },
         { "inverse_transform_corner_prediction_vectors", test_inverse_transform_corner_prediction_vectors },
         { "four_butterfly_vectors", test_four_butterfly_vectors },
         { "inverse_transform_dc_clip_vectors", test_inverse_transform_dc_clip_vectors },
