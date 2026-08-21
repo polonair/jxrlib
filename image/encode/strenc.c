@@ -35,6 +35,7 @@
 #include "JxrEncoderSliceFinalizer.h"
 #include "JxrEncoderTileHeaderWriter.h"
 #include "JxrEncoderImagePlaneHeaderWriter.h"
+#include "JxrEncoderMainHeaderWriter.h"
 #include <math.h>
 #include "perfTimer.h"
 
@@ -559,92 +560,9 @@ Int WriteImagePlaneHeader(CWMImageStrCodec * pSC)
 
 Int WriteWMIHeader(CWMImageStrCodec * pSC)
 {
-    CWMImageInfo * pII = &pSC->WMII;
-    CWMIStrCodecParam * pSCP = &pSC->WMISCP;
-    CCoreParameters * pCoreParam = &pSC->m_param;
-    BitIOInfo* pIO = pSC->pIOHeader;
-    U32 /*iSizeOfSize = 2,*/ i;
-    // temporary assignments / reserved words
-    // const Int HEADERSIZE = 0;
-    Bool bInscribed = FALSE;
-    Bool bAbbreviatedHeader = (((pII->cWidth + 15) / 16 > 255 || (pII->cHeight + 15) / 16 > 255) ? FALSE : TRUE);
-
-    if(pCoreParam->bTranscode == FALSE)
-        pCoreParam->cExtraPixelsTop = pCoreParam->cExtraPixelsLeft = pCoreParam->cExtraPixelsRight = pCoreParam->cExtraPixelsBottom = 0;
-
-    // num of extra boundary pixels due to compressed domain processing
-    bInscribed = (pCoreParam->cExtraPixelsTop || pCoreParam->cExtraPixelsLeft || pCoreParam->cExtraPixelsBottom || pCoreParam->cExtraPixelsRight);
-
-// 0
-    /** signature **/
-    for (i = 0; i < 8; PUTBITS(pSC->pIOHeader, gGDISignature[i++], 8));
-
-// 8
-    /** codec version and subversion **/
-    PUTBITS(pIO, CODEC_VERSION, 4);  // this should be changed to "profile" in RTM
-    if (pSC->WMISCP.bUseHardTileBoundaries)
-        PUTBITS(pIO, CODEC_SUBVERSION_NEWSCALING_HARD_TILES, 4);
-    else
-        PUTBITS(pIO, CODEC_SUBVERSION_NEWSCALING_SOFT_TILES, 4);
-
-// 9 primary parameters
-    PUTBITS(pIO, (pSCP->cNumOfSliceMinus1V || pSCP->cNumOfSliceMinus1H) ? 1 : 0, 1); // tiling present
-    PUTBITS(pIO, (Int) pSCP->bfBitstreamFormat, 1); // bitstream layout
-    PUTBITS(pIO, pII->oOrientation, 3);        // m_iRotateFlip
-    PUTBITS(pIO, pSC->m_param.bIndexTable, 1); // index table present
-    PUTBITS(pIO, pSCP->olOverlap, 2); // overlap
-
-// 10
-    PUTBITS(pIO, bAbbreviatedHeader, 1); // short words for size and tiles
-    PUTBITS(pIO, 1, 1); // long word length (use intelligence later)
-    PUTBITS(pIO, bInscribed, 1); // windowing
-    PUTBITS(pIO, pSC->m_param.bTrimFlexbitsFlag, 1); // trim flexbits flag sent
-    PUTBITS(pIO, 0, 1); // tile stretching parameters (not enabled)
-    PUTBITS(pIO, 0, 2); // reserved bits
-    PUTBITS(pIO, (Int) pSC->m_param.bAlphaChannel, 1); // alpha channel present
-
-// 11 - informational
-    PUTBITS(pIO, (Int) pII->cfColorFormat, 4); // source color format
-    if(BD_1 == pII->bdBitDepth && pSCP->bBlackWhite)
-        PUTBITS(pIO, (Int) BD_1alt, 4); // source bit depth
-    else 
-        PUTBITS(pIO, (Int) pII->bdBitDepth, 4); // source bit depth
-
-// 12 - Variable length fields
-// size
-    putBit32(pIO, (U32)(pII->cWidth - 1), bAbbreviatedHeader ? 16 : 32);
-    putBit32(pIO, (U32)(pII->cHeight - 1), bAbbreviatedHeader ? 16 : 32);
-
-// tiling
-    if (pSCP->cNumOfSliceMinus1V || pSCP->cNumOfSliceMinus1H) {
-        PUTBITS(pIO, pSCP->cNumOfSliceMinus1V, LOG_MAX_TILES); // # of vertical slices
-        PUTBITS(pIO, pSCP->cNumOfSliceMinus1H, LOG_MAX_TILES); // # of horizontal slices
-    }
-
-// tile sizes
-    for(i = 0; i < pSCP->cNumOfSliceMinus1V; i ++){ // width in MB of vertical slices, not needed for last slice!
-        PUTBITS(pIO, pSCP->uiTileX[i + 1] - pSCP->uiTileX[i], bAbbreviatedHeader ? 8 : 16);
-    }
-    for(i = 0; i < pSCP->cNumOfSliceMinus1H; i ++){ // width in MB of horizontal slices, not needed for last slice!
-        PUTBITS(pIO, pSCP->uiTileY[i + 1] - pSCP->uiTileY[i], bAbbreviatedHeader ? 8 : 16);
-    }
-
-// window due to compressed domain processing
-    if (bInscribed) {
-        PUTBITS(pIO, (U32)pCoreParam->cExtraPixelsTop, 6);
-        PUTBITS(pIO, (U32)pCoreParam->cExtraPixelsLeft, 6);
-        PUTBITS(pIO, (U32)pCoreParam->cExtraPixelsBottom, 6);
-        PUTBITS(pIO, (U32)pCoreParam->cExtraPixelsRight, 6);
-    }    
-    fillToByte(pIO);  // redundant
-
-    // write image plane headers
-    WriteImagePlaneHeader(pSC);
-
-    return ICERR_OK;
+    return JxrEncoderMainHeaderWriterWrite(pSC);
 }
 
-// streaming codec init/term
 Int StrEncInit(CWMImageStrCodec* pSC)
 {
     COLORFORMAT cf = pSC->m_param.cfColorFormat;

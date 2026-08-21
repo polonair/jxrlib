@@ -23,6 +23,7 @@
 #include "../image/encode/JxrEncoderSliceFinalizer.h"
 #include "../image/encode/JxrEncoderTileHeaderWriter.h"
 #include "../image/encode/JxrEncoderImagePlaneHeaderWriter.h"
+#include "../image/encode/JxrEncoderMainHeaderWriter.h"
 #include "encode.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
@@ -3660,6 +3661,23 @@ static int test_encoder_image_plane_header_quantizer_plan_vectors(void)
     return !plan.writesLowpassSyntax && !plan.writesHighpassSyntax;
 }
 
+static int test_encoder_main_header_plan_vectors(void)
+{
+    JxrEncoderMainHeaderPlan plan;
+
+    JxrEncoderMainHeaderPlanInitialize(&plan, 16, 32, 0, 0,
+        0, 0, 0, 0, BD_1, TRUE, TRUE);
+    if (!plan.usesAbbreviatedFields || plan.writesTiling ||
+        plan.writesWindowing || !plan.usesAlternateOneBitDepth ||
+        !plan.usesHardTileSubversion || plan.tileSizeBitCount != 8) return 0;
+
+    JxrEncoderMainHeaderPlanInitialize(&plan, 4096, 16, 2, 1,
+        1, 0, 0, 2, BD_8, FALSE, FALSE);
+    return !plan.usesAbbreviatedFields && plan.writesTiling &&
+        plan.writesWindowing && !plan.usesAlternateOneBitDepth &&
+        !plan.usesHardTileSubversion && plan.tileSizeBitCount == 16;
+}
+
 static int test_forward_full_resolution_plane_vectors(void)
 {
     PixelI samples[1408];
@@ -4315,6 +4333,7 @@ int main(int argc, char** argv)
         { "encoder_slice_finalization_plan_vectors", test_encoder_slice_finalization_plan_vectors },
         { "encoder_tile_header_plan_vectors", test_encoder_tile_header_plan_vectors },
         { "encoder_image_plane_header_quantizer_plan_vectors", test_encoder_image_plane_header_quantizer_plan_vectors },
+        { "encoder_main_header_plan_vectors", test_encoder_main_header_plan_vectors },
         { "forward_full_resolution_plane_vectors", test_forward_full_resolution_plane_vectors },
         { "forward_chroma_420_plane_vectors", test_forward_chroma_420_plane_vectors },
         { "forward_chroma_422_plane_vectors", test_forward_chroma_422_plane_vectors },
