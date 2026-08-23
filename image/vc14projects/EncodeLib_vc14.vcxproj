@@ -201,6 +201,7 @@
     <ClCompile Include="..\encode\JxrEncoderSampleConversion.c" />
     <ClCompile Include="..\encode\JxrEncoderColorTransform.c" />
     <ClCompile Include="..\encode\JxrEncoderAlphaPlaneInput.c" />
+    <ClCompile Include="..\encode\JxrEncoderInputPadding.c" />
     <ClCompile Include="..\encode\strPredQuantEnc.c" />
   </ItemGroup>
   <ItemGroup>

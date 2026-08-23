@@ -47,6 +47,7 @@
 #include "JxrEncoderSampleConversion.h"
 #include "JxrEncoderColorTransform.h"
 #include "JxrEncoderAlphaPlaneInput.h"
+#include "JxrEncoderInputPadding.h"
 #include <math.h>
 #include "perfTimer.h"
 
@@ -836,59 +837,6 @@ Void downsampleUV(CWMImageStrCodec * pSC)
 }
 
 // centralized horizontal padding
-Void padHorizontally(CWMImageStrCodec * pSC)
-{
-    if(pSC->WMII.cWidth != pSC->cmbWidth * 16){ // horizontal padding is necessary!
-        const COLORFORMAT cfExt = pSC->WMISCP.bYUVData ?
-            pSC->m_param.cfColorFormat : pSC->WMII.cfColorFormat;
-        size_t cFullChannel = pSC->WMISCP.cChannel;
-        size_t iLast = pSC->WMII.cWidth - 1;
-        PixelI * pCh[16];
-        size_t iChannel, iColumn, iRow;
-
-        if(cfExt == YUV_420 || cfExt == YUV_422 || cfExt == Y_ONLY)
-            cFullChannel = 1;
-
-        assert(cFullChannel <= 16);
-
-        assert(pSC->WMISCP.cChannel <= 16);
-        for(iChannel = 0; iChannel < pSC->WMISCP.cChannel; iChannel ++)
-            pCh[iChannel & 15] = pSC->p1MBbuffer[iChannel & 15];
-
-        if(pSC->m_bUVResolutionChange)
-            pCh[1] = pSC->pResU, pCh[2] = pSC->pResV;
-
-        // pad full resoluton channels
-        for(iRow = 0; iRow < 16; iRow ++){
-            const size_t iPosLast = ((iLast >> 4) << 8) + idxCC[iRow][iLast & 0xf];
-            for(iColumn = iLast + 1; iColumn < pSC->cmbWidth * 16; iColumn ++){
-                const size_t iPos = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf];
-                for(iChannel = 0; iChannel < cFullChannel; iChannel ++)
-                    pCh[iChannel & 15][iPos] = pCh[iChannel & 15][iPosLast];
-            }
-        }
-
-        if(cfExt == YUV_422) // pad YUV_422 UV
-            for(iLast >>= 1, iRow = 0; iRow < 16; iRow ++){
-                const size_t iPosLast = ((iLast >> 3) << 7) + idxCC[iRow][iLast & 7];
-                for(iColumn = iLast + 1; iColumn < pSC->cmbWidth * 8; iColumn ++){
-                    const size_t iPos = ((iColumn >> 3) << 7) + idxCC[iRow][iColumn & 7];
-                    for(iChannel = 1; iChannel < 3; iChannel ++)
-                        pCh[iChannel][iPos] = pCh[iChannel][iPosLast];
-                }
-            }
-        else if(cfExt == YUV_420) // pad YUV_420 UV
-            for(iLast >>= 1, iRow = 0; iRow < 8; iRow ++){
-                const size_t iPosLast = ((iLast >> 3) << 6) + idxCC_420[iRow][iLast & 7];
-                for(iColumn = iLast + 1; iColumn < pSC->cmbWidth * 8; iColumn ++){
-                    const size_t iPos = ((iColumn >> 3) << 6) + idxCC_420[iRow][iColumn & 7];
-                    for(iChannel = 1; iChannel < 3; iChannel ++)
-                        pCh[iChannel][iPos] = pCh[iChannel][iPosLast];
-                }
-            }
-    }
-}
-
 // centralized alpha channel color conversion, small perf penalty
 // input one MB row of image data from input buffer
 Int inputMBRow(CWMImageStrCodec* pSC)
@@ -1432,7 +1380,7 @@ Int inputMBRow(CWMImageStrCodec* pSC)
             pSrc0 += pSC->WMIBI.cbStride;
     }
 
-    padHorizontally(pSC); // centralized horizontal padding
+    JxrEncoderInputPaddingApply(pSC); // centralized horizontal padding
 
     // centralized down-sampling
     if(pSC->m_bUVResolutionChange)

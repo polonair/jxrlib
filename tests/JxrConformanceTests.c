@@ -35,6 +35,7 @@
 #include "../image/encode/JxrEncoderSampleConversion.h"
 #include "../image/encode/JxrEncoderColorTransform.h"
 #include "../image/encode/JxrEncoderAlphaPlaneInput.h"
+#include "../image/encode/JxrEncoderInputPadding.h"
 #include "encode.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
@@ -3873,6 +3874,24 @@ static int test_encoder_alpha_plane_input_plan_vectors(void)
     return plan.readsAlphaPlane && !plan.supportsSourceBitDepth;
 }
 
+static int test_encoder_input_padding_plan_vectors(void)
+{
+    JxrEncoderInputPaddingPlan plan;
+
+    JxrEncoderInputPaddingPlanInitialize(&plan, 16, 1, FALSE, CF_RGB, YUV_444, 3);
+    if (plan.requiresPadding || plan.fullResolutionChannelCount != 3 ||
+        plan.padsYuv422Chroma || plan.padsYuv420Chroma) return 0;
+
+    JxrEncoderInputPaddingPlanInitialize(&plan, 15, 1, FALSE, YUV_422, YUV_422, 3);
+    if (!plan.requiresPadding || plan.fullResolutionChannelCount != 1 ||
+        !plan.padsYuv422Chroma || plan.padsYuv420Chroma) return 0;
+
+    JxrEncoderInputPaddingPlanInitialize(&plan, 15, 1, TRUE, CF_RGB, YUV_420, 3);
+    return plan.requiresPadding && plan.sourceFormat == YUV_420 &&
+        plan.fullResolutionChannelCount == 1 && !plan.padsYuv422Chroma &&
+        plan.padsYuv420Chroma;
+}
+
 static int test_forward_full_resolution_plane_vectors(void)
 {
     PixelI samples[1408];
@@ -4540,6 +4559,7 @@ int main(int argc, char** argv)
         { "encoder_sample_conversion_vectors", test_encoder_sample_conversion_vectors },
         { "encoder_color_transform_vectors", test_encoder_color_transform_vectors },
         { "encoder_alpha_plane_input_plan_vectors", test_encoder_alpha_plane_input_plan_vectors },
+        { "encoder_input_padding_plan_vectors", test_encoder_input_padding_plan_vectors },
         { "forward_full_resolution_plane_vectors", test_forward_full_resolution_plane_vectors },
         { "forward_chroma_420_plane_vectors", test_forward_chroma_420_plane_vectors },
         { "forward_chroma_422_plane_vectors", test_forward_chroma_422_plane_vectors },
