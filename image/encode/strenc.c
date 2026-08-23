@@ -46,6 +46,7 @@
 #include "JxrEncoderOutputInitializer.h"
 #include "JxrEncoderSampleConversion.h"
 #include "JxrEncoderColorTransform.h"
+#include "JxrEncoderAlphaPlaneInput.h"
 #include <math.h>
 #include "perfTimer.h"
 
@@ -889,80 +890,6 @@ Void padHorizontally(CWMImageStrCodec * pSC)
 }
 
 // centralized alpha channel color conversion, small perf penalty
-Int inputMBRowAlpha(CWMImageStrCodec* pSC)
-{
-    if(pSC->m_bSecondary == FALSE && pSC->m_pNextSC != NULL){ // alpha channel is present
-        const size_t cShift = (pSC->m_pNextSC->m_param.bScaledArith ? (SHIFTZERO + QPFRACBITS) : 0);
-        const BITDEPTH_BITS bdExt = pSC->WMII.bdBitDepth;
-        const size_t iAlphaPos = pSC->WMII.cLeadingPadding + (pSC->WMII.cfColorFormat == CMYK ? 4 : 3);//only RGB and CMYK may have interleaved alpha
-        const size_t cRow = pSC->WMIBI.cLine;
-        const size_t cColumn = pSC->WMII.cWidth;
-        const U8 * pSrc0 = (U8 *)pSC->WMIBI.pv;
-        PixelI * pA = pSC->m_pNextSC->p1MBbuffer[0];
-        size_t iRow, iColumn;
-
-        for(iRow = 0; iRow < 16; iRow ++){
-            if(bdExt == BD_8){
-                const size_t cStride = (pSC->WMII.cBitsPerUnit >> 3);
-                const U8 * pSrc = pSrc0;
-                
-                for(iColumn = 0; iColumn < cColumn; iColumn ++, pSrc += cStride)
-                    pA[((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf]] = ((PixelI)pSrc[iAlphaPos] - (1 << 7)) << cShift;
-            }
-            else if(bdExt == BD_16){
-                const size_t cStride = (pSC->WMII.cBitsPerUnit >> 3) / sizeof(U16);
-                const U8 nLenMantissaOrShift = pSC->m_pNextSC->WMISCP.nLenMantissaOrShift;
-                const U16 * pSrc = (U16 *)pSrc0;
-
-                for(iColumn = 0; iColumn < cColumn; iColumn ++, pSrc += cStride)
-                    pA[((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf]] = ((((PixelI)pSrc[iAlphaPos] - (1 << 15)) >> nLenMantissaOrShift) << cShift);
-            }
-            else if(bdExt == BD_16S){
-                const size_t cStride = (pSC->WMII.cBitsPerUnit >> 3) / sizeof(I16);
-                const U8 nLenMantissaOrShift = pSC->m_pNextSC->WMISCP.nLenMantissaOrShift;
-                const I16 * pSrc = (I16 *)pSrc0;
-            
-                for(iColumn = 0; iColumn < cColumn; iColumn ++, pSrc += cStride)
-                    pA[((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf]] = (((PixelI)pSrc[iAlphaPos] >> nLenMantissaOrShift) << cShift);
-            }
-            else if(bdExt == BD_16F){
-                const size_t cStride = (pSC->WMII.cBitsPerUnit >> 3) / sizeof(U16);
-                const I16 * pSrc = (I16 *)pSrc0;
-
-                for(iColumn = 0; iColumn < cColumn; iColumn ++, pSrc += cStride)
-                    pA[((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf]] = JxrEncoderSampleConversionFromHalf(pSrc[iAlphaPos]) << cShift;
-            }
-            else if(bdExt == BD_32S){
-                const size_t cStride = (pSC->WMII.cBitsPerUnit >> 3) / sizeof(I32);
-                const U8 nLenMantissaOrShift = pSC->m_pNextSC->WMISCP.nLenMantissaOrShift;
-                const I32 * pSrc = (I32 *)pSrc0;
-            
-                for(iColumn = 0; iColumn < cColumn; iColumn ++, pSrc += cStride)
-                    pA[((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf]] = (((PixelI)pSrc[iAlphaPos] >> nLenMantissaOrShift) << cShift);
-            }
-            else if(bdExt == BD_32F){
-                const size_t cStride = (pSC->WMII.cBitsPerUnit >> 3) / sizeof(float);
-                const U8 nLen = pSC->m_pNextSC->WMISCP.nLenMantissaOrShift;
-                const I8 nExpBias = pSC->m_pNextSC->WMISCP.nExpBias;
-                const float * pSrc = (float *)pSrc0;
-            
-                for(iColumn = 0; iColumn < cColumn; iColumn ++, pSrc += cStride)
-                    pA[((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf]] = JxrEncoderSampleConversionFromSingle(pSrc[iAlphaPos], nExpBias, nLen) << cShift;
-            }
-            else // not supported
-                return ICERR_ERROR;
-
-            if(iRow + 1 < cRow) // vertical padding!
-                pSrc0 += pSC->WMIBI.cbStride;
-
-            for(iColumn = cColumn; iColumn < pSC->cmbWidth * 16; iColumn ++) // horizontal padding
-                pA[((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 0xf]] =  pA[(((cColumn - 1) >> 4) << 8) + idxCC[iRow][(cColumn - 1) & 0xf]];
-        }
-    }
-    
-    return ICERR_OK;
-}
-
 // input one MB row of image data from input buffer
 Int inputMBRow(CWMImageStrCodec* pSC)
 {
@@ -1513,7 +1440,7 @@ Int inputMBRow(CWMImageStrCodec* pSC)
 
     // centralized alpha channel handdling
     if (pSC->WMISCP.uAlphaMode == 3)
-        if(inputMBRowAlpha(pSC) != ICERR_OK)
+        if(JxrEncoderAlphaPlaneInputRead(pSC) != ICERR_OK)
             return ICERR_ERROR;
 
     return ICERR_OK;
