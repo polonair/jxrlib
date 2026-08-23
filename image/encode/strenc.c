@@ -50,6 +50,7 @@
 #include "JxrEncoderInputPadding.h"
 #include "JxrEncoderChromaDownsampler.h"
 #include "JxrEncoderInputRowProcessor.h"
+#include "JxrEncoderResourceRelease.h"
 #include <math.h>
 #include "perfTimer.h"
 
@@ -240,39 +241,10 @@ Int StrEncInit(CWMImageStrCodec* pSC)
 
 static Int StrEncTerm(CTXSTRCODEC ctxSC)
 {
-    CWMImageStrCodec* pSC = (CWMImageStrCodec*)ctxSC;
-    JXRTraceDumpCodecState("encoder", pSC);
-    size_t j, jend = (pSC->m_pNextSC != NULL);
-
-    for (j = 0; j <= jend; j++) {
-        if (sizeof(*pSC) != pSC->cbStruct) {
-            return ICERR_ERROR;
-        }
-
-        if(pSC->m_bUVResolutionChange){
-            if(pSC->pResU != NULL)
-                free(pSC->pResU);
-            if(pSC->pResV != NULL)
-                free(pSC->pResV);
-        }
-
-        freePredInfo(pSC);
-
-        if (j == 0)
-            StrIOEncTerm(pSC);
-
-        FreeCodingContextEnc(pSC);
-        
-        freeTileInfo(pSC);
-
-        pSC->WMISCP.nExpBias -= 128; // reset
-
-        pSC = pSC->m_pNextSC;
-    }
-
-    return 0;
+    CWMImageStrCodec* codec = (CWMImageStrCodec*)ctxSC;
+    JXRTraceDumpCodecState("encoder", codec);
+    return JxrEncoderResourceReleaseRelease(codec);
 }
-
 U32 setUniformTiling(U32 * pTile, U32 cNumTile, U32 cNumMB)
 {
     U32 i, j;

@@ -38,6 +38,7 @@
 #include "../image/encode/JxrEncoderInputPadding.h"
 #include "../image/encode/JxrEncoderChromaDownsampler.h"
 #include "../image/encode/JxrEncoderInputRowProcessor.h"
+#include "../image/encode/JxrEncoderResourceRelease.h"
 #include "encode.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
@@ -3928,6 +3929,21 @@ static int test_encoder_input_row_plan_vectors(void)
     return plan.performsChromaDownsampling && plan.readsAlphaPlane;
 }
 
+static int test_encoder_resource_release_plan_vectors(void)
+{
+    JxrEncoderResourceReleasePlan plan;
+
+    JxrEncoderResourceReleasePlanInitialize(&plan, 0, TRUE);
+    if (!plan.releasesChromaResiduals || !plan.finalizesPrimaryOutput ||
+        !plan.releasesPredictionState || !plan.releasesCodingContexts ||
+        !plan.releasesTileState) return 0;
+
+    JxrEncoderResourceReleasePlanInitialize(&plan, 1, FALSE);
+    return !plan.releasesChromaResiduals && !plan.finalizesPrimaryOutput &&
+        plan.releasesPredictionState && plan.releasesCodingContexts &&
+        plan.releasesTileState;
+}
+
 static int test_forward_full_resolution_plane_vectors(void)
 {
     PixelI samples[1408];
@@ -4598,6 +4614,7 @@ int main(int argc, char** argv)
         { "encoder_input_padding_plan_vectors", test_encoder_input_padding_plan_vectors },
         { "encoder_chroma_downsampling_vectors", test_encoder_chroma_downsampling_vectors },
         { "encoder_input_row_plan_vectors", test_encoder_input_row_plan_vectors },
+        { "encoder_resource_release_plan_vectors", test_encoder_resource_release_plan_vectors },
         { "forward_full_resolution_plane_vectors", test_forward_full_resolution_plane_vectors },
         { "forward_chroma_420_plane_vectors", test_forward_chroma_420_plane_vectors },
         { "forward_chroma_422_plane_vectors", test_forward_chroma_422_plane_vectors },
