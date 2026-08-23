@@ -48,6 +48,7 @@
 #include "JxrEncoderColorTransform.h"
 #include "JxrEncoderAlphaPlaneInput.h"
 #include "JxrEncoderInputPadding.h"
+#include "JxrEncoderChromaDownsampler.h"
 #include <math.h>
 #include "perfTimer.h"
 
@@ -754,88 +755,6 @@ Int ImageStrEncTerm(
 }
 
 // centralized UV downsampling
-#define DF_ODD ((((d1 + d2 + d3) << 2) + (d2 << 1) + d0 + d4 + 8) >> 4)
-Void downsampleUV(CWMImageStrCodec * pSC)
-{
-    const COLORFORMAT cfInt = pSC->m_param.cfColorFormat;
-    const COLORFORMAT cfExt = pSC->WMII.cfColorFormat;
-    PixelI * pSrc, * pDst;
-    PixelI d0, d1, d2, d3, d4;
-    size_t iChannel, iRow, iColumn;
-
-    for(iChannel = 1; iChannel < 3; iChannel ++){
-        if(cfExt != YUV_422){ // need to do horizontal downsampling, 444 => 422
-            const size_t cShift = (cfInt == YUV_422 ? 1 : 0);
-
-            pSrc = (iChannel == 1 ? pSC->pResU : pSC->pResV);
-            pDst = (cfInt == YUV_422 ? pSC->p1MBbuffer[iChannel] : pSrc);
-            
-            for(iRow = 0; iRow < 16; iRow ++){
-                d0 = d4 = pSrc[idxCC[iRow][2]], d1 = d3 = pSrc[idxCC[iRow][1]], d2 = pSrc[idxCC[iRow][0]]; // left boundary
-                
-                for(iColumn = 0; iColumn + 2 < pSC->cmbWidth * 16; iColumn += 2){
-                    pDst[((iColumn >> 4) << (8 - cShift)) + idxCC[iRow][(iColumn & 15) >> cShift]] = DF_ODD;
-                    d0 = d2, d1 = d3, d2 = d4;
-                    d3 = pSrc[(((iColumn + 3) >> 4) << 8) + idxCC[iRow][(iColumn + 3) & 0xf]];
-                    d4 = pSrc[(((iColumn + 4) >> 4) << 8) + idxCC[iRow][(iColumn + 4) & 0xf]];
-                }
-
-                d4 = d2; // right boundary
-                pDst[((iColumn >> 4) << (8 - cShift)) + idxCC[iRow][(iColumn & 15) >> cShift]] = DF_ODD;
-            }
-        }
-
-        if(cfInt == YUV_420){ // need to do vertical downsampling
-            const size_t cShift = (cfExt == YUV_422 ? 0 : 1);
-            PixelI * pBuf[4];
-            size_t mbOff, pxOff;
-            
-            pDst = pSC->p1MBbuffer[iChannel];
-            pSrc = (iChannel == 1 ? pSC->pResU : pSC->pResV);
-            pBuf[0] = pSrc + (pSC->cmbWidth << (cfExt == YUV_422 ? 7 : 8));
-            pBuf[1] = pBuf[0] + pSC->cmbWidth * 8, pBuf[2] = pBuf[1] + pSC->cmbWidth * 8, pBuf[3] = pBuf[2] + pSC->cmbWidth * 8;
-
-            for(iColumn = 0; iColumn < pSC->cmbWidth * 8; iColumn ++){
-                mbOff = (iColumn >> 3) << (7 + cShift);
-                pxOff = (iColumn & 7) << cShift;
-
-                if(pSC->cRow == 0) // top image boundary
-                    d0 = d4 = pSrc[mbOff + idxCC[2][pxOff]], d1 = d3 = pSrc[mbOff + idxCC[1][pxOff]], d2 = pSrc[mbOff + idxCC[0][pxOff]]; // top MB boundary
-                else{
-                    // last row of previous MB row
-                    d0 = pBuf[0][iColumn], d1 = pBuf[1][iColumn], d2 = pBuf[2][iColumn], d3 = pBuf[3][iColumn], d4 = pSrc[mbOff + idxCC[0][pxOff]];
-                    pSC->p0MBbuffer[iChannel][((iColumn >> 3) << 6) + idxCC_420[7][iColumn & 7]] = DF_ODD;
-
-                    // for first row of current MB
-                    d0 = pBuf[2][iColumn], d1 = pBuf[3][iColumn];
-                    d2 = pSrc[mbOff + idxCC[0][pxOff]], d3 = pSrc[mbOff + idxCC[1][pxOff]], d4 = pSrc[mbOff + idxCC[2][pxOff]];
-                }
-
-                for(iRow = 0; iRow < 12; iRow += 2){
-                    pDst[((iColumn >> 3) << 6) + idxCC_420[iRow >> 1][iColumn & 7]] = DF_ODD;
-                    d0 = d2, d1 = d3, d2 = d4;
-                    d3 = pSrc[mbOff + idxCC[iRow + 3][pxOff]];
-                    d4 = pSrc[mbOff + idxCC[iRow + 4][pxOff]];
-                }
-                
-                //last row of current MB
-                pDst[((iColumn >> 3) << 6) + idxCC_420[6][iColumn & 7]] = DF_ODD;
-                d0 = d2, d1 = d3, d2 = d4;
-                d3 = pSrc[mbOff + idxCC[iRow + 3][pxOff]];
-
-                if(pSC->cRow + 1 == pSC->cmbHeight){ // bottom image boundary
-                    d4 = d2;
-                    pDst[((iColumn >> 3) << 6) + idxCC_420[7][iColumn & 7]] = DF_ODD;
-                }
-                else{
-                    for(iRow = 0; iRow < 4; iRow ++)
-                        pBuf[iRow][iColumn] = pSrc[mbOff + idxCC[iRow + 12][pxOff]];
-                }
-            }
-        }
-    }
-}
-
 // centralized horizontal padding
 // centralized alpha channel color conversion, small perf penalty
 // input one MB row of image data from input buffer
@@ -1384,7 +1303,7 @@ Int inputMBRow(CWMImageStrCodec* pSC)
 
     // centralized down-sampling
     if(pSC->m_bUVResolutionChange)
-        downsampleUV(pSC);
+        JxrEncoderChromaDownsamplerApply(pSC);
 
     // centralized alpha channel handdling
     if (pSC->WMISCP.uAlphaMode == 3)

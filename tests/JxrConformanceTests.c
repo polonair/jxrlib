@@ -36,6 +36,7 @@
 #include "../image/encode/JxrEncoderColorTransform.h"
 #include "../image/encode/JxrEncoderAlphaPlaneInput.h"
 #include "../image/encode/JxrEncoderInputPadding.h"
+#include "../image/encode/JxrEncoderChromaDownsampler.h"
 #include "encode.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
@@ -3892,6 +3893,26 @@ static int test_encoder_input_padding_plan_vectors(void)
         plan.padsYuv420Chroma;
 }
 
+static int test_encoder_chroma_downsampling_vectors(void)
+{
+    JxrEncoderChromaDownsamplingPlan plan;
+
+    JxrEncoderChromaDownsamplingPlanInitialize(&plan, YUV_422, YUV_420);
+    if (plan.performsHorizontalDownsampling || plan.writesHorizontalResultToMacroblockBuffer ||
+        !plan.performsVerticalDownsampling) return 0;
+
+    JxrEncoderChromaDownsamplingPlanInitialize(&plan, YUV_444, YUV_422);
+    if (!plan.performsHorizontalDownsampling || !plan.writesHorizontalResultToMacroblockBuffer ||
+        plan.performsVerticalDownsampling) return 0;
+
+    JxrEncoderChromaDownsamplingPlanInitialize(&plan, YUV_444, YUV_420);
+    if (!plan.performsHorizontalDownsampling || plan.writesHorizontalResultToMacroblockBuffer ||
+        !plan.performsVerticalDownsampling) return 0;
+
+    return JxrEncoderChromaDownsamplerFilterOdd(0, 4, 8, 12, 16) == 8 &&
+        JxrEncoderChromaDownsamplerFilterOdd(1, 1, 1, 1, 1) == 1;
+}
+
 static int test_forward_full_resolution_plane_vectors(void)
 {
     PixelI samples[1408];
@@ -4560,6 +4581,7 @@ int main(int argc, char** argv)
         { "encoder_color_transform_vectors", test_encoder_color_transform_vectors },
         { "encoder_alpha_plane_input_plan_vectors", test_encoder_alpha_plane_input_plan_vectors },
         { "encoder_input_padding_plan_vectors", test_encoder_input_padding_plan_vectors },
+        { "encoder_chroma_downsampling_vectors", test_encoder_chroma_downsampling_vectors },
         { "forward_full_resolution_plane_vectors", test_forward_full_resolution_plane_vectors },
         { "forward_chroma_420_plane_vectors", test_forward_chroma_420_plane_vectors },
         { "forward_chroma_422_plane_vectors", test_forward_chroma_422_plane_vectors },
