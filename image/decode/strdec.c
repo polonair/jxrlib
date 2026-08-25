@@ -43,6 +43,7 @@
 #include "JxrDecoderOutputPipeline.h"
 #include "JxrDecoderTransformPipeline.h"
 #include "JxrDecoderMacroblockProcessingPipeline.h"
+#include "JxrDecoderExecutionPipeline.h"
 #include "JxrSecondaryPlaneInitializer.h"
 #include "JxrDecoderDcQuantizerHeaderApplier.h"
 #include "JxrDecoderLpQuantizerHeaderApplier.h"
@@ -822,14 +823,8 @@ Int ImageStrDecDecode(
     CWMImageStrCodec* pSC = (CWMImageStrCodec*)ctxSC;
     JXRTraceDumpCodecState("decoder", pSC);
     CWMImageStrCodec* pNextSC = pSC->m_pNextSC;
-    size_t cMBRow, k;
-
-
-    Bool useCenterTransform = FALSE;
+    size_t cMBRow;
     JxrDecoderOutputPipelinePlan outputPipeline;
-    const size_t iChromaElements = (pSC->m_param.cfColorFormat == YUV_420) ? 8 * 8 
-        : ((pSC->m_param.cfColorFormat == YUV_422) ? 8 * 16 : 16 * 16);
-
     if (sizeof(*pSC) != pSC->cbStruct)
     {
         return ICERR_ERROR;
@@ -894,100 +889,13 @@ Int ImageStrDecDecode(
     }
 #endif
 
-    //================================
-    // top row
+    if (JxrDecoderExecutionPipelineRun(pSC, cMBRow,
+        outputPipeline.usesLegacyLoadCallback
 #ifdef REENTRANT_MODE
-#else
-    pSC->cRow = 0;
-
-    useCenterTransform = FALSE;
-
-#endif // REENTRANT_MODE
-
-#ifdef REENTRANT_MODE
-    for (pSC->cRow = pSC->WMIBI.uiFirstMBRow; pSC->cRow <= pSC->WMIBI.uiLastMBRow; pSC->cRow++)
-    {
-        // const COLORFORMAT cfExt = (pSC->m_param.cfColorFormat == Y_ONLY ? Y_ONLY : pSC->WMII.cfColorFormat);
-
-        if (0 == pSC->cRow)
-        {
-            useCenterTransform = FALSE;
-        }
-        else if (cMBRow == pSC->cRow)
-        {
-            //================================
-            // bottom row
-            useCenterTransform = FALSE;
-        }
-        else { // middle rows
-            useCenterTransform = TRUE;
-        }
-#else
-    //================================
-    // central rows
-    for(pSC->cRow = 0; pSC->cRow <= cMBRow; pSC->cRow++)
-    {
-#endif // REENTRANT_MODE
-        pSC->cColumn = 0;
-        initMRPtr(pSC);
-        /** zero out the transform coefficients (pull this out to once per MB row) **/
-        memset(pSC->p1MBbuffer[0], 0, sizeof(PixelI) * 16 * 16 * pSC->cmbWidth);
-        for (k = 1; k < pSC->m_param.cNumChannels; k++) {
-            memset(pSC->p1MBbuffer[k], 0, sizeof(PixelI) * iChromaElements * pSC->cmbWidth);
-        }
-        if (pSC->m_pNextSC != NULL) {  // alpha channel
-            memset(pSC->m_pNextSC->p1MBbuffer[0], 0, sizeof(PixelI) * 16 * 16 * pSC->m_pNextSC->cmbWidth);
-        }
-
-        if (JxrDecoderMacroblockProcessingPipelineProcess(pSC) != ICERR_OK)
-            return ICERR_ERROR;
-        advanceMRPtr(pSC);
-
-        JxrDecoderTransformPipelineSetCenterMacroblock(pSC, useCenterTransform);
-        for (pSC->cColumn = 1; pSC->cColumn < pSC->cmbWidth; ++pSC->cColumn)
-        {
-            if (JxrDecoderMacroblockProcessingPipelineProcess(pSC) != ICERR_OK)
-                return ICERR_ERROR;
-            advanceMRPtr(pSC);
-        }
-
-        JxrDecoderTransformPipelineSetCenterMacroblock(pSC, FALSE);
-
-
-        if (JxrDecoderMacroblockProcessingPipelineProcess(pSC) != ICERR_OK)
-            return ICERR_ERROR;
-
-        if (pSC->cRow) {
-            if(pSC->m_Dparam->cThumbnailScale < 2 && (pSC->m_Dparam->bDecodeFullFrame || 
-                ((pSC->cRow * 16 > pSC->m_Dparam->cROITopY) && (pSC->cRow * 16 <= pSC->m_Dparam->cROIBottomY + 16)))) {
-                if (outputPipeline.usesLegacyLoadCallback) {
-                    if (pSC->Load(pSC) != ICERR_OK)
-                        return ICERR_ERROR;
-                }
-                else if (JxrDecoderOutputPipelineWriteStandardRow(pSC) != ICERR_OK)
-                    return ICERR_ERROR;
-            }
-
-            if(pSC->m_Dparam->cThumbnailScale >= 2) // decode thumbnail
-                JxrDecoderOutputPipelineWriteThumbnailRow(pSC);
-        }
-
-        advanceOneMBRow(pSC);
-        swapMRPtr(pSC);
-#ifdef REENTRANT_MODE
-        *pcDecodedLines = pSC->WMIBI.cLinesDecoded;
-#else
-        if (pSC->cRow == cMBRow - 1) {
-        //================================
-        // bottom row
-            useCenterTransform = FALSE;
-        }
-        else {
-            useCenterTransform = TRUE;
-        }
-#endif // REENTRANT_MODE
-    }
-
+        , pcDecodedLines
+#endif
+        ) != ICERR_OK)
+        return ICERR_ERROR;
 #ifndef REENTRANT_MODE
     fixup_Y_ONLY_to_Others(pSC, pBI);
 #endif // REENTRANT_MODE
