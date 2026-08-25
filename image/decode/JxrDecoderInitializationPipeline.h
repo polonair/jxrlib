@@ -3,17 +3,13 @@
 
 #include "JxrHeaderDecodePipeline.h"
 
-typedef Int (*JxrDecoderInitializeStage)(CWMImageStrCodec* codec);
-
 typedef struct JxrDecoderInitializationPipeline {
     CWMImageStrCodec* primaryCodec;
     CWMImageStrCodec* secondaryCodec;
-    JxrDecoderInitializeStage initializeIo;
 } JxrDecoderInitializationPipeline;
 
 Void JxrDecoderInitializationPipelineInit(JxrDecoderInitializationPipeline* pipeline,
-    CWMImageStrCodec* primaryCodec, CWMImageStrCodec* secondaryCodec,
-    JxrDecoderInitializeStage initializeIo);
+    CWMImageStrCodec* primaryCodec, CWMImageStrCodec* secondaryCodec);
 Int JxrDecoderInitializationPipelineRun(JxrDecoderInitializationPipeline* pipeline);
 
 #endif

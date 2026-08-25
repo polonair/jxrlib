@@ -41,8 +41,8 @@
 EXTERN_C Void freePredInfo(CWMImageStrCodec *);
 
 EXTERN_C Int ReadWMIHeader(CWMImageInfo *, CWMIStrCodecParam *, CCoreParameters *);
-EXTERN_C Int StrIODecInit(CWMImageStrCodec *);
 #include "JxrDecoderResourceInitializer.h"
+#include "JxrDecoderInputInitializer.h"
 
 EXTERN_C Int DecodeMacroblockDC(CWMImageStrCodec *, CCodingContext *, Int, Int);
 EXTERN_C Int DecodeMacroblockLowpass(CWMImageStrCodec *, CCodingContext *, Int, Int);
@@ -327,7 +327,7 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
     memset(pIOHeaderDec, 0, (PACKETLENGTH * 4 - 1) + PACKETLENGTH * 4 + sizeof(BitIOInfo));
     pSCDec->pIOHeader = (BitIOInfo *)((U8 *)ALIGNUP(pIOHeaderDec, PACKETLENGTH * 4) + PACKETLENGTH * 2);
     
-    if(StrIODecInit(pSCDec) != ICERR_OK)
+    if(JxrDecoderInputInitializerInitialize(pSCDec) != ICERR_OK)
         return ICERR_ERROR;
 
     if(JxrDecoderResourceInitializerInitialize(pSCDec) != ICERR_OK)

@@ -990,37 +990,15 @@ static int test_header_decode_pipeline_vectors(void)
         !JxrHeaderDecodePipelineReadImagePlane(NULL, NULL, NULL, NULL);
 }
 
-typedef struct JxrDecoderInitializationPipelineTestContext {
-    Int ioResult;
-    U8 callCount;
-} JxrDecoderInitializationPipelineTestContext;
-
-static JxrDecoderInitializationPipelineTestContext* g_decoder_initialization_test;
-
-static Int initialize_pipeline_test_io(CWMImageStrCodec* codec)
-{
-    UNREFERENCED_PARAMETER(codec);
-    g_decoder_initialization_test->callCount++;
-    return g_decoder_initialization_test->ioResult;
-}
-
 static int test_decoder_initialization_pipeline_vectors(void)
 {
-    CWMImageStrCodec primaryCodec;
+    CWMImageStrCodec primaryCodec, secondaryCodec;
     JxrDecoderInitializationPipeline pipeline;
-    JxrDecoderInitializationPipelineTestContext context;
     memset(&primaryCodec, 0, sizeof(primaryCodec));
-    memset(&context, 0, sizeof(context));
-    g_decoder_initialization_test = &context;
-    context.ioResult = ICERR_ERROR;
-    JxrDecoderInitializationPipelineInit(&pipeline, &primaryCodec, NULL,
-        initialize_pipeline_test_io);
-    if (JxrDecoderInitializationPipelineRun(&pipeline) != ICERR_ERROR || context.callCount != 1 ||
-        primaryCodec.m_pNextSC != NULL) return 0;
-    JxrDecoderInitializationPipelineInit(&pipeline, &primaryCodec, NULL, NULL);
-    if (JxrDecoderInitializationPipelineRun(&pipeline) != ICERR_ERROR) return 0;
-    JxrDecoderInitializationPipelineInit(&pipeline, NULL, NULL,
-        initialize_pipeline_test_io);
+    memset(&secondaryCodec, 0, sizeof(secondaryCodec));
+    JxrDecoderInitializationPipelineInit(&pipeline, &primaryCodec, &secondaryCodec);
+    if (pipeline.primaryCodec != &primaryCodec || pipeline.secondaryCodec != &secondaryCodec) return 0;
+    JxrDecoderInitializationPipelineInit(&pipeline, NULL, NULL);
     return JxrDecoderInitializationPipelineRun(&pipeline) == ICERR_ERROR;
 }
 
