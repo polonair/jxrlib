@@ -200,50 +200,6 @@ Int StrIODecInit(CWMImageStrCodec* pSC)
     return 0;
 }
 
-Int StrIODecTerm(CWMImageStrCodec* pSC)
-{
-    detachISRead(pSC, pSC->pIOHeader);
-
-    free(pSC->m_ppBitIO);
-    free(pSC->pIndexTable);
-
-    return 0;
-}
-
-Int StrDecTerm(CWMImageStrCodec* pSC)
-{
-    size_t j, jend = (pSC->m_pNextSC != NULL);
-
-    for (j = 0; j <= jend; j++) {
-        if(pSC->m_bUVResolutionChange){        
-            if(pSC->pResU != NULL)
-                free(pSC->pResU);
-            if(pSC->pResV != NULL)
-                free(pSC->pResV);
-        }
-
-        freePredInfo(pSC);
-
-        freeTileInfo(pSC);
-
-        FreeCodingContextDec(pSC);
-
-        if (j == 0) {
-            StrIODecTerm(pSC);
-
-            // free lookup tables for rotation and flipping
-            if(pSC->m_Dparam->pOffsetX != NULL)
-                free(pSC->m_Dparam->pOffsetX);
-            if(pSC->m_Dparam->pOffsetY != NULL)
-                free(pSC->m_Dparam->pOffsetY);
-        }
-
-        pSC = pSC->m_pNextSC;
-    }
-
-    return 0;
-}
-
 /*************************************************************************
     Read header of image plane
 *************************************************************************/
@@ -598,7 +554,7 @@ Int ImageStrDecTerm(
 
     PERFTIMER_START(pSC->m_fMeasurePerf, pSC->m_ptEncDecPerf);
 
-    StrDecTerm(pSC);
+    JxrDecoderResourceInitializerRelease(pSC);
     PERFTIMER_STOP(pSC->m_fMeasurePerf, pSC->m_ptEncDecPerf);
     PERFTIMER_REPORT(pSC->m_fMeasurePerf, pSC);
     PERFTIMER_DELETE(pSC->m_fMeasurePerf, pSC->m_ptEncDecPerf);

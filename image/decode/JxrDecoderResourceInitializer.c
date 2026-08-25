@@ -1,4 +1,5 @@
 #include "JxrDecoderResourceInitializer.h"
+#include "decode.h"
 
 Int JxrDecoderResourceInitializerInitialize(CWMImageStrCodec* pSC)
 {
@@ -79,4 +80,48 @@ Int JxrDecoderResourceInitializerInitialize(CWMImageStrCodec* pSC)
     setBitIOPointers(pSC);
 
     return ICERR_OK;
+}
+
+Int JxrDecoderResourceInitializerReleaseIo(CWMImageStrCodec* pSC)
+{
+    detachISRead(pSC, pSC->pIOHeader);
+
+    free(pSC->m_ppBitIO);
+    free(pSC->pIndexTable);
+
+    return 0;
+}
+
+Int JxrDecoderResourceInitializerRelease(CWMImageStrCodec* pSC)
+{
+    size_t j, jend = (pSC->m_pNextSC != NULL);
+
+    for (j = 0; j <= jend; j++) {
+        if(pSC->m_bUVResolutionChange){
+            if(pSC->pResU != NULL)
+                free(pSC->pResU);
+            if(pSC->pResV != NULL)
+                free(pSC->pResV);
+        }
+
+        freePredInfo(pSC);
+
+        freeTileInfo(pSC);
+
+        FreeCodingContextDec(pSC);
+
+        if (j == 0) {
+            JxrDecoderResourceInitializerReleaseIo(pSC);
+
+            // free lookup tables for rotation and flipping
+            if(pSC->m_Dparam->pOffsetX != NULL)
+                free(pSC->m_Dparam->pOffsetX);
+            if(pSC->m_Dparam->pOffsetY != NULL)
+                free(pSC->m_Dparam->pOffsetY);
+        }
+
+        pSC = pSC->m_pNextSC;
+    }
+
+    return 0;
 }

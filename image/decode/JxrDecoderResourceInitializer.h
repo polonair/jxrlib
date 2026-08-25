@@ -4,5 +4,7 @@
 #include "strcodec.h"
 
 Int JxrDecoderResourceInitializerInitialize(CWMImageStrCodec* codec);
+Int JxrDecoderResourceInitializerReleaseIo(CWMImageStrCodec* codec);
+Int JxrDecoderResourceInitializerRelease(CWMImageStrCodec* codec);
 
 #endif

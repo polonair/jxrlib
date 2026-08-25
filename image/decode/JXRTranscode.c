@@ -49,7 +49,6 @@ EXTERN_C Int DecodeMacroblockLowpass(CWMImageStrCodec *, CCodingContext *, Int, 
 EXTERN_C Int DecodeMacroblockHighpass(CWMImageStrCodec *, CCodingContext *, Int, Int);
 EXTERN_C Void predDCACDec(CWMImageStrCodec *);
 EXTERN_C Void predACDec(CWMImageStrCodec *);
-EXTERN_C Void StrIODecTerm(CWMImageStrCodec *);
 EXTERN_C Void FreeCodingContextDec(CWMImageStrCodec *);
 
 EXTERN_C Int StrEncInit(CWMImageStrCodec *);
@@ -736,7 +735,7 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
 
     freePredInfo(pSCDec);
     freeTileInfo(pSCDec);
-    StrIODecTerm(pSCDec);
+    JxrDecoderResourceInitializerReleaseIo(pSCDec);
     FreeCodingContextDec(pSCDec);
     if(pSCDec->m_param.bAlphaChannel)
         free(pSCDec->m_pNextSC);
