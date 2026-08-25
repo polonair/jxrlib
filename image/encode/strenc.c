@@ -54,6 +54,7 @@
 #include "JxrEncoderMemoryLayoutPlan.h"
 #include "JxrEncoderBufferRegionLayout.h"
 #include "JxrEncoderProcessingPipeline.h"
+#include "JxrEncoderMacroblockProcessingPipeline.h"
 #include <math.h>
 #include "perfTimer.h"
 
@@ -127,10 +128,6 @@ Int encodeMB(CWMImageStrCodec * pSC, Int iMBX, Int iMBY)
 /*************************************************************************
     Top level function for processing a macroblock worth of input
 *************************************************************************/
-Int processMacroblock(CWMImageStrCodec *pSC)
-{
-    return JxrEncoderMacroblockProcessorProcess(pSC);
-}
 
 //================================================================
 // Color Conversion 
@@ -453,15 +450,6 @@ static Void InitializeStrEnc(CWMImageStrCodec *pSC,
     pSC->Load = JxrEncoderInputRowProcessorProcess;
 #endif
     pSC->Quantize = quantizeMacroblock;
-    pSC->ProcessTopLeft = processMacroblock;
-    pSC->ProcessTop = processMacroblock;
-    pSC->ProcessTopRight = processMacroblock;
-    pSC->ProcessLeft = processMacroblock;
-    pSC->ProcessCenter = processMacroblock;
-    pSC->ProcessRight = processMacroblock;
-    pSC->ProcessBottomLeft = processMacroblock;
-    pSC->ProcessBottom = processMacroblock;
-    pSC->ProcessBottomRight = processMacroblock;
 
     pSC->m_pNextSC = NULL;
     pSC->m_bSecondary = FALSE;
@@ -625,7 +613,7 @@ Int ImageStrEncEncode(
     CWMImageStrCodec* pSC = (CWMImageStrCodec*)ctxSC;
     JXRTraceDumpCodecState("encoder", pSC);
     CWMImageStrCodec* pNextSC = pSC->m_pNextSC;
-    ImageDataProc ProcessLeft, ProcessCenter, ProcessRight;
+
     JxrEncoderProcessingPipelinePlan processingPipeline;
 
 #if defined(WMP_OPT_SSE2) || defined(WMP_OPT_CC_ENC) || defined(WMP_OPT_TRFM_ENC)
@@ -648,16 +636,6 @@ Int ImageStrEncEncode(
     if (pNextSC)
         pNextSC->WMIBI = *pBI;
 
-    if (0 == pSC->cRow) {
-        ProcessLeft = pSC->ProcessTopLeft;
-        ProcessCenter = pSC->ProcessTop;
-        ProcessRight = pSC->ProcessTopRight;
-    }
-    else {
-        ProcessLeft = pSC->ProcessLeft;
-        ProcessCenter = pSC->ProcessCenter;
-        ProcessRight = pSC->ProcessRight;
-    }
 
     if (processingPipeline.usesLegacyLoadCallback) {
         if (pSC->Load(pSC) != ICERR_OK)
@@ -666,25 +644,8 @@ Int ImageStrEncEncode(
     else if (JxrEncoderProcessingPipelineLoadInput(pSC) != ICERR_OK)
         return ICERR_ERROR;
     JXRTraceDumpStage("encoder", "centered_samples", pSC, 0, (Int)pSC->cRow, JXRTraceSamples);
-    if(ProcessLeft(pSC) != ICERR_OK)
+    if (JxrEncoderMacroblockProcessingPipelineProcessLoadedRow(pSC) != ICERR_OK)
         return ICERR_ERROR;
-    advanceMRPtr(pSC);
-
-    //================================
-    for (pSC->cColumn = 1; pSC->cColumn < pSC->cmbWidth; ++pSC->cColumn) {
-        if(ProcessCenter(pSC) != ICERR_OK)
-            return ICERR_ERROR;
-        advanceMRPtr(pSC);
-    }
-
-    //================================
-    if(ProcessRight(pSC) != ICERR_OK)
-        return ICERR_ERROR;
-    if (pSC->cRow)
-        advanceOneMBRow(pSC);
-
-    ++pSC->cRow;
-    swapMRPtr(pSC);
 
     PERFTIMER_STOP(pSC->m_fMeasurePerf, pSC->m_ptEncDecPerf);
     return ICERR_OK;
@@ -707,20 +668,7 @@ Int ImageStrEncTerm(
 
     //================================
     PERFTIMER_START(pSC->m_fMeasurePerf, pSC->m_ptEncDecPerf);
-    pSC->cColumn = 0;
-    initMRPtr(pSC);
-
-    pSC->ProcessBottomLeft(pSC);
-    advanceMRPtr(pSC);
-
-    //================================
-    for (pSC->cColumn = 1; pSC->cColumn < pSC->cmbWidth; ++pSC->cColumn) {
-        pSC->ProcessBottom(pSC);
-        advanceMRPtr(pSC);
-    }
-
-    //================================
-    pSC->ProcessBottomRight(pSC);
+    JxrEncoderMacroblockProcessingPipelineProcessFinalRow(pSC);
 
     //================================
     StrEncTerm(pSC);
