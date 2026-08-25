@@ -82,46 +82,6 @@ void StrDecOpt(CWMImageStrCodec* pSC);
 // Inverse color conversion is implemented by JxrInverseColorTransform.
 
 
-static void fixup_Y_ONLY_to_Others(
-    const CWMImageStrCodec* pSC,
-    const CWMImageBufferInfo* pBI)
-{
-    const CWMImageInfo* pII = &pSC->WMII;
-    const CWMIStrCodecParam* pSCP = &pSC->WMISCP;
-    size_t cWidth = 0, cHeight = 0;
-
-    if (CF_RGB != pII->cfColorFormat || Y_ONLY != pSCP->cfColorFormat)
-        return;
-
-    cWidth = 0 != pII->cROIWidth ? pII->cROIWidth : pII->cWidth;
-    cHeight = 0 != pII->cROIHeight ? pII->cROIHeight : pII->cHeight;
-
-    switch (pII->bdBitDepth)
-    {
-        case BD_8:
-            JxrMonochromeExpansionReplicateByte((U8*)pBI->pv, pBI->cbStride, cWidth, cHeight, pII->cBitsPerUnit >> 3);
-            break;
-
-        case BD_16:
-        case BD_16S:
-        case BD_16F:
-            JxrMonochromeExpansionReplicateUInt16((U16*)pBI->pv, pBI->cbStride, cWidth, cHeight, (pII->cBitsPerUnit >> 3) / sizeof(U16));
-            break;
-
-        case BD_32:
-        case BD_32S:
-        case BD_32F:
-            JxrMonochromeExpansionReplicateUInt32((U32*)pBI->pv, pBI->cbStride, cWidth, cHeight, (pII->cBitsPerUnit >> 3) / sizeof(float));
-            break;
-
-        case BD_5:
-        case BD_10:
-        case BD_565:
-        default:
-            break;
-    }
-}
-
 // Index-table syntax is implemented by JxrIndexTableReader.
 
 static Bool JxrIndexTableReaderStoreLegacyEntry(Void* context, U32 index, U64 value)
@@ -695,7 +655,7 @@ Int ImageStrDecDecode(
         ) != ICERR_OK)
         return ICERR_ERROR;
 #ifndef REENTRANT_MODE
-    fixup_Y_ONLY_to_Others(pSC, pBI);
+    JxrDecoderOutputPipelineFinalize(pSC, pBI);
 #endif // REENTRANT_MODE
 
     PERFTIMER_STOP(pSC->m_fMeasurePerf, pSC->m_ptEncDecPerf);

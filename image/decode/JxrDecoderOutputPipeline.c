@@ -1147,6 +1147,46 @@ Int JxrDecoderOutputPipelineWriteStandardRow(CWMImageStrCodec * pSC)
     return ICERR_OK;
 }
 
+Void JxrDecoderOutputPipelineFinalize(
+    const CWMImageStrCodec* pSC,
+    const CWMImageBufferInfo* pBI)
+{
+    const CWMImageInfo* pII = &pSC->WMII;
+    const CWMIStrCodecParam* pSCP = &pSC->WMISCP;
+    size_t cWidth = 0, cHeight = 0;
+
+    if (CF_RGB != pII->cfColorFormat || Y_ONLY != pSCP->cfColorFormat)
+        return;
+
+    cWidth = 0 != pII->cROIWidth ? pII->cROIWidth : pII->cWidth;
+    cHeight = 0 != pII->cROIHeight ? pII->cROIHeight : pII->cHeight;
+
+    switch (pII->bdBitDepth)
+    {
+        case BD_8:
+            JxrMonochromeExpansionReplicateByte((U8*)pBI->pv, pBI->cbStride, cWidth, cHeight, pII->cBitsPerUnit >> 3);
+            break;
+
+        case BD_16:
+        case BD_16S:
+        case BD_16F:
+            JxrMonochromeExpansionReplicateUInt16((U16*)pBI->pv, pBI->cbStride, cWidth, cHeight, (pII->cBitsPerUnit >> 3) / sizeof(U16));
+            break;
+
+        case BD_32:
+        case BD_32S:
+        case BD_32F:
+            JxrMonochromeExpansionReplicateUInt32((U32*)pBI->pv, pBI->cbStride, cWidth, cHeight, (pII->cBitsPerUnit >> 3) / sizeof(float));
+            break;
+
+        case BD_5:
+        case BD_10:
+        case BD_565:
+        default:
+            break;
+    }
+}
+
 // Y_ONLY/CF_ALPHA/YUV_444/N_CHANNEL thumbnail decode
 static Void JxrDecoderOutputPipelineWriteNChannelThumbnail(CWMImageStrCodec * pSC, const PixelI cMul, const size_t rShiftY, size_t iFirstRow, size_t iFirstColumn)
 {

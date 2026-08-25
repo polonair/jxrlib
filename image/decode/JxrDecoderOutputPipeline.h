@@ -11,5 +11,7 @@ Void JxrDecoderOutputPipelinePlanInitialize(JxrDecoderOutputPipelinePlan* plan,
     Bool hasOptimizedLoadOverride);
 Int JxrDecoderOutputPipelineWriteStandardRow(CWMImageStrCodec* codec);
 Int JxrDecoderOutputPipelineWriteThumbnailRow(CWMImageStrCodec* codec);
+Void JxrDecoderOutputPipelineFinalize(const CWMImageStrCodec* codec,
+    const CWMImageBufferInfo* outputBuffer);
 
 #endif
