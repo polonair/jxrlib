@@ -52,6 +52,7 @@
 #include "JxrEncoderInputRowProcessor.h"
 #include "JxrEncoderResourceRelease.h"
 #include "JxrEncoderMemoryLayoutPlan.h"
+#include "JxrEncoderBufferRegionLayout.h"
 #include <math.h>
 #include "perfTimer.h"
 
@@ -473,13 +474,15 @@ Int ImageStrEncInit(
 {
     static size_t cbChannels[BD_MAX] = {2, 4};
 
-    size_t cbChannel = 0, cblkChroma = 0, i;
+    size_t cbChannel = 0, cblkChroma = 0;
     size_t cbMacBlockStride = 0, cbMacBlockChroma = 0;
 
     CWMImageStrCodec* pSC = NULL, *pNextSC = NULL;
     char* pb = NULL;
     size_t cb = 0;
     JxrEncoderMemoryLayoutPlan memoryLayout;
+    JxrEncoderBufferRegionLayout primaryBufferRegions;
+    JxrEncoderBufferRegionLayout secondaryBufferRegions;
 
     Int err;
 
@@ -512,7 +515,9 @@ Int ImageStrEncInit(
     memset(pb, 0, cb);
 
     //================================================
-    pSC = (CWMImageStrCodec*)pb; pb += sizeof(*pSC);
+    pSC = (CWMImageStrCodec*)pb;
+    JxrEncoderBufferRegionLayoutInitialize(&primaryBufferRegions, (UINTPTR_T)pSC,
+        sizeof(*pSC), &memoryLayout);
 
     // Set up perf timers
     PERFTIMER_ONLY(pSC->m_fMeasurePerf = pSCP->fMeasurePerf);
@@ -536,18 +541,9 @@ Int ImageStrEncInit(
     InitializeStrEnc(pSC, pII, pSCP);
 
     //================================================
-    // 2 Macro Row buffers for each channel
-    pb = ALIGNUP(pb, 128);
-    for (i = 0; i < pSC->m_param.cNumChannels; i++) {
-        pSC->a0MBbuffer[i] = (PixelI*)pb; pb += cbMacBlockStride * pSC->cmbWidth;
-        pSC->a1MBbuffer[i] = (PixelI*)pb; pb += cbMacBlockStride * pSC->cmbWidth;
-        cbMacBlockStride = cbMacBlockChroma;
-    }
-
-    //================================================
-    // lay 2 aligned IO buffers just below pIO struct
-    pb = (char*)ALIGNUP(pb, PACKETLENGTH * 4) + PACKETLENGTH * 2;
-    pSC->pIOHeader = (BitIOInfo*)pb;
+    // Bind two macroblock rows per channel and the packet/header I/O region.
+    JxrEncoderBufferRegionLayoutBindPrimary(pSC, (U8*)pSC, &primaryBufferRegions,
+        cbMacBlockStride, cbMacBlockChroma);
 
     //================================================
     err = StrEncInit(pSC);
@@ -567,7 +563,9 @@ Int ImageStrEncInit(
         }
         memset(pb, 0, cb);
         //================================================
-        pNextSC = (CWMImageStrCodec*)pb; pb += sizeof(*pNextSC);
+        pNextSC = (CWMImageStrCodec*)pb;
+        JxrEncoderBufferRegionLayoutInitialize(&secondaryBufferRegions, (UINTPTR_T)pNextSC,
+            sizeof(*pNextSC), &memoryLayout);
 
         // 2. initialize pNextSC
         pNextSC->m_param.cfColorFormat = Y_ONLY;
@@ -580,10 +578,9 @@ Int ImageStrEncInit(
         InitializeStrEnc(pNextSC, pII, pSCP);
         //================================================
 
-        // 2 Macro Row buffers for each channel
-        pb = ALIGNUP(pb, 128);
-        pNextSC->a0MBbuffer[0] = (PixelI*)pb; pb += cbMacBlockStride * pNextSC->cmbWidth;
-        pNextSC->a1MBbuffer[0] = (PixelI*)pb; pb += cbMacBlockStride * pNextSC->cmbWidth;
+        // Bind two macroblock rows for the secondary alpha plane.
+        JxrEncoderBufferRegionLayoutBindSecondary(pNextSC, (U8*)pNextSC,
+            &secondaryBufferRegions, cbMacBlockStride);
         //================================================
         pNextSC->pIOHeader = pSC->pIOHeader;
         //================================================

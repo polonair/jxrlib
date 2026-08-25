@@ -40,6 +40,7 @@
 #include "../image/encode/JxrEncoderInputRowProcessor.h"
 #include "../image/encode/JxrEncoderResourceRelease.h"
 #include "../image/encode/JxrEncoderMemoryLayoutPlan.h"
+#include "../image/encode/JxrEncoderBufferRegionLayout.h"
 #include "encode.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
@@ -3964,6 +3965,24 @@ static int test_encoder_memory_layout_plan_vectors(void)
     return !plan.allocationIsSafe;
 }
 
+static int test_encoder_buffer_region_layout_vectors(void)
+{
+    JxrEncoderMemoryLayoutPlan memoryLayout;
+    JxrEncoderBufferRegionLayout regions;
+    size_t expectedHeaderOffset;
+
+    JxrEncoderMemoryLayoutPlanInitialize(&memoryLayout, 4, 4, 3, 17, 100, 20, FALSE);
+    JxrEncoderBufferRegionLayoutInitialize(&regions, 0, 100, &memoryLayout);
+    expectedHeaderOffset = ((128 + memoryLayout.primaryMacroblockBufferBytes +
+        PACKETLENGTH * 4 - 1) & ~(PACKETLENGTH * 4 - 1)) + PACKETLENGTH * 2;
+    if (regions.macroblockBufferOffset != 128 ||
+        regions.headerBitIoOffset != expectedHeaderOffset) return 0;
+
+    JxrEncoderBufferRegionLayoutInitialize(&regions, 16, 100, &memoryLayout);
+    return regions.macroblockBufferOffset == 112 &&
+        regions.headerBitIoOffset == expectedHeaderOffset - 16;
+}
+
 static int test_forward_full_resolution_plane_vectors(void)
 {
     PixelI samples[1408];
@@ -4636,6 +4655,7 @@ int main(int argc, char** argv)
         { "encoder_input_row_plan_vectors", test_encoder_input_row_plan_vectors },
         { "encoder_resource_release_plan_vectors", test_encoder_resource_release_plan_vectors },
         { "encoder_memory_layout_plan_vectors", test_encoder_memory_layout_plan_vectors },
+        { "encoder_buffer_region_layout_vectors", test_encoder_buffer_region_layout_vectors },
         { "forward_full_resolution_plane_vectors", test_forward_full_resolution_plane_vectors },
         { "forward_chroma_420_plane_vectors", test_forward_chroma_420_plane_vectors },
         { "forward_chroma_422_plane_vectors", test_forward_chroma_422_plane_vectors },
