@@ -44,7 +44,7 @@ Int writeTileHeaderDC(CWMImageStrCodec*, BitIOInfo*);
 Int writeTileHeaderLP(CWMImageStrCodec*, BitIOInfo*);
 Int writeTileHeaderHP(CWMImageStrCodec*, BitIOInfo*);
 
-Int quantizeMacroblock(CWMImageStrCodec *);
+
 Void transformMacroblock(CWMImageStrCodec *);
 Void predMacroblockEnc(CWMImageStrCodec *);
 

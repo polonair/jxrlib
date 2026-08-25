@@ -196,6 +196,7 @@
     <ClCompile Include="..\encode\JxrEncoderPacketStreamCleanup.c" />
     <ClCompile Include="..\encode\JxrEncoderPacketStreamInitializer.c" />
     <ClCompile Include="..\encode\JxrEncoderQuantizerInitializer.c" />
+    <ClCompile Include="..\encode\JxrEncoderQuantizationPipeline.c" />
     <ClCompile Include="..\encode\JxrEncoderChromaResamplingSetup.c" />
     <ClCompile Include="..\encode\JxrEncoderTileStateInitializer.c" />
     <ClCompile Include="..\encode\JxrEncoderOutputInitializer.c" />

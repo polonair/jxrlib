@@ -31,6 +31,7 @@
 #include "strcodec.h"
 #include "JXRTrace.h"
 #include "encode.h"
+#include "JxrEncoderQuantizationPipeline.h"
 
 #ifdef MEM_TRACE
 #define TRACE_MALLOC    1
@@ -144,7 +145,7 @@ Int EncodeMacroblockDC (CWMImageStrCodec *pSC, CCodingContext *pContext, Int iMB
     }
 
     if(pSC->m_param.bTranscode == FALSE)
-        pSC->Quantize(pSC);
+        JxrEncoderQuantizationPipelineQuantize(pSC);
     JXRTraceDumpStage("encoder", "quantized_coefficients", pSC, iMBX, iMBY, JXRTraceCoefficients);
 
     predMacroblockEnc(pSC);

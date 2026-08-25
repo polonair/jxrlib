@@ -449,7 +449,7 @@ static Void InitializeStrEnc(CWMImageStrCodec *pSC,
 #if defined(WMP_OPT_SSE2) || defined(WMP_OPT_CC_ENC) || defined(WMP_OPT_TRFM_ENC)
     pSC->Load = JxrEncoderInputRowProcessorProcess;
 #endif
-    pSC->Quantize = quantizeMacroblock;
+
 
     pSC->m_pNextSC = NULL;
     pSC->m_bSecondary = FALSE;
