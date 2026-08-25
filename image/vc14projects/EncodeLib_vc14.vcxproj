@@ -169,7 +169,6 @@
     <ClCompile Include="..\encode\segenc.c" />
     <ClCompile Include="..\encode\strenc.c" />
     <ClCompile Include="..\encode\strenc_x86.c" />
-    <ClCompile Include="..\encode\strFwdTransform.c" />
     <ClCompile Include="..\encode\JxrForwardTransformMath.c" />
     <ClCompile Include="..\encode\JxrForwardTransformStages.c" />
     <ClCompile Include="..\encode\JxrForwardHardTileBoundaryState.c" />

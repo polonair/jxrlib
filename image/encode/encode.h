@@ -45,7 +45,7 @@ Int writeTileHeaderLP(CWMImageStrCodec*, BitIOInfo*);
 Int writeTileHeaderHP(CWMImageStrCodec*, BitIOInfo*);
 
 
-Void transformMacroblock(CWMImageStrCodec *);
+
 Void predMacroblockEnc(CWMImageStrCodec *);
 
 Void AdaptLowpassEnc(CCodingContext *pContext);
