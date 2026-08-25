@@ -42,7 +42,7 @@ EXTERN_C Void freePredInfo(CWMImageStrCodec *);
 
 EXTERN_C Int ReadWMIHeader(CWMImageInfo *, CWMIStrCodecParam *, CCoreParameters *);
 EXTERN_C Int StrIODecInit(CWMImageStrCodec *);
-EXTERN_C Int StrDecInit(CWMImageStrCodec *);
+#include "JxrDecoderResourceInitializer.h"
 
 EXTERN_C Int DecodeMacroblockDC(CWMImageStrCodec *, CCodingContext *, Int, Int);
 EXTERN_C Int DecodeMacroblockLowpass(CWMImageStrCodec *, CCodingContext *, Int, Int);
@@ -316,7 +316,7 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
         ReadImagePlaneHeader(&pSCDec->m_pNextSC->WMII, &pSCDec->m_pNextSC->WMISCP, &pSCDec->m_pNextSC->m_param, &SB);
         detach_SB(&SB);
 
-        if(StrDecInit(pSCDec->m_pNextSC) != ICERR_OK)
+        if(JxrDecoderResourceInitializerInitialize(pSCDec->m_pNextSC) != ICERR_OK)
             return ICERR_ERROR;
     }
     else
@@ -331,11 +331,11 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
     if(StrIODecInit(pSCDec) != ICERR_OK)
         return ICERR_ERROR;
 
-    if(StrDecInit(pSCDec) != ICERR_OK)
+    if(JxrDecoderResourceInitializerInitialize(pSCDec) != ICERR_OK)
         return ICERR_ERROR;
 
     if(pSCDec->m_param.bAlphaChannel){ // alpha channel
-        if(StrDecInit(pSCDec->m_pNextSC) != ICERR_OK)
+        if(JxrDecoderResourceInitializerInitialize(pSCDec->m_pNextSC) != ICERR_OK)
             return ICERR_ERROR;
     }
 
