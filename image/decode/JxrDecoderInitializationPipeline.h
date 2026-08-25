@@ -9,12 +9,11 @@ typedef struct JxrDecoderInitializationPipeline {
     CWMImageStrCodec* primaryCodec;
     CWMImageStrCodec* secondaryCodec;
     JxrDecoderInitializeStage initializeIo;
-    JxrDecoderInitializeStage initializeDecoder;
 } JxrDecoderInitializationPipeline;
 
 Void JxrDecoderInitializationPipelineInit(JxrDecoderInitializationPipeline* pipeline,
     CWMImageStrCodec* primaryCodec, CWMImageStrCodec* secondaryCodec,
-    JxrDecoderInitializeStage initializeIo, JxrDecoderInitializeStage initializeDecoder);
+    JxrDecoderInitializeStage initializeIo);
 Int JxrDecoderInitializationPipelineRun(JxrDecoderInitializationPipeline* pipeline);
 
 #endif

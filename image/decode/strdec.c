@@ -482,7 +482,7 @@ Int ImageStrDecInit(
     {
         JxrDecoderInitializationPipeline initialization;
         JxrDecoderInitializationPipelineInit(&initialization, pSC, pNextSC,
-            StrIODecInit, JxrDecoderResourceInitializerInitialize);
+            StrIODecInit);
         if (JxrDecoderInitializationPipelineRun(&initialization) != ICERR_OK)
             return ICERR_ERROR;
     }
