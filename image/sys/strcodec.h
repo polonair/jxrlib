@@ -409,20 +409,6 @@ typedef struct CWMImageStrCodec {
     //ImageDataProc QuantizeLuma;
     //ImageDataProc QuantizeChroma;
 
-    //================================
-    // process and store data from
-    // macro block 0 of 2x2 working window
-    //================================
-    ImageDataProc ProcessTopLeft;
-    ImageDataProc ProcessTop;
-    ImageDataProc ProcessTopRight;
-    ImageDataProc ProcessLeft;
-    ImageDataProc ProcessCenter;
-    ImageDataProc ProcessRight;
-    ImageDataProc ProcessBottomLeft;
-    ImageDataProc ProcessBottom;
-    ImageDataProc ProcessBottomRight;
-    
 
     //================================
     // 2 MB working window for encoder

@@ -42,6 +42,7 @@
 #include "JxrDecoderInitializationPipeline.h"
 #include "JxrDecoderOutputPipeline.h"
 #include "JxrDecoderTransformPipeline.h"
+#include "JxrDecoderMacroblockProcessingPipeline.h"
 #include "JxrSecondaryPlaneInitializer.h"
 #include "JxrDecoderDcQuantizerHeaderApplier.h"
 #include "JxrDecoderLpQuantizerHeaderApplier.h"
@@ -75,7 +76,7 @@
 void StrDecOpt(CWMImageStrCodec* pSC);
 #endif // OPT defined
 
-Int processMacroblockDec(CWMImageStrCodec *);
+
 
 U8 readQuantizerSB(U8 pQPIndex[MAX_CHANNELS], SimpleBitIO * pIO, size_t cChannel)
 {
@@ -2804,15 +2805,6 @@ static Void InitializeStrDec(CWMImageStrCodec *pSC,
     JxrDecoderTransformPipelineInitialize(pSC,
         pParams->cSubVersion != CODEC_SUBVERSION);
 
-    pSC->ProcessTopLeft = processMacroblockDec;
-    pSC->ProcessTop = processMacroblockDec;
-    pSC->ProcessTopRight = processMacroblockDec;
-    pSC->ProcessLeft = processMacroblockDec;
-    pSC->ProcessCenter = processMacroblockDec;
-    pSC->ProcessRight = processMacroblockDec;
-    pSC->ProcessBottomLeft = processMacroblockDec;
-    pSC->ProcessBottom = processMacroblockDec;
-    pSC->ProcessBottomRight = processMacroblockDec;
 
     pSC->m_pNextSC = NULL;
     pSC->m_bSecondary = FALSE;
@@ -2989,7 +2981,7 @@ Int ImageStrDecDecode(
     CWMImageStrCodec* pNextSC = pSC->m_pNextSC;
     size_t cMBRow, k;
 
-    ImageDataProc ProcessLeft, ProcessCenter, ProcessRight;
+
     Bool useCenterTransform = FALSE;
     JxrDecoderOutputPipelinePlan outputPipeline;
     const size_t iChromaElements = (pSC->m_param.cfColorFormat == YUV_420) ? 8 * 8 
@@ -3064,9 +3056,6 @@ Int ImageStrDecDecode(
 #ifdef REENTRANT_MODE
 #else
     pSC->cRow = 0;
-    ProcessLeft = pSC->ProcessTopLeft;
-    ProcessCenter = pSC->ProcessTop;
-    ProcessRight = pSC->ProcessTopRight;
 
     useCenterTransform = FALSE;
 
@@ -3079,24 +3068,15 @@ Int ImageStrDecDecode(
 
         if (0 == pSC->cRow)
         {
-            ProcessLeft = pSC->ProcessTopLeft;
-            ProcessCenter = pSC->ProcessTop;
-            ProcessRight = pSC->ProcessTopRight;
             useCenterTransform = FALSE;
         }
         else if (cMBRow == pSC->cRow)
         {
             //================================
             // bottom row
-            ProcessLeft = pSC->ProcessBottomLeft;
-            ProcessCenter = pSC->ProcessBottom;
-            ProcessRight = pSC->ProcessBottomRight;
             useCenterTransform = FALSE;
         }
         else { // middle rows
-            ProcessLeft = pSC->ProcessLeft;
-            ProcessCenter = pSC->ProcessCenter;
-            ProcessRight = pSC->ProcessRight;
             useCenterTransform = TRUE;
         }
 #else
@@ -3116,14 +3096,14 @@ Int ImageStrDecDecode(
             memset(pSC->m_pNextSC->p1MBbuffer[0], 0, sizeof(PixelI) * 16 * 16 * pSC->m_pNextSC->cmbWidth);
         }
 
-        if(ProcessLeft(pSC) != ICERR_OK)
+        if (JxrDecoderMacroblockProcessingPipelineProcess(pSC) != ICERR_OK)
             return ICERR_ERROR;
         advanceMRPtr(pSC);
 
         JxrDecoderTransformPipelineSetCenterMacroblock(pSC, useCenterTransform);
         for (pSC->cColumn = 1; pSC->cColumn < pSC->cmbWidth; ++pSC->cColumn)
         {
-            if(ProcessCenter(pSC) != ICERR_OK)
+            if (JxrDecoderMacroblockProcessingPipelineProcess(pSC) != ICERR_OK)
                 return ICERR_ERROR;
             advanceMRPtr(pSC);
         }
@@ -3131,7 +3111,7 @@ Int ImageStrDecDecode(
         JxrDecoderTransformPipelineSetCenterMacroblock(pSC, FALSE);
 
 
-        if(ProcessRight(pSC) != ICERR_OK)
+        if (JxrDecoderMacroblockProcessingPipelineProcess(pSC) != ICERR_OK)
             return ICERR_ERROR;
 
         if (pSC->cRow) {
@@ -3157,15 +3137,9 @@ Int ImageStrDecDecode(
         if (pSC->cRow == cMBRow - 1) {
         //================================
         // bottom row
-            ProcessLeft = pSC->ProcessBottomLeft;
-            ProcessCenter = pSC->ProcessBottom;
-            ProcessRight = pSC->ProcessBottomRight;
             useCenterTransform = FALSE;
         }
         else {
-            ProcessLeft = pSC->ProcessLeft;
-            ProcessCenter = pSC->ProcessCenter;
-            ProcessRight = pSC->ProcessRight;
             useCenterTransform = TRUE;
         }
 #endif // REENTRANT_MODE
