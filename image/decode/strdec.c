@@ -249,152 +249,6 @@ Int StrIODecTerm(CWMImageStrCodec* pSC)
     return 0;
 }
 
-Int initLookupTables(CWMImageStrCodec* pSC)
-{
-    static const U8 cbChannels[BDB_MAX] = {1, 1, 2, 2, 2, 4, 4, 4, (U8) -1, (U8) -1, (U8) -1 };
-
-    CWMImageInfo * pII = &pSC->WMII;
-    size_t cStrideX, cStrideY;
-    size_t w, h, i, iFirst = 0;
-    Bool bReverse;
-
-    // lookup tables for rotation and flipping
-    if(pSC->m_Dparam->cThumbnailScale > 1) // thumbnail
-        w = pII->cThumbnailWidth, h = pII->cThumbnailHeight;
-    else
-        w = pII->cWidth, h = pII->cHeight;
-    w += (pSC->m_Dparam->cROILeftX + pSC->m_Dparam->cThumbnailScale - 1) / pSC->m_Dparam->cThumbnailScale;
-    h += (pSC->m_Dparam->cROITopY + pSC->m_Dparam->cThumbnailScale - 1) / pSC->m_Dparam->cThumbnailScale;
-
-    switch(pII->bdBitDepth){
-        case BD_16:
-        case BD_16S:
-        case BD_5:
-        case BD_565:
-        case BD_16F:
-            cStrideY = pSC->WMIBI.cbStride / 2;
-            break;
-
-        case BD_32:
-        case BD_32S:
-        case BD_32F:
-        case BD_10:
-            cStrideY = pSC->WMIBI.cbStride / 4;
-            break;
-
-        default: //BD_8, BD_1
-            cStrideY = pSC->WMIBI.cbStride;
-            break;
-    }
-
-    switch(pII->cfColorFormat){
-        case YUV_420:
-            cStrideX = 6;
-            w >>= 1, h >>= 1;
-            break;
-
-        case YUV_422:
-            cStrideX = 4;
-            w >>= 1;
-            break;
-
-        default:
-            cStrideX = (pII->cBitsPerUnit >> 3) / cbChannels[pII->bdBitDepth];
-            break;
-    }
-
-    if(pII->bdBitDepth == BD_1 || pII->bdBitDepth == BD_5 || pII->bdBitDepth == BD_10 ||  pII->bdBitDepth == BD_565)
-        cStrideX = 1;
-
-    if(pII->oOrientation > O_FLIPVH) // rotated !!
-        i =cStrideX, cStrideX = cStrideY, cStrideY = i;
-
-    pSC->m_Dparam->pOffsetX = (size_t *)malloc(w * sizeof(size_t));
-    if(pSC->m_Dparam->pOffsetX == NULL || w * sizeof(size_t) < w)
-        return ICERR_ERROR;
-    /*
-    consider a row in the source image. if it becomes a reversed row in the target, or a reversed (upside-down)column 
-    in the target, we have to reverse the offsets. bReverse here tells us when this happened.
-    */
-    bReverse = (pII->oOrientation == O_FLIPH || pII->oOrientation == O_FLIPVH || 
-        pII->oOrientation == O_RCW_FLIPV || pII->oOrientation == O_RCW_FLIPVH);
-    if(!pSC->m_Dparam->bDecodeFullFrame) // take care of region decode here!
-        iFirst = (pSC->m_Dparam->cROILeftX + pSC->m_Dparam->cThumbnailScale - 1) / pSC->m_Dparam->cThumbnailScale;
-    for(i = 0; i + iFirst < w; i ++){
-        pSC->m_Dparam->pOffsetX[i + iFirst] = pII->cLeadingPadding + (bReverse ? (pSC->m_Dparam->bDecodeFullFrame ? w : 
-    (pSC->m_Dparam->cROIRightX - pSC->m_Dparam->cROILeftX + pSC->m_Dparam->cThumbnailScale) / pSC->m_Dparam->cThumbnailScale / ((pII->cfColorFormat == YUV_420 || pII->cfColorFormat == YUV_422) ? 2 : 1)) - 1 - i : i) * cStrideX;
-    }
-
-    pSC->m_Dparam->pOffsetY = (size_t *)malloc(h * sizeof(size_t));
-    if(pSC->m_Dparam->pOffsetY == NULL || h * sizeof(size_t) < h)
-        return ICERR_ERROR;
-    /*
-    consider a column in the source image. if it becomes an upside-down column in the target, or a reversed row 
-    in the target, we have to reverse the offsets. bReverse here tells us when this happened.
-    */
-    bReverse = (pII->oOrientation == O_FLIPV || pII->oOrientation == O_FLIPVH || 
-        pII->oOrientation == O_RCW || pII->oOrientation == O_RCW_FLIPV);
-    if(!pSC->m_Dparam->bDecodeFullFrame) // take care of region decode here!
-        iFirst = (pSC->m_Dparam->cROITopY + pSC->m_Dparam->cThumbnailScale - 1) / pSC->m_Dparam->cThumbnailScale;
-    for(i = 0; i + iFirst < h; i ++){
-        pSC->m_Dparam->pOffsetY[i + iFirst] = (bReverse ? (pSC->m_Dparam->bDecodeFullFrame ? h : 
-    (pSC->m_Dparam->cROIBottomY - pSC->m_Dparam->cROITopY + pSC->m_Dparam->cThumbnailScale) / pSC->m_Dparam->cThumbnailScale / (pII->cfColorFormat == YUV_420 ? 2 : 1)) - 1 - i : i) * cStrideY;
-    }
-
-    return ICERR_OK;
-}
-
-Void setROI(CWMImageStrCodec* pSC)
-{
-    CWMImageInfo * pWMII = &pSC->WMII;
-    CWMIStrCodecParam * pSCP = &pSC->WMISCP;
-
-    // inscribed image size
-    pWMII->cWidth -= pSC->m_param.cExtraPixelsLeft + pSC->m_param.cExtraPixelsRight;
-    pWMII->cHeight -= pSC->m_param.cExtraPixelsTop + pSC->m_param.cExtraPixelsBottom;
-
-    pSC->m_Dparam->bSkipFlexbits = (pSCP->sbSubband == SB_NO_FLEXBITS);
-    pSC->m_Dparam->bDecodeHP = (pSCP->sbSubband == SB_ALL || pSCP->sbSubband == SB_NO_FLEXBITS);
-    pSC->m_Dparam->bDecodeLP = (pSCP->sbSubband != SB_DC_ONLY);
-    pSC->m_Dparam->cThumbnailScale = 1;
-    while(pSC->m_Dparam->cThumbnailScale * pWMII->cThumbnailWidth < pWMII->cWidth)
-        pSC->m_Dparam->cThumbnailScale <<= 1;
-    if(pSC->WMISCP.bfBitstreamFormat == FREQUENCY){
-        if(pSC->m_Dparam->cThumbnailScale >= 4)
-            pSC->m_Dparam->bDecodeHP = FALSE;  // no need to decode HP
-        if(pSC->m_Dparam->cThumbnailScale >= 16)
-            pSC->m_Dparam->bDecodeLP = FALSE; // only need to decode DC
-    }
-
-    // original image size
-    pWMII->cWidth += pSC->m_param.cExtraPixelsLeft + pSC->m_param.cExtraPixelsRight;
-    pWMII->cHeight += pSC->m_param.cExtraPixelsTop + pSC->m_param.cExtraPixelsBottom;
-
-    /** region decode stuff */
-    pSC->m_Dparam->cROILeftX = pWMII->cROILeftX * pSC->m_Dparam->cThumbnailScale + pSC->m_param.cExtraPixelsLeft;
-    pSC->m_Dparam->cROIRightX = pSC->m_Dparam->cROILeftX + pWMII->cROIWidth * pSC->m_Dparam->cThumbnailScale - 1;
-    pSC->m_Dparam->cROITopY = pWMII->cROITopY * pSC->m_Dparam->cThumbnailScale + pSC->m_param.cExtraPixelsTop;
-    pSC->m_Dparam->cROIBottomY = pSC->m_Dparam->cROITopY + pWMII->cROIHeight * pSC->m_Dparam->cThumbnailScale - 1;
-    if(pSC->m_Dparam->cROIRightX >= pWMII->cWidth)
-        pSC->m_Dparam->cROIRightX = pWMII->cWidth - 1;
-    if(pSC->m_Dparam->cROIBottomY >= pWMII->cHeight)
-        pSC->m_Dparam->cROIBottomY = pWMII->cHeight - 1;
-
-    pSC->m_Dparam->bDecodeFullFrame = (pSC->m_Dparam->cROILeftX + pSC->m_Dparam->cROITopY == 0 &&
-        ((pSC->m_Dparam->cROIRightX + 15) / 16 >= (pWMII->cWidth + 14) / 16) && ((pSC->m_Dparam->cROIBottomY + 15) / 16 >= (pWMII->cHeight + 14) / 16));
-
-    pSC->m_Dparam->bDecodeFullWidth = (pSC->m_Dparam->cROILeftX == 0 && ((pSC->m_Dparam->cROIRightX + 15) / 16 >= (pWMII->cWidth + 14) / 16));
-
-    // inscribed image size
-    pWMII->cWidth -= pSC->m_param.cExtraPixelsLeft + pSC->m_param.cExtraPixelsRight;
-    pWMII->cHeight -= pSC->m_param.cExtraPixelsTop + pSC->m_param.cExtraPixelsBottom;
-
-    if(pSC->WMISCP.bfBitstreamFormat == FREQUENCY && pWMII->bSkipFlexbits == TRUE)
-        pSC->m_Dparam->bSkipFlexbits = TRUE;
-
-    pSC->cTileColumn = pSC->cTileRow = 0;
-}
-
 Int StrDecInit(CWMImageStrCodec* pSC)
 {
     // CWMImageInfo * pWMII = &pSC->WMII;
@@ -822,9 +676,7 @@ Int ImageStrDecDecode(
 {
     CWMImageStrCodec* pSC = (CWMImageStrCodec*)ctxSC;
     JXRTraceDumpCodecState("decoder", pSC);
-    CWMImageStrCodec* pNextSC = pSC->m_pNextSC;
-    size_t cMBRow;
-    JxrDecoderOutputPipelinePlan outputPipeline;
+    JxrDecoderExecutionPreparation preparation;
     if (sizeof(*pSC) != pSC->cbStruct)
     {
         return ICERR_ERROR;
@@ -833,64 +685,10 @@ Int ImageStrDecDecode(
     //================================
     PERFTIMER_START(pSC->m_fMeasurePerf, pSC->m_ptEncDecPerf);
 
-    pSC->WMIBI = *pBI;
-
-#ifdef REENTRANT_MODE
-    if (0 == pSC->WMIBI.uiFirstMBRow)
-    {
-        setROI(pSC);
-        if (pNextSC) {
-            pNextSC->WMIBI = pSC->WMIBI;
-            setROI(pNextSC);
-        }
-    }
-#else
-    setROI(pSC);
-    if (pNextSC) {
-        pNextSC->WMIBI = pSC->WMIBI;
-        setROI(pNextSC);
-    }
-#endif // REENTRANT_MODE
-
-// optimization flags can be defined only after ROI is set!
-#if defined(WMP_OPT_SSE2) || defined(WMP_OPT_CC_DEC) || defined(WMP_OPT_TRFM_DEC)
-    StrDecOpt(pSC);
-    JxrDecoderOutputPipelinePlanInitialize(&outputPipeline, TRUE);
-#else
-    JxrDecoderOutputPipelinePlanInitialize(&outputPipeline, FALSE);
-#endif // OPT defined
-
-
-
-    cMBRow = (pSC->m_Dparam->bDecodeFullFrame ? pSC->cmbHeight : ((pSC->m_Dparam->cROIBottomY + 16) >> 4));
-
-#ifdef REENTRANT_MODE
-    if (0 == pSC->WMIBI.uiFirstMBRow)
-    {
-        if(initLookupTables(pSC) != ICERR_OK)
-            return ICERR_ERROR;
-        if (pNextSC && initLookupTables(pNextSC) != ICERR_OK)
-            return ICERR_ERROR;
-    }
-#else
-    if(initLookupTables(pSC) != ICERR_OK)
+    if (JxrDecoderExecutionPipelinePrepare(pSC, pBI, &preparation) != ICERR_OK)
         return ICERR_ERROR;
-    if (pNextSC && initLookupTables(pNextSC) != ICERR_OK)
-        return ICERR_ERROR;
-#endif // REENTRANT_MODE
-
-#ifndef REENTRANT_MODE
-    if(pSC->WMII.bdBitDepth == BD_1){
-        size_t i;
-
-
-        for(i = 0; i < pSC->WMIBI.cLine; i ++)
-            memset(pSC->WMIBI.pv, 0, pSC->WMIBI.cbStride);
-    }
-#endif
-
-    if (JxrDecoderExecutionPipelineRun(pSC, cMBRow,
-        outputPipeline.usesLegacyLoadCallback
+    if (JxrDecoderExecutionPipelineRun(pSC, preparation.macroblockRowCount,
+        preparation.usesLegacyLoadCallback
 #ifdef REENTRANT_MODE
         , pcDecodedLines
 #endif
