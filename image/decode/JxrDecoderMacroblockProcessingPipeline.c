@@ -3,10 +3,8 @@
 #include "JXRTrace.h"
 #include "decode.h"
 #include "JxrDecoderTransformPipeline.h"
+#include "JxrDecoderPacketPipeline.h"
 #include "JxrMacroblockRegionState.h"
-
-/* Packet/header helpers remain in strdec.c because transcode also uses them. */
-Int readPackets(CWMImageStrCodec* codec);
 
 Int JxrDecoderMacroblockProcessingPipelineProcess(CWMImageStrCodec* codec)
 {
@@ -37,7 +35,7 @@ Int JxrDecoderMacroblockProcessingPipelineProcess(CWMImageStrCodec* codec)
             }
 
             codingContext = &currentCodec->m_pCodingContext[currentCodec->cTileColumn];
-            if (readPackets(currentCodec) != ICERR_OK)
+            if (JxrDecoderPacketPipelineReadCurrentMacroblock(currentCodec) != ICERR_OK)
                 return ICERR_ERROR;
 
             region.tileLeftMacroblock = currentCodec->WMISCP.uiTileX[currentCodec->cTileColumn];

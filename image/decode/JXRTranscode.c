@@ -36,13 +36,14 @@
 #include "JxrTranscodeCoefficientTransform.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
+#include "JxrDecoderPacketPipeline.h"
 
 EXTERN_C Void freePredInfo(CWMImageStrCodec *);
 
 EXTERN_C Int ReadWMIHeader(CWMImageInfo *, CWMIStrCodecParam *, CCoreParameters *);
 EXTERN_C Int StrIODecInit(CWMImageStrCodec *);
 EXTERN_C Int StrDecInit(CWMImageStrCodec *);
-EXTERN_C Int readPackets(CWMImageStrCodec *);
+
 EXTERN_C Int DecodeMacroblockDC(CWMImageStrCodec *, CCodingContext *, Int, Int);
 EXTERN_C Int DecodeMacroblockLowpass(CWMImageStrCodec *, CCodingContext *, Int, Int);
 EXTERN_C Int DecodeMacroblockHighpass(CWMImageStrCodec *, CCodingContext *, Int, Int);
@@ -537,7 +538,7 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
                     pSCDec->m_pNextSC->cTileRow = pSCDec->cTileRow;
                 }
                 
-                if(readPackets(pSCDec) != ICERR_OK)
+                if (JxrDecoderPacketPipelineReadCurrentMacroblock(pSCDec) != ICERR_OK)
                     return ICERR_ERROR;
 
                 pContext = &pSCDec->m_pCodingContext[pSCDec->cTileColumn];
