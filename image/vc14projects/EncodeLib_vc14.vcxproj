@@ -205,6 +205,7 @@
     <ClCompile Include="..\encode\JxrEncoderChromaDownsampler.c" />
     <ClCompile Include="..\encode\JxrEncoderInputRowProcessor.c" />
     <ClCompile Include="..\encode\JxrEncoderResourceRelease.c" />
+    <ClCompile Include="..\encode\JxrEncoderMemoryLayoutPlan.c" />
     <ClCompile Include="..\encode\strPredQuantEnc.c" />
   </ItemGroup>
   <ItemGroup>

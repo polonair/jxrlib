@@ -39,6 +39,7 @@
 #include "../image/encode/JxrEncoderChromaDownsampler.h"
 #include "../image/encode/JxrEncoderInputRowProcessor.h"
 #include "../image/encode/JxrEncoderResourceRelease.h"
+#include "../image/encode/JxrEncoderMemoryLayoutPlan.h"
 #include "encode.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
@@ -3944,6 +3945,25 @@ static int test_encoder_resource_release_plan_vectors(void)
         plan.releasesTileState;
 }
 
+static int test_encoder_memory_layout_plan_vectors(void)
+{
+    JxrEncoderMemoryLayoutPlan plan;
+
+    JxrEncoderMemoryLayoutPlanInitialize(&plan, 4, 4, 3, 17, 100, 20, FALSE);
+    if (!plan.allocationIsSafe || plan.macroblockCount != 2 ||
+        plan.fullResolutionMacroblockBytes != 1024 ||
+        plan.chromaMacroblockBytes != 256 ||
+        plan.primaryMacroblockRowBytes != 1536 ||
+        plan.primaryMacroblockBufferBytes != 6144 ||
+        plan.secondaryMacroblockBufferBytes != 4096 ||
+        plan.primaryAllocationBytes != 6390 + PACKETLENGTH * 6 ||
+        plan.secondaryAllocationBytes != 4323) return 0;
+
+    JxrEncoderMemoryLayoutPlanInitialize(&plan, 4, 16, 4, 0x08000000,
+        100, 20, TRUE);
+    return !plan.allocationIsSafe;
+}
+
 static int test_forward_full_resolution_plane_vectors(void)
 {
     PixelI samples[1408];
@@ -4615,6 +4635,7 @@ int main(int argc, char** argv)
         { "encoder_chroma_downsampling_vectors", test_encoder_chroma_downsampling_vectors },
         { "encoder_input_row_plan_vectors", test_encoder_input_row_plan_vectors },
         { "encoder_resource_release_plan_vectors", test_encoder_resource_release_plan_vectors },
+        { "encoder_memory_layout_plan_vectors", test_encoder_memory_layout_plan_vectors },
         { "forward_full_resolution_plane_vectors", test_forward_full_resolution_plane_vectors },
         { "forward_chroma_420_plane_vectors", test_forward_chroma_420_plane_vectors },
         { "forward_chroma_422_plane_vectors", test_forward_chroma_422_plane_vectors },

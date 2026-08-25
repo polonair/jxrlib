@@ -51,6 +51,7 @@
 #include "JxrEncoderChromaDownsampler.h"
 #include "JxrEncoderInputRowProcessor.h"
 #include "JxrEncoderResourceRelease.h"
+#include "JxrEncoderMemoryLayoutPlan.h"
 #include <math.h>
 #include "perfTimer.h"
 
@@ -473,12 +474,12 @@ Int ImageStrEncInit(
     static size_t cbChannels[BD_MAX] = {2, 4};
 
     size_t cbChannel = 0, cblkChroma = 0, i;
-    size_t cbMacBlockStride = 0, cbMacBlockChroma = 0, cMacBlock = 0;
+    size_t cbMacBlockStride = 0, cbMacBlockChroma = 0;
 
     CWMImageStrCodec* pSC = NULL, *pNextSC = NULL;
     char* pb = NULL;
     size_t cb = 0;
-    Bool b32bit = sizeof(size_t) == 4;
+    JxrEncoderMemoryLayoutPlan memoryLayout;
 
     Int err;
 
@@ -492,18 +493,16 @@ Int ImageStrEncInit(
     //================================================
     cbChannel = cbChannels[pSCP->bdBitDepth];
     cblkChroma = cblkChromas[pSCP->cfColorFormat];
-    cbMacBlockStride = cbChannel * 16 * 16;
-    cbMacBlockChroma = cbChannel * 16 * cblkChroma;
-    cMacBlock = (pII->cWidth + 15) / 16;
+    JxrEncoderMemoryLayoutPlanInitialize(&memoryLayout, cbChannel, cblkChroma,
+        pSCP->cChannel, pII->cWidth, sizeof(*pSC), sizeof(*pSC->pIOHeader),
+        sizeof(size_t) == 4);
+    if (!memoryLayout.allocationIsSafe)
+        return ICERR_ERROR;
+    cbMacBlockStride = memoryLayout.fullResolutionMacroblockBytes;
+    cbMacBlockChroma = memoryLayout.chromaMacroblockBytes;
 
     //================================================
-    cb = sizeof(*pSC) + (128 - 1) + (PACKETLENGTH * 4 - 1) + (PACKETLENGTH * 2 ) + sizeof(*pSC->pIOHeader);
-    i = cbMacBlockStride + cbMacBlockChroma * (pSCP->cChannel - 1);
-    if(b32bit) // integer overlow/underflow check for 32-bit system
-        if(((cMacBlock >> 15) * i) & 0xffff0000)
-            return ICERR_ERROR;
-    i *= cMacBlock * 2;
-    cb += i;
+    cb = memoryLayout.primaryAllocationBytes;
 
     pb = malloc(cb);
     if (NULL == pb)
@@ -557,10 +556,10 @@ Int ImageStrEncInit(
 
     // if interleaved alpha is needed
     if (pSC->m_param.bAlphaChannel) {
-        cbMacBlockStride = cbChannel * 16 * 16;
+        cbMacBlockStride = memoryLayout.fullResolutionMacroblockBytes;
         // 1. allocate new pNextSC info
         //================================================
-        cb = sizeof(*pNextSC) + (128 - 1) + cbMacBlockStride * cMacBlock * 2;
+        cb = memoryLayout.secondaryAllocationBytes;
         pb = malloc(cb);
         if (NULL == pb)
         {
