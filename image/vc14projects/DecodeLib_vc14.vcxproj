@@ -214,6 +214,7 @@
     <ClCompile Include="..\decode\JxrHeaderDecodePipeline.c" />
     <ClCompile Include="..\decode\JxrDecoderInitializationPipeline.c" />
     <ClCompile Include="..\decode\JxrDecoderOutputPipeline.c" />
+    <ClCompile Include="..\decode\JxrDecoderTransformPipeline.c" />
     <ClCompile Include="..\decode\JxrSecondaryPlaneInitializer.c" />
     <ClCompile Include="..\decode\JxrPredictionMath.c" />
     <ClCompile Include="..\decode\JxrInverseTransformMath.c" />

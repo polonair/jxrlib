@@ -399,7 +399,9 @@ typedef struct CWMImageStrCodec {
     //================================
     ImageDataProc Load;
     //ImageDataProc Load2;
-    ImageDataProc Transform;
+    Bool m_bDecoderUseAlternateTransform;
+    Bool m_bDecoderUseCenterTransform;
+    /* Optional x86-only override for interior decoder macroblocks. */
     ImageDataProc TransformCenter;
 
     //================================

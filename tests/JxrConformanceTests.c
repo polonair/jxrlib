@@ -65,6 +65,7 @@
 #include "JxrBitMath.h"
 #include "JxrDecoderFormatState.h"
 #include "../image/decode/JxrDecoderOutputPipeline.h"
+#include "../image/decode/JxrDecoderTransformPipeline.h"
 #include "JxrDecoderSubbandContext.h"
 #include "JxrHpCoefficientBlockResolver.h"
 #include "JxrMacroblockRegionState.h"
@@ -1047,6 +1048,23 @@ static int test_decoder_output_pipeline_plan_vectors(void)
 
     JxrDecoderOutputPipelinePlanInitialize(&plan, TRUE);
     return plan.usesLegacyLoadCallback;
+}
+
+static int test_decoder_transform_pipeline_state_vectors(void)
+{
+    CWMImageStrCodec codec;
+    memset(&codec, 0, sizeof(codec));
+
+    JxrDecoderTransformPipelineInitialize(&codec, FALSE);
+    if (codec.m_bDecoderUseAlternateTransform || codec.m_bDecoderUseCenterTransform ||
+        codec.TransformCenter != NULL) return 0;
+
+    JxrDecoderTransformPipelineSetCenterMacroblock(&codec, TRUE);
+    if (!codec.m_bDecoderUseCenterTransform) return 0;
+
+    JxrDecoderTransformPipelineInitialize(&codec, TRUE);
+    return codec.m_bDecoderUseAlternateTransform && !codec.m_bDecoderUseCenterTransform &&
+        codec.TransformCenter == NULL;
 }
 
 typedef struct JxrSecondaryPlaneInitializerTestContext {
@@ -4585,6 +4603,7 @@ int main(int argc, char** argv)
         { "header_decode_pipeline_vectors", test_header_decode_pipeline_vectors },
         { "decoder_initialization_pipeline_vectors", test_decoder_initialization_pipeline_vectors },
         { "decoder_output_pipeline_plan_vectors", test_decoder_output_pipeline_plan_vectors },
+        { "decoder_transform_pipeline_state_vectors", test_decoder_transform_pipeline_state_vectors },
         { "secondary_plane_initializer_vectors", test_secondary_plane_initializer_vectors },
         { "image_plane_descriptor_reader_vectors", test_image_plane_descriptor_reader_vectors },
         { "image_plane_quantizer_header_reader_vectors", test_image_plane_quantizer_header_reader_vectors },

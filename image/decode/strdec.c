@@ -41,6 +41,7 @@
 #include "JxrHeaderDecodePipeline.h"
 #include "JxrDecoderInitializationPipeline.h"
 #include "JxrDecoderOutputPipeline.h"
+#include "JxrDecoderTransformPipeline.h"
 #include "JxrSecondaryPlaneInitializer.h"
 #include "JxrDecoderDcQuantizerHeaderApplier.h"
 #include "JxrDecoderLpQuantizerHeaderApplier.h"
@@ -364,7 +365,7 @@ Int processMacroblockDec(CWMImageStrCodec * pSC)
 
         if (JxrMacroblockRegionStateShouldTransform(&region,
             pSC->m_Dparam->bDecodeFullFrame)) {
-            pSC->Transform(pSC);
+            JxrDecoderTransformPipelineApply(pSC);
             if (pSC->cColumn < pSC->cmbWidth && pSC->cRow < pSC->cmbHeight)
                 JXRTraceDumpStage("decoder", "reconstructed_samples", pSC, (Int)pSC->cColumn, (Int)pSC->cRow, JXRTraceOutput);
         }
@@ -2800,9 +2801,8 @@ static Void InitializeStrDec(CWMImageStrCodec *pSC,
 #if defined(WMP_OPT_SSE2) || defined(WMP_OPT_CC_DEC) || defined(WMP_OPT_TRFM_DEC)
     pSC->Load = outputMBRow; // compatibility fallback for optimized output
 #endif
-    pSC->Transform = pParams->cSubVersion == CODEC_SUBVERSION ?
-        invTransformMacroblock : invTransformMacroblock_alteredOperators_hard;
-    pSC->TransformCenter = pSC->Transform;
+    JxrDecoderTransformPipelineInitialize(pSC,
+        pParams->cSubVersion != CODEC_SUBVERSION);
 
     pSC->ProcessTopLeft = processMacroblockDec;
     pSC->ProcessTop = processMacroblockDec;
@@ -2990,7 +2990,7 @@ Int ImageStrDecDecode(
     size_t cMBRow, k;
 
     ImageDataProc ProcessLeft, ProcessCenter, ProcessRight;
-    ImageDataProc Transform = NULL;
+    Bool useCenterTransform = FALSE;
     JxrDecoderOutputPipelinePlan outputPipeline;
     const size_t iChromaElements = (pSC->m_param.cfColorFormat == YUV_420) ? 8 * 8 
         : ((pSC->m_param.cfColorFormat == YUV_422) ? 8 * 16 : 16 * 16);
@@ -3067,8 +3067,9 @@ Int ImageStrDecDecode(
     ProcessLeft = pSC->ProcessTopLeft;
     ProcessCenter = pSC->ProcessTop;
     ProcessRight = pSC->ProcessTopRight;
-    Transform = pSC->m_param.cSubVersion == CODEC_SUBVERSION ?
-        invTransformMacroblock : invTransformMacroblock_alteredOperators_hard;
+
+    useCenterTransform = FALSE;
+
 #endif // REENTRANT_MODE
 
 #ifdef REENTRANT_MODE
@@ -3081,8 +3082,7 @@ Int ImageStrDecDecode(
             ProcessLeft = pSC->ProcessTopLeft;
             ProcessCenter = pSC->ProcessTop;
             ProcessRight = pSC->ProcessTopRight;
-            Transform = pSC->m_param.cSubVersion == CODEC_SUBVERSION ?
-                invTransformMacroblock : invTransformMacroblock_alteredOperators_hard;
+            useCenterTransform = FALSE;
         }
         else if (cMBRow == pSC->cRow)
         {
@@ -3091,14 +3091,13 @@ Int ImageStrDecDecode(
             ProcessLeft = pSC->ProcessBottomLeft;
             ProcessCenter = pSC->ProcessBottom;
             ProcessRight = pSC->ProcessBottomRight;
-            Transform = pSC->m_param.cSubVersion == CODEC_SUBVERSION ?
-                invTransformMacroblock : invTransformMacroblock_alteredOperators_hard;
+            useCenterTransform = FALSE;
         }
         else { // middle rows
             ProcessLeft = pSC->ProcessLeft;
             ProcessCenter = pSC->ProcessCenter;
             ProcessRight = pSC->ProcessRight;
-            Transform = pSC->TransformCenter;
+            useCenterTransform = TRUE;
         }
 #else
     //================================
@@ -3121,15 +3120,16 @@ Int ImageStrDecDecode(
             return ICERR_ERROR;
         advanceMRPtr(pSC);
 
-        pSC->Transform = Transform;
+        JxrDecoderTransformPipelineSetCenterMacroblock(pSC, useCenterTransform);
         for (pSC->cColumn = 1; pSC->cColumn < pSC->cmbWidth; ++pSC->cColumn)
         {
             if(ProcessCenter(pSC) != ICERR_OK)
                 return ICERR_ERROR;
             advanceMRPtr(pSC);
         }
-        pSC->Transform = pSC->m_param.cSubVersion == CODEC_SUBVERSION ?
-            invTransformMacroblock : invTransformMacroblock_alteredOperators_hard;
+
+        JxrDecoderTransformPipelineSetCenterMacroblock(pSC, FALSE);
+
 
         if(ProcessRight(pSC) != ICERR_OK)
             return ICERR_ERROR;
@@ -3160,14 +3160,13 @@ Int ImageStrDecDecode(
             ProcessLeft = pSC->ProcessBottomLeft;
             ProcessCenter = pSC->ProcessBottom;
             ProcessRight = pSC->ProcessBottomRight;
-            Transform = pSC->m_param.cSubVersion == CODEC_SUBVERSION ?
-                invTransformMacroblock : invTransformMacroblock_alteredOperators_hard;
+            useCenterTransform = FALSE;
         }
         else {
             ProcessLeft = pSC->ProcessLeft;
             ProcessCenter = pSC->ProcessCenter;
             ProcessRight = pSC->ProcessRight;
-            Transform = pSC->TransformCenter;
+            useCenterTransform = TRUE;
         }
 #endif // REENTRANT_MODE
     }
