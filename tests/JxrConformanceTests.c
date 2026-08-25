@@ -41,6 +41,7 @@
 #include "../image/encode/JxrEncoderResourceRelease.h"
 #include "../image/encode/JxrEncoderMemoryLayoutPlan.h"
 #include "../image/encode/JxrEncoderBufferRegionLayout.h"
+#include "../image/encode/JxrEncoderProcessingPipeline.h"
 #include "encode.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
@@ -3983,6 +3984,17 @@ static int test_encoder_buffer_region_layout_vectors(void)
         regions.headerBitIoOffset == expectedHeaderOffset - 16;
 }
 
+static int test_encoder_processing_pipeline_plan_vectors(void)
+{
+    JxrEncoderProcessingPipelinePlan plan;
+
+    JxrEncoderProcessingPipelinePlanInitialize(&plan, FALSE);
+    if (plan.usesLegacyLoadCallback) return 0;
+
+    JxrEncoderProcessingPipelinePlanInitialize(&plan, TRUE);
+    return plan.usesLegacyLoadCallback;
+}
+
 static int test_forward_full_resolution_plane_vectors(void)
 {
     PixelI samples[1408];
@@ -4656,6 +4668,7 @@ int main(int argc, char** argv)
         { "encoder_resource_release_plan_vectors", test_encoder_resource_release_plan_vectors },
         { "encoder_memory_layout_plan_vectors", test_encoder_memory_layout_plan_vectors },
         { "encoder_buffer_region_layout_vectors", test_encoder_buffer_region_layout_vectors },
+        { "encoder_processing_pipeline_plan_vectors", test_encoder_processing_pipeline_plan_vectors },
         { "forward_full_resolution_plane_vectors", test_forward_full_resolution_plane_vectors },
         { "forward_chroma_420_plane_vectors", test_forward_chroma_420_plane_vectors },
         { "forward_chroma_422_plane_vectors", test_forward_chroma_422_plane_vectors },

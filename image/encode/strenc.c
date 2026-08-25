@@ -53,6 +53,7 @@
 #include "JxrEncoderResourceRelease.h"
 #include "JxrEncoderMemoryLayoutPlan.h"
 #include "JxrEncoderBufferRegionLayout.h"
+#include "JxrEncoderProcessingPipeline.h"
 #include <math.h>
 #include "perfTimer.h"
 
@@ -448,7 +449,9 @@ static Void InitializeStrEnc(CWMImageStrCodec *pSC,
     pSC->cmbWidth = (pSC->WMII.cWidth + 15) / 16;
     pSC->cmbHeight = (pSC->WMII.cHeight + 15) / 16;
 
+#if defined(WMP_OPT_SSE2) || defined(WMP_OPT_CC_ENC) || defined(WMP_OPT_TRFM_ENC)
     pSC->Load = JxrEncoderInputRowProcessorProcess;
+#endif
     pSC->Quantize = quantizeMacroblock;
     pSC->ProcessTopLeft = processMacroblock;
     pSC->ProcessTop = processMacroblock;
@@ -623,6 +626,13 @@ Int ImageStrEncEncode(
     JXRTraceDumpCodecState("encoder", pSC);
     CWMImageStrCodec* pNextSC = pSC->m_pNextSC;
     ImageDataProc ProcessLeft, ProcessCenter, ProcessRight;
+    JxrEncoderProcessingPipelinePlan processingPipeline;
+
+#if defined(WMP_OPT_SSE2) || defined(WMP_OPT_CC_ENC) || defined(WMP_OPT_TRFM_ENC)
+    JxrEncoderProcessingPipelinePlanInitialize(&processingPipeline, TRUE);
+#else
+    JxrEncoderProcessingPipelinePlanInitialize(&processingPipeline, FALSE);
+#endif
 
     if (sizeof(*pSC) != pSC->cbStruct)
     {
@@ -649,8 +659,12 @@ Int ImageStrEncEncode(
         ProcessRight = pSC->ProcessRight;
     }
 
-    if( pSC->Load(pSC) != ICERR_OK )
-		return ICERR_ERROR;
+    if (processingPipeline.usesLegacyLoadCallback) {
+        if (pSC->Load(pSC) != ICERR_OK)
+            return ICERR_ERROR;
+    }
+    else if (JxrEncoderProcessingPipelineLoadInput(pSC) != ICERR_OK)
+        return ICERR_ERROR;
     JXRTraceDumpStage("encoder", "centered_samples", pSC, 0, (Int)pSC->cRow, JXRTraceSamples);
     if(ProcessLeft(pSC) != ICERR_OK)
         return ICERR_ERROR;
