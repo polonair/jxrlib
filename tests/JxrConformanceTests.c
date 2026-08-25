@@ -64,6 +64,7 @@
 #include "JxrPacketExecutor.h"
 #include "JxrBitMath.h"
 #include "JxrDecoderFormatState.h"
+#include "../image/decode/JxrDecoderOutputPipeline.h"
 #include "JxrDecoderSubbandContext.h"
 #include "JxrHpCoefficientBlockResolver.h"
 #include "JxrMacroblockRegionState.h"
@@ -1035,6 +1036,17 @@ static int test_decoder_initialization_pipeline_vectors(void)
     JxrDecoderInitializationPipelineInit(&pipeline, NULL, NULL,
         initialize_pipeline_test_io, initialize_pipeline_test_decoder);
     return JxrDecoderInitializationPipelineRun(&pipeline) == ICERR_ERROR;
+}
+
+static int test_decoder_output_pipeline_plan_vectors(void)
+{
+    JxrDecoderOutputPipelinePlan plan;
+
+    JxrDecoderOutputPipelinePlanInitialize(&plan, FALSE);
+    if (plan.usesLegacyLoadCallback) return 0;
+
+    JxrDecoderOutputPipelinePlanInitialize(&plan, TRUE);
+    return plan.usesLegacyLoadCallback;
 }
 
 typedef struct JxrSecondaryPlaneInitializerTestContext {
@@ -4572,6 +4584,7 @@ int main(int argc, char** argv)
         { "header_metadata_finalizer_vectors", test_header_metadata_finalizer_vectors },
         { "header_decode_pipeline_vectors", test_header_decode_pipeline_vectors },
         { "decoder_initialization_pipeline_vectors", test_decoder_initialization_pipeline_vectors },
+        { "decoder_output_pipeline_plan_vectors", test_decoder_output_pipeline_plan_vectors },
         { "secondary_plane_initializer_vectors", test_secondary_plane_initializer_vectors },
         { "image_plane_descriptor_reader_vectors", test_image_plane_descriptor_reader_vectors },
         { "image_plane_quantizer_header_reader_vectors", test_image_plane_quantizer_header_reader_vectors },

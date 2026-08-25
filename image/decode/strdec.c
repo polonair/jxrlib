@@ -40,6 +40,7 @@
 #include "JxrHeaderMetadataFinalizer.h"
 #include "JxrHeaderDecodePipeline.h"
 #include "JxrDecoderInitializationPipeline.h"
+#include "JxrDecoderOutputPipeline.h"
 #include "JxrSecondaryPlaneInitializer.h"
 #include "JxrDecoderDcQuantizerHeaderApplier.h"
 #include "JxrDecoderLpQuantizerHeaderApplier.h"
@@ -2796,7 +2797,9 @@ static Void InitializeStrDec(CWMImageStrCodec *pSC,
     pSC->cmbWidth = (pSC->WMII.cWidth + 15) / 16;
     pSC->cmbHeight = (pSC->WMII.cHeight + 15) / 16;
 
-    pSC->Load = outputMBRow; // output decoding result (ICC, etc)
+#if defined(WMP_OPT_SSE2) || defined(WMP_OPT_CC_DEC) || defined(WMP_OPT_TRFM_DEC)
+    pSC->Load = outputMBRow; // compatibility fallback for optimized output
+#endif
     pSC->Transform = pParams->cSubVersion == CODEC_SUBVERSION ?
         invTransformMacroblock : invTransformMacroblock_alteredOperators_hard;
     pSC->TransformCenter = pSC->Transform;
@@ -2988,6 +2991,7 @@ Int ImageStrDecDecode(
 
     ImageDataProc ProcessLeft, ProcessCenter, ProcessRight;
     ImageDataProc Transform = NULL;
+    JxrDecoderOutputPipelinePlan outputPipeline;
     const size_t iChromaElements = (pSC->m_param.cfColorFormat == YUV_420) ? 8 * 8 
         : ((pSC->m_param.cfColorFormat == YUV_422) ? 8 * 16 : 16 * 16);
 
@@ -3021,6 +3025,9 @@ Int ImageStrDecDecode(
 // optimization flags can be defined only after ROI is set!
 #if defined(WMP_OPT_SSE2) || defined(WMP_OPT_CC_DEC) || defined(WMP_OPT_TRFM_DEC)
     StrDecOpt(pSC);
+    JxrDecoderOutputPipelinePlanInitialize(&outputPipeline, TRUE);
+#else
+    JxrDecoderOutputPipelinePlanInitialize(&outputPipeline, FALSE);
 #endif // OPT defined
 
 
@@ -3130,8 +3137,12 @@ Int ImageStrDecDecode(
         if (pSC->cRow) {
             if(pSC->m_Dparam->cThumbnailScale < 2 && (pSC->m_Dparam->bDecodeFullFrame || 
                 ((pSC->cRow * 16 > pSC->m_Dparam->cROITopY) && (pSC->cRow * 16 <= pSC->m_Dparam->cROIBottomY + 16)))) {
-                if( pSC->Load(pSC) != ICERR_OK ) // bypass CC for thumbnail decode
-            		return ICERR_ERROR;
+                if (outputPipeline.usesLegacyLoadCallback) {
+                    if (pSC->Load(pSC) != ICERR_OK)
+                        return ICERR_ERROR;
+                }
+                else if (JxrDecoderOutputPipelineWriteStandardRow(pSC) != ICERR_OK)
+                    return ICERR_ERROR;
             }
 
             if(pSC->m_Dparam->cThumbnailScale >= 2) // decode thumbnail
