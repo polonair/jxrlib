@@ -10,5 +10,6 @@ typedef struct JxrDecoderOutputPipelinePlan {
 Void JxrDecoderOutputPipelinePlanInitialize(JxrDecoderOutputPipelinePlan* plan,
     Bool hasOptimizedLoadOverride);
 Int JxrDecoderOutputPipelineWriteStandardRow(CWMImageStrCodec* codec);
+Int JxrDecoderOutputPipelineWriteThumbnailRow(CWMImageStrCodec* codec);
 
 #endif
