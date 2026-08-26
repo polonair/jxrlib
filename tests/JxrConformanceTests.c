@@ -68,6 +68,7 @@
 #include "../image/decode/JxrDecoderMemoryLayoutPlan.h"
 #include "../image/decode/JxrDecoderPrimaryPlaneFactory.h"
 #include "../image/decode/JxrSecondaryPlaneBufferRegionLayout.h"
+#include "../image/decode/JxrSecondaryPlaneFactory.h"
 #include "../image/decode/JxrSecondaryPlaneMemoryLayoutPlan.h"
 #include "../image/decode/JxrDecoderOutputPipeline.h"
 #include "../image/decode/JxrDecoderTransformPipeline.h"
@@ -1095,11 +1096,11 @@ static int test_secondary_plane_initializer_vectors(void)
         secondaryCodec->a0MBbuffer[0] == NULL || secondaryCodec->a1MBbuffer[0] == NULL ||
         secondaryCodec->pIOHeader != &headerBitIO || secondaryCodec->m_pNextSC != &primaryCodec ||
         !secondaryCodec->m_bSecondary) {
-        if (secondaryCodec != NULL) free(secondaryCodec);
+        JxrSecondaryPlaneFactoryRelease(secondaryCodec);
         CloseWS_Memory(&stream);
         return 0;
     }
-    free(secondaryCodec);
+    JxrSecondaryPlaneFactoryRelease(secondaryCodec);
     secondaryCodec = NULL;
     JxrSecondaryPlaneInitializerInit(&initializer, NULL, &parameters, &templateCodec, 2, 2);
     return JxrSecondaryPlaneInitializerRun(&initializer, &secondaryCodec) == ICERR_ERROR &&
@@ -4055,6 +4056,32 @@ static int test_secondary_plane_buffer_region_layout_vectors(void)
     return regions.macroblockBufferOffset == 112 && regions.allocationUsedBytes == 2160;
 }
 
+static int test_secondary_plane_factory_vectors(void)
+{
+    CWMImageStrCodec templateCodec;
+    CCoreParameters parameters;
+    CWMImageStrCodec* codec = NULL;
+
+    memset(&templateCodec, 0, sizeof(templateCodec));
+    memset(&parameters, 0, sizeof(parameters));
+    templateCodec.WMII.cWidth = 32;
+    templateCodec.WMII.cHeight = 16;
+    parameters.cNumChannels = 1;
+    parameters.cSubVersion = CODEC_SUBVERSION;
+    if (JxrSecondaryPlaneFactoryCreate(&parameters, &templateCodec, 2, 2, &codec) !=
+        ICERR_OK || codec == NULL || codec->cmbWidth != 2 || codec->cmbHeight != 1 ||
+        codec->m_param.cNumChannels != 1 || codec->a0MBbuffer[0] == NULL ||
+        codec->a1MBbuffer[0] == NULL || codec->m_bSecondary) {
+        JxrSecondaryPlaneFactoryRelease(codec);
+        return 0;
+    }
+    JxrSecondaryPlaneFactoryRelease(codec);
+
+    codec = (CWMImageStrCodec*)1;
+    return JxrSecondaryPlaneFactoryCreate(NULL, &templateCodec, 2, 2, &codec) ==
+        ICERR_ERROR && codec == NULL;
+}
+
 static int test_encoder_buffer_region_layout_vectors(void)
 {
     JxrEncoderMemoryLayoutPlan memoryLayout;
@@ -4764,6 +4791,7 @@ int main(int argc, char** argv)
         { "decoder_primary_plane_factory_vectors", test_decoder_primary_plane_factory_vectors },
         { "secondary_plane_memory_layout_plan_vectors", test_secondary_plane_memory_layout_plan_vectors },
         { "secondary_plane_buffer_region_layout_vectors", test_secondary_plane_buffer_region_layout_vectors },
+        { "secondary_plane_factory_vectors", test_secondary_plane_factory_vectors },
         { "encoder_buffer_region_layout_vectors", test_encoder_buffer_region_layout_vectors },
         { "encoder_processing_pipeline_plan_vectors", test_encoder_processing_pipeline_plan_vectors },
         { "forward_full_resolution_plane_vectors", test_forward_full_resolution_plane_vectors },
