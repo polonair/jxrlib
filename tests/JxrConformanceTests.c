@@ -64,6 +64,7 @@
 #include "JxrPacketExecutor.h"
 #include "JxrBitMath.h"
 #include "JxrDecoderFormatState.h"
+#include "../image/decode/JxrDecoderMemoryLayoutPlan.h"
 #include "../image/decode/JxrDecoderOutputPipeline.h"
 #include "../image/decode/JxrDecoderTransformPipeline.h"
 #include "JxrDecoderSubbandContext.h"
@@ -3959,6 +3960,30 @@ static int test_encoder_memory_layout_plan_vectors(void)
     return !plan.allocationIsSafe;
 }
 
+static int test_decoder_memory_layout_plan_vectors(void)
+{
+    JxrDecoderMemoryLayoutPlan plan;
+    size_t expectedPrefix;
+
+    JxrDecoderMemoryLayoutPlanInitialize(&plan, BD_LONG, YUV_420, 3, 17,
+        sizeof(CWMImageStrCodec), sizeof(CWMDecoderParameters), sizeof(BitIOInfo), FALSE);
+    expectedPrefix = sizeof(CWMImageStrCodec) + (128 - 1) +
+        sizeof(CWMDecoderParameters) + (PACKETLENGTH * 4 - 1) +
+        (PACKETLENGTH * 2) + sizeof(BitIOInfo);
+    if (!plan.allocationIsSafe || plan.channelBytes != 4 ||
+        plan.chromaBlockCount != 4 || plan.macroblockCount != 2 ||
+        plan.fullResolutionMacroblockBytes != 1024 ||
+        plan.chromaMacroblockBytes != 256 ||
+        plan.primaryMacroblockRowBytes != 1536 ||
+        plan.primaryMacroblockBufferBytes != 6144 ||
+        plan.allocationBytes != expectedPrefix + 6144) return 0;
+
+    JxrDecoderMemoryLayoutPlanInitialize(&plan, BD_LONG, YUV_444,
+        MAX_CHANNELS, 0x00100000, sizeof(CWMImageStrCodec), sizeof(CWMDecoderParameters),
+        sizeof(BitIOInfo), TRUE);
+    return !plan.allocationIsSafe;
+}
+
 static int test_encoder_buffer_region_layout_vectors(void)
 {
     JxrEncoderMemoryLayoutPlan memoryLayout;
@@ -4662,6 +4687,7 @@ int main(int argc, char** argv)
         { "encoder_input_row_plan_vectors", test_encoder_input_row_plan_vectors },
         { "encoder_resource_release_plan_vectors", test_encoder_resource_release_plan_vectors },
         { "encoder_memory_layout_plan_vectors", test_encoder_memory_layout_plan_vectors },
+        { "decoder_memory_layout_plan_vectors", test_decoder_memory_layout_plan_vectors },
         { "encoder_buffer_region_layout_vectors", test_encoder_buffer_region_layout_vectors },
         { "encoder_processing_pipeline_plan_vectors", test_encoder_processing_pipeline_plan_vectors },
         { "forward_full_resolution_plane_vectors", test_forward_full_resolution_plane_vectors },

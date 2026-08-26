@@ -41,6 +41,7 @@
 #include "JxrHeaderDecodePipeline.h"
 #include "JxrDecoderInitializationPipeline.h"
 #include "JxrDecoderInputInitializer.h"
+#include "JxrDecoderMemoryLayoutPlan.h"
 #include "JxrDecoderResourceInitializer.h"
 #include "JxrDecoderOutputPipeline.h"
 #include "JxrDecoderTransformPipeline.h"
@@ -248,14 +249,13 @@ Int ImageStrDecInit(
     CWMIStrCodecParam *pSCP,
     CTXSTRCODEC* pctxSC)
 {
-    static size_t cbChannels[BD_MAX] = {2, 4};
-    size_t cbChannel = 0, cblkChroma = 0;
+    JxrDecoderMemoryLayoutPlan memoryLayout;
     size_t cbMacBlockStride = 0, cbMacBlockChroma = 0, cMacBlock = 0;
 
     CWMImageStrCodec SC = {0};
     CWMImageStrCodec *pSC = NULL, *pNextSC = NULL;
     char* pb = NULL;
-    size_t cb = 0, i;
+    size_t i;
     Bool bLossyTranscoding = FALSE;
     Bool bUseHardTileBoundaries = FALSE; //default is soft tile boundaries
     Bool bLessThan64Bit = sizeof(void *) < 8;
@@ -291,28 +291,24 @@ Int ImageStrDecInit(
     pII->cROITopY += SC.m_param.cExtraPixelsTop;
     
     //================================================
-    cbChannel = cbChannels[SC.WMISCP.bdBitDepth];
-    cblkChroma = cblkChromas[SC.m_param.cfColorFormat];
-
-    cbMacBlockStride = cbChannel * 16 * 16;
-    cbMacBlockChroma = cbChannel * 16 * cblkChroma;
-    cMacBlock = (SC.WMII.cWidth + 15) / 16;
+    JxrDecoderMemoryLayoutPlanInitialize(&memoryLayout,
+        SC.WMISCP.bdBitDepth, SC.m_param.cfColorFormat, SC.m_param.cNumChannels,
+        SC.WMII.cWidth, sizeof(*pSC), sizeof(CWMDecoderParameters), sizeof(BitIOInfo),
+        bLessThan64Bit);
+    cbMacBlockStride = memoryLayout.fullResolutionMacroblockBytes;
+    cbMacBlockChroma = memoryLayout.chromaMacroblockBytes;
+    cMacBlock = memoryLayout.macroblockCount;
 
     //================================================
-    cb = sizeof(*pSC) + (128 - 1) + sizeof(CWMDecoderParameters);
-    cb += (PACKETLENGTH * 4 - 1) + (PACKETLENGTH * 2 ) + sizeof(*pSC->pIOHeader);
-
-    i = (cbMacBlockStride + cbMacBlockChroma * (SC.m_param.cNumChannels - 1)) * 2; // i <= 2^15
-    if (bLessThan64Bit && ((i * (cMacBlock >> 16)) & 0xffffc000)) {
+    if (!memoryLayout.allocationIsSafe) {
         /** potential overflow - 32 bit pointers insufficient to address cache **/
         return ICERR_ERROR;
     }
-    cb += i * cMacBlock;
 
-    pb = malloc(cb);
+    pb = malloc(memoryLayout.allocationBytes);
     if(pb == NULL)
         return WMP_errOutOfMemory;
-    memset(pb, 0, cb);
+    memset(pb, 0, memoryLayout.allocationBytes);
 
     //================================================
     pSC = (CWMImageStrCodec*)pb; pb += sizeof(*pSC);
@@ -328,7 +324,7 @@ Int ImageStrDecInit(
     PERFTIMER_COPYSTARTTIME(pSC->m_fMeasurePerf, pSC->m_ptEncDecPerf, pSC->m_ptEndToEndPerf);
 
     pSC->m_Dparam = (CWMDecoderParameters*)pb; pb += sizeof(CWMDecoderParameters);
-    pSC->cbChannel = cbChannel;
+    pSC->cbChannel = memoryLayout.channelBytes;
     //pSC->cNumChannels = SC.WMISCP.cChannel;
     pSC->bUseHardTileBoundaries = bUseHardTileBoundaries;
 
@@ -354,7 +350,7 @@ Int ImageStrDecInit(
         JxrSecondaryPlaneInitializer secondaryInitializer;
         Int secondaryResult;
         JxrSecondaryPlaneInitializerInit(&secondaryInitializer, pSC, &SC.m_param, &SC,
-            cbChannel, cMacBlock, JxrLegacySecondaryPlaneInitializeCodec,
+            memoryLayout.channelBytes, cMacBlock, JxrLegacySecondaryPlaneInitializeCodec,
             JxrLegacySecondaryPlaneReadHeader);
         secondaryResult = JxrSecondaryPlaneInitializerRun(&secondaryInitializer, &pNextSC);
         if (secondaryResult != ICERR_OK)
