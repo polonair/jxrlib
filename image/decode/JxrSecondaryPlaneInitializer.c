@@ -1,20 +1,18 @@
 #include "JxrSecondaryPlaneInitializer.h"
+#include "JxrDecoderCodecStateInitializer.h"
+#include "JxrHeaderDecodePipeline.h"
 #include <stdlib.h>
 #include <string.h>
 
 Void JxrSecondaryPlaneInitializerInit(JxrSecondaryPlaneInitializer* initializer,
     CWMImageStrCodec* primaryCodec, const CCoreParameters* templateParameters,
-    const CWMImageStrCodec* templateCodec, size_t channelBytes, size_t macroblockCount,
-    JxrSecondaryPlaneCodecInitializer initializeCodec,
-    JxrSecondaryPlaneHeaderReader readHeader)
+    const CWMImageStrCodec* templateCodec, size_t channelBytes, size_t macroblockCount)
 {
     initializer->primaryCodec = primaryCodec;
     initializer->templateParameters = templateParameters;
     initializer->templateCodec = templateCodec;
     initializer->channelBytes = channelBytes;
     initializer->macroblockCount = macroblockCount;
-    initializer->initializeCodec = initializeCodec;
-    initializer->readHeader = readHeader;
 }
 
 Int JxrSecondaryPlaneInitializerRun(JxrSecondaryPlaneInitializer* initializer,
@@ -31,7 +29,6 @@ Int JxrSecondaryPlaneInitializerRun(JxrSecondaryPlaneInitializer* initializer,
     if (secondaryCodec != NULL) *secondaryCodec = NULL;
     if (initializer == NULL || secondaryCodec == NULL || initializer->primaryCodec == NULL ||
         initializer->templateParameters == NULL || initializer->templateCodec == NULL ||
-        initializer->initializeCodec == NULL || initializer->readHeader == NULL ||
         initializer->primaryCodec->WMISCP.pWStream == NULL) return ICERR_ERROR;
     macroblockStride = initializer->channelBytes * 16 * 16;
     allocationSize = sizeof(*secondary) + 127 + macroblockStride *
@@ -41,7 +38,7 @@ Int JxrSecondaryPlaneInitializerRun(JxrSecondaryPlaneInitializer* initializer,
     memset(storage, 0, allocationSize);
     secondary = (CWMImageStrCodec*)storage;
     cursor = storage + sizeof(*secondary);
-    initializer->initializeCodec(secondary, initializer->templateParameters,
+    JxrDecoderCodecStateInitializerInitialize(secondary, initializer->templateParameters,
         initializer->templateCodec);
     result = attach_SB(&bitInput, initializer->primaryCodec->WMISCP.pWStream);
     if (result != WMP_errSuccess) {
@@ -49,8 +46,8 @@ Int JxrSecondaryPlaneInitializerRun(JxrSecondaryPlaneInitializer* initializer,
         return result;
     }
     isAttached = TRUE;
-    result = initializer->readHeader(&secondary->WMII, &secondary->WMISCP,
-        &secondary->m_param, &bitInput);
+    result = JxrHeaderDecodePipelineReadImagePlane(&secondary->WMII,
+        &secondary->WMISCP, &secondary->m_param, &bitInput) ? ICERR_OK : ICERR_ERROR;
     if (result == ICERR_OK) {
         result = detach_SB(&bitInput);
         isAttached = FALSE;

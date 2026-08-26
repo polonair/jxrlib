@@ -43,6 +43,7 @@
 #include "JxrDecoderInputInitializer.h"
 #include "JxrDecoderMemoryLayoutPlan.h"
 #include "JxrDecoderBufferRegionLayout.h"
+#include "JxrDecoderCodecStateInitializer.h"
 #include "JxrDecoderResourceInitializer.h"
 #include "JxrDecoderOutputPipeline.h"
 #include "JxrDecoderTransformPipeline.h"
@@ -201,48 +202,6 @@ EXTERN_C Int WMPhotoValidate(
 }
 
 /*************************************************************************
-  Initialization of CWMImageStrCodec struct
-*************************************************************************/
-static Void InitializeStrDec(CWMImageStrCodec *pSC,
-  const CCoreParameters *pParams, const CWMImageStrCodec *pSCIn)
-{
-    // copy core parameters
-    memcpy (&(pSC->m_param), pParams, sizeof (CCoreParameters));
-
-    pSC->cbStruct = sizeof(*pSC);
-    pSC->WMII = pSCIn->WMII;
-    pSC->WMISCP = pSCIn->WMISCP;
-
-    pSC->cRow = 0;
-    pSC->cColumn = 0;
-    
-    pSC->cmbWidth = (pSC->WMII.cWidth + 15) / 16;
-    pSC->cmbHeight = (pSC->WMII.cHeight + 15) / 16;
-
-#if defined(WMP_OPT_SSE2) || defined(WMP_OPT_CC_DEC) || defined(WMP_OPT_TRFM_DEC)
-    pSC->Load = JxrDecoderOutputPipelineWriteStandardRow; // compatibility fallback for optimized output
-#endif
-    JxrDecoderTransformPipelineInitialize(pSC,
-        pParams->cSubVersion != CODEC_SUBVERSION);
-
-
-    pSC->m_pNextSC = NULL;
-    pSC->m_bSecondary = FALSE;
-}
-
-static Void JxrLegacySecondaryPlaneInitializeCodec(CWMImageStrCodec* codec,
-    const CCoreParameters* parameters, const CWMImageStrCodec* templateCodec)
-{
-    InitializeStrDec(codec, parameters, templateCodec);
-}
-
-static Int JxrLegacySecondaryPlaneReadHeader(CWMImageInfo* imageInfo,
-    CWMIStrCodecParam* codecParameters, CCoreParameters* coreParameters,
-    SimpleBitIO* bitInput)
-{
-    return ReadImagePlaneHeader(imageInfo, codecParameters, coreParameters, bitInput);
-}
-/*************************************************************************
   ImageStrDecInit
 *************************************************************************/
 Int ImageStrDecInit(
@@ -332,7 +291,7 @@ Int ImageStrDecInit(
     pSC->bUseHardTileBoundaries = bUseHardTileBoundaries;
 
     //================================================
-    InitializeStrDec(pSC, &SC.m_param, &SC);
+    JxrDecoderCodecStateInitializerInitialize(pSC, &SC.m_param, &SC);
 
     //================================================
     // Bind the primary plane buffers from their explicit allocation offsets.
@@ -344,8 +303,7 @@ Int ImageStrDecInit(
         JxrSecondaryPlaneInitializer secondaryInitializer;
         Int secondaryResult;
         JxrSecondaryPlaneInitializerInit(&secondaryInitializer, pSC, &SC.m_param, &SC,
-            memoryLayout.channelBytes, cMacBlock, JxrLegacySecondaryPlaneInitializeCodec,
-            JxrLegacySecondaryPlaneReadHeader);
+            memoryLayout.channelBytes, cMacBlock);
         secondaryResult = JxrSecondaryPlaneInitializerRun(&secondaryInitializer, &pNextSC);
         if (secondaryResult != ICERR_OK)
             return secondaryResult;
