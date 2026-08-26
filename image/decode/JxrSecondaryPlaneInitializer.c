@@ -1,6 +1,8 @@
 #include "JxrSecondaryPlaneInitializer.h"
 #include "JxrDecoderCodecStateInitializer.h"
 #include "JxrHeaderDecodePipeline.h"
+#include "JxrSecondaryPlaneMemoryLayoutPlan.h"
+#include "JxrSecondaryPlaneBufferRegionLayout.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -19,10 +21,9 @@ Int JxrSecondaryPlaneInitializerRun(JxrSecondaryPlaneInitializer* initializer,
     CWMImageStrCodec** secondaryCodec)
 {
     CWMImageStrCodec* secondary;
-    char* storage;
-    char* cursor;
-    size_t macroblockStride;
-    size_t allocationSize;
+    U8* storage;
+    JxrSecondaryPlaneMemoryLayoutPlan memoryLayout;
+    JxrSecondaryPlaneBufferRegionLayout bufferLayout;
     Bool isAttached = FALSE;
     Int result;
     SimpleBitIO bitInput = {0};
@@ -30,14 +31,14 @@ Int JxrSecondaryPlaneInitializerRun(JxrSecondaryPlaneInitializer* initializer,
     if (initializer == NULL || secondaryCodec == NULL || initializer->primaryCodec == NULL ||
         initializer->templateParameters == NULL || initializer->templateCodec == NULL ||
         initializer->primaryCodec->WMISCP.pWStream == NULL) return ICERR_ERROR;
-    macroblockStride = initializer->channelBytes * 16 * 16;
-    allocationSize = sizeof(*secondary) + 127 + macroblockStride *
-        initializer->macroblockCount * 2;
-    storage = (char*)malloc(allocationSize);
+    JxrSecondaryPlaneMemoryLayoutPlanInitialize(&memoryLayout,
+        initializer->channelBytes, initializer->macroblockCount, sizeof(*secondary));
+    storage = (U8*)malloc(memoryLayout.allocationBytes);
     if (storage == NULL) return WMP_errOutOfMemory;
-    memset(storage, 0, allocationSize);
+    memset(storage, 0, memoryLayout.allocationBytes);
+    JxrSecondaryPlaneBufferRegionLayoutInitialize(&bufferLayout, (UINTPTR_T)storage,
+        sizeof(*secondary), &memoryLayout);
     secondary = (CWMImageStrCodec*)storage;
-    cursor = storage + sizeof(*secondary);
     JxrDecoderCodecStateInitializerInitialize(secondary, initializer->templateParameters,
         initializer->templateCodec);
     result = attach_SB(&bitInput, initializer->primaryCodec->WMISCP.pWStream);
@@ -65,10 +66,8 @@ Int JxrSecondaryPlaneInitializerRun(JxrSecondaryPlaneInitializer* initializer,
     secondary->m_param.cfColorFormat = Y_ONLY;
     secondary->m_param.cNumChannels = 1;
     secondary->m_param.bAlphaChannel = TRUE;
-    cursor = (char*)ALIGNUP(cursor, 128);
-    secondary->a0MBbuffer[0] = (PixelI*)cursor;
-    cursor += macroblockStride * secondary->cmbWidth;
-    secondary->a1MBbuffer[0] = (PixelI*)cursor;
+    JxrSecondaryPlaneBufferRegionLayoutBind(secondary, storage, &bufferLayout,
+        memoryLayout.macroblockStride);
     secondary->pIOHeader = initializer->primaryCodec->pIOHeader;
     secondary->m_pNextSC = initializer->primaryCodec;
     secondary->m_bSecondary = TRUE;

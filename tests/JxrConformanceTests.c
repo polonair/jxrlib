@@ -66,6 +66,8 @@
 #include "JxrDecoderFormatState.h"
 #include "../image/decode/JxrDecoderBufferRegionLayout.h"
 #include "../image/decode/JxrDecoderMemoryLayoutPlan.h"
+#include "../image/decode/JxrSecondaryPlaneBufferRegionLayout.h"
+#include "../image/decode/JxrSecondaryPlaneMemoryLayoutPlan.h"
 #include "../image/decode/JxrDecoderOutputPipeline.h"
 #include "../image/decode/JxrDecoderTransformPipeline.h"
 #include "JxrDecoderSubbandContext.h"
@@ -3995,6 +3997,29 @@ static int test_decoder_buffer_region_layout_vectors(void)
         regions.allocationUsedBytes == expectedHeaderOffset + 14;
 }
 
+static int test_secondary_plane_memory_layout_plan_vectors(void)
+{
+    JxrSecondaryPlaneMemoryLayoutPlan plan;
+
+    JxrSecondaryPlaneMemoryLayoutPlanInitialize(&plan, 2, 2, 100);
+    return plan.macroblockStride == 512 && plan.macroblockBufferBytes == 2048 &&
+        plan.allocationBytes == 2275;
+}
+
+static int test_secondary_plane_buffer_region_layout_vectors(void)
+{
+    JxrSecondaryPlaneMemoryLayoutPlan memoryLayout;
+    JxrSecondaryPlaneBufferRegionLayout regions;
+
+    JxrSecondaryPlaneMemoryLayoutPlanInitialize(&memoryLayout, 2, 2, 100);
+    JxrSecondaryPlaneBufferRegionLayoutInitialize(&regions, 0, 100, &memoryLayout);
+    if (regions.macroblockBufferOffset != 128 || regions.allocationUsedBytes != 2176)
+        return 0;
+
+    JxrSecondaryPlaneBufferRegionLayoutInitialize(&regions, 16, 100, &memoryLayout);
+    return regions.macroblockBufferOffset == 112 && regions.allocationUsedBytes == 2160;
+}
+
 static int test_encoder_buffer_region_layout_vectors(void)
 {
     JxrEncoderMemoryLayoutPlan memoryLayout;
@@ -4701,6 +4726,8 @@ int main(int argc, char** argv)
         { "encoder_memory_layout_plan_vectors", test_encoder_memory_layout_plan_vectors },
         { "decoder_memory_layout_plan_vectors", test_decoder_memory_layout_plan_vectors },
         { "decoder_buffer_region_layout_vectors", test_decoder_buffer_region_layout_vectors },
+        { "secondary_plane_memory_layout_plan_vectors", test_secondary_plane_memory_layout_plan_vectors },
+        { "secondary_plane_buffer_region_layout_vectors", test_secondary_plane_buffer_region_layout_vectors },
         { "encoder_buffer_region_layout_vectors", test_encoder_buffer_region_layout_vectors },
         { "encoder_processing_pipeline_plan_vectors", test_encoder_processing_pipeline_plan_vectors },
         { "forward_full_resolution_plane_vectors", test_forward_full_resolution_plane_vectors },

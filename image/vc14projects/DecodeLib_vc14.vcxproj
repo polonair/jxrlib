@@ -223,7 +223,9 @@
     <ClCompile Include="..\decode\JxrDecoderTransformPipeline.c" />
     <ClCompile Include="..\decode\JxrDecoderMacroblockProcessingPipeline.c" />
     <ClCompile Include="..\decode\JxrDecoderExecutionPipeline.c" />
+    <ClCompile Include="..\decode\JxrSecondaryPlaneBufferRegionLayout.c" />
     <ClCompile Include="..\decode\JxrSecondaryPlaneInitializer.c" />
+    <ClCompile Include="..\decode\JxrSecondaryPlaneMemoryLayoutPlan.c" />
     <ClCompile Include="..\decode\JxrPredictionMath.c" />
     <ClCompile Include="..\decode\JxrInverseTransformMath.c" />
     <ClCompile Include="..\decode\JxrInverseTransformStages.c" />
