@@ -42,8 +42,7 @@
 #include "JxrDecoderInitializationPipeline.h"
 #include "JxrDecoderInputInitializer.h"
 #include "JxrDecoderMemoryLayoutPlan.h"
-#include "JxrDecoderBufferRegionLayout.h"
-#include "JxrDecoderCodecStateInitializer.h"
+#include "JxrDecoderPrimaryPlaneFactory.h"
 #include "JxrDecoderResourceInitializer.h"
 #include "JxrDecoderOutputPipeline.h"
 #include "JxrDecoderTransformPipeline.h"
@@ -210,12 +209,10 @@ Int ImageStrDecInit(
     CTXSTRCODEC* pctxSC)
 {
     JxrDecoderMemoryLayoutPlan memoryLayout;
-    JxrDecoderBufferRegionLayout bufferLayout;
-    size_t cbMacBlockStride = 0, cbMacBlockChroma = 0, cMacBlock = 0;
+    size_t cMacBlock = 0;
 
     CWMImageStrCodec SC = {0};
     CWMImageStrCodec *pSC = NULL, *pNextSC = NULL;
-    char* pb = NULL;
 
     Bool bLossyTranscoding = FALSE;
     Bool bUseHardTileBoundaries = FALSE; //default is soft tile boundaries
@@ -256,8 +253,6 @@ Int ImageStrDecInit(
         SC.WMISCP.bdBitDepth, SC.m_param.cfColorFormat, SC.m_param.cNumChannels,
         SC.WMII.cWidth, sizeof(*pSC), sizeof(CWMDecoderParameters), sizeof(BitIOInfo),
         bLessThan64Bit);
-    cbMacBlockStride = memoryLayout.fullResolutionMacroblockBytes;
-    cbMacBlockChroma = memoryLayout.chromaMacroblockBytes;
     cMacBlock = memoryLayout.macroblockCount;
 
     //================================================
@@ -266,37 +261,12 @@ Int ImageStrDecInit(
         return ICERR_ERROR;
     }
 
-    pb = malloc(memoryLayout.allocationBytes);
-    if(pb == NULL)
-        return WMP_errOutOfMemory;
-    memset(pb, 0, memoryLayout.allocationBytes);
-
-    //================================================
-    JxrDecoderBufferRegionLayoutInitialize(&bufferLayout, (UINTPTR_T)pb,
-        sizeof(*pSC), sizeof(CWMDecoderParameters), sizeof(BitIOInfo), &memoryLayout);
-    pSC = (CWMImageStrCodec*)pb;
-    if(pSC == NULL)
-        return ICERR_ERROR;
-
-    // Set up perf timers
-    PERFTIMER_ONLY(pSC->m_fMeasurePerf = pSCP->fMeasurePerf);
-    PERFTIMER_NEW(pSC->m_fMeasurePerf, &pSC->m_ptEndToEndPerf);
-    PERFTIMER_NEW(pSC->m_fMeasurePerf, &pSC->m_ptEncDecPerf);
-    PERFTIMER_START(pSC->m_fMeasurePerf, pSC->m_ptEndToEndPerf);
-    PERFTIMER_START(pSC->m_fMeasurePerf, pSC->m_ptEncDecPerf);
-    PERFTIMER_COPYSTARTTIME(pSC->m_fMeasurePerf, pSC->m_ptEncDecPerf, pSC->m_ptEndToEndPerf);
-
-    pSC->cbChannel = memoryLayout.channelBytes;
-    //pSC->cNumChannels = SC.WMISCP.cChannel;
-    pSC->bUseHardTileBoundaries = bUseHardTileBoundaries;
-
-    //================================================
-    JxrDecoderCodecStateInitializerInitialize(pSC, &SC.m_param, &SC);
-
-    //================================================
-    // Bind the primary plane buffers from their explicit allocation offsets.
-    JxrDecoderBufferRegionLayoutBind(pSC, (U8*)pb, &bufferLayout,
-        cbMacBlockStride, cbMacBlockChroma);
+    {
+        Int primaryResult = JxrDecoderPrimaryPlaneFactoryCreate(&memoryLayout,
+            &SC.m_param, &SC, bUseHardTileBoundaries, pSCP->fMeasurePerf, &pSC);
+        if (primaryResult != ICERR_OK)
+            return primaryResult;
+    }
 
     // Create and read the alpha plane before the shared decoder initialization pipeline.
     if (pSC->m_param.bAlphaChannel) {
@@ -391,7 +361,7 @@ Int ImageStrDecTerm(
     PERFTIMER_DELETE(pSC->m_fMeasurePerf, pSC->m_ptEncDecPerf);
     PERFTIMER_DELETE(pSC->m_fMeasurePerf, pSC->m_ptEndToEndPerf);
 
-    free(pSC);
+    JxrDecoderPrimaryPlaneFactoryRelease(pSC);
 
     return ICERR_OK;
 }
