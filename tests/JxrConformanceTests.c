@@ -64,6 +64,7 @@
 #include "JxrPacketExecutor.h"
 #include "JxrBitMath.h"
 #include "JxrDecoderFormatState.h"
+#include "../image/decode/JxrDecoderBufferRegionLayout.h"
 #include "../image/decode/JxrDecoderMemoryLayoutPlan.h"
 #include "../image/decode/JxrDecoderOutputPipeline.h"
 #include "../image/decode/JxrDecoderTransformPipeline.h"
@@ -3984,6 +3985,27 @@ static int test_decoder_memory_layout_plan_vectors(void)
     return !plan.allocationIsSafe;
 }
 
+static int test_decoder_buffer_region_layout_vectors(void)
+{
+    JxrDecoderMemoryLayoutPlan memoryLayout;
+    JxrDecoderBufferRegionLayout regions;
+    size_t expectedHeaderOffset;
+
+    JxrDecoderMemoryLayoutPlanInitialize(&memoryLayout, BD_LONG, YUV_420, 3, 17,
+        100, 20, 30, FALSE);
+    JxrDecoderBufferRegionLayoutInitialize(&regions, 0, 100, 20, 30, &memoryLayout);
+    expectedHeaderOffset = ((128 + memoryLayout.primaryMacroblockBufferBytes +
+        PACKETLENGTH * 4 - 1) & ~(PACKETLENGTH * 4 - 1)) + PACKETLENGTH * 2;
+    if (regions.decoderParametersOffset != 100 || regions.macroblockBufferOffset != 128 ||
+        regions.headerBitIoOffset != expectedHeaderOffset ||
+        regions.allocationUsedBytes != expectedHeaderOffset + 30) return 0;
+
+    JxrDecoderBufferRegionLayoutInitialize(&regions, 16, 100, 20, 30, &memoryLayout);
+    return regions.decoderParametersOffset == 100 && regions.macroblockBufferOffset == 240 &&
+        regions.headerBitIoOffset == expectedHeaderOffset - 16 &&
+        regions.allocationUsedBytes == expectedHeaderOffset + 14;
+}
+
 static int test_encoder_buffer_region_layout_vectors(void)
 {
     JxrEncoderMemoryLayoutPlan memoryLayout;
@@ -4688,6 +4710,7 @@ int main(int argc, char** argv)
         { "encoder_resource_release_plan_vectors", test_encoder_resource_release_plan_vectors },
         { "encoder_memory_layout_plan_vectors", test_encoder_memory_layout_plan_vectors },
         { "decoder_memory_layout_plan_vectors", test_decoder_memory_layout_plan_vectors },
+        { "decoder_buffer_region_layout_vectors", test_decoder_buffer_region_layout_vectors },
         { "encoder_buffer_region_layout_vectors", test_encoder_buffer_region_layout_vectors },
         { "encoder_processing_pipeline_plan_vectors", test_encoder_processing_pipeline_plan_vectors },
         { "forward_full_resolution_plane_vectors", test_forward_full_resolution_plane_vectors },

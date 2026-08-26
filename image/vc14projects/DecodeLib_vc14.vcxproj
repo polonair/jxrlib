@@ -215,6 +215,7 @@
     <ClCompile Include="..\decode\JxrHeaderDecodePipeline.c" />
     <ClCompile Include="..\decode\JxrDecoderInitializationPipeline.c" />
     <ClCompile Include="..\decode\JxrDecoderInputInitializer.c" />
+    <ClCompile Include="..\decode\JxrDecoderBufferRegionLayout.c" />
     <ClCompile Include="..\decode\JxrDecoderMemoryLayoutPlan.c" />
     <ClCompile Include="..\decode\JxrDecoderResourceInitializer.c" />
     <ClCompile Include="..\decode\JxrDecoderOutputPipeline.c" />

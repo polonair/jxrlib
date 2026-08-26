@@ -42,6 +42,7 @@
 #include "JxrDecoderInitializationPipeline.h"
 #include "JxrDecoderInputInitializer.h"
 #include "JxrDecoderMemoryLayoutPlan.h"
+#include "JxrDecoderBufferRegionLayout.h"
 #include "JxrDecoderResourceInitializer.h"
 #include "JxrDecoderOutputPipeline.h"
 #include "JxrDecoderTransformPipeline.h"
@@ -250,12 +251,13 @@ Int ImageStrDecInit(
     CTXSTRCODEC* pctxSC)
 {
     JxrDecoderMemoryLayoutPlan memoryLayout;
+    JxrDecoderBufferRegionLayout bufferLayout;
     size_t cbMacBlockStride = 0, cbMacBlockChroma = 0, cMacBlock = 0;
 
     CWMImageStrCodec SC = {0};
     CWMImageStrCodec *pSC = NULL, *pNextSC = NULL;
     char* pb = NULL;
-    size_t i;
+
     Bool bLossyTranscoding = FALSE;
     Bool bUseHardTileBoundaries = FALSE; //default is soft tile boundaries
     Bool bLessThan64Bit = sizeof(void *) < 8;
@@ -311,7 +313,9 @@ Int ImageStrDecInit(
     memset(pb, 0, memoryLayout.allocationBytes);
 
     //================================================
-    pSC = (CWMImageStrCodec*)pb; pb += sizeof(*pSC);
+    JxrDecoderBufferRegionLayoutInitialize(&bufferLayout, (UINTPTR_T)pb,
+        sizeof(*pSC), sizeof(CWMDecoderParameters), sizeof(BitIOInfo), &memoryLayout);
+    pSC = (CWMImageStrCodec*)pb;
     if(pSC == NULL)
         return ICERR_ERROR;
 
@@ -323,7 +327,6 @@ Int ImageStrDecInit(
     PERFTIMER_START(pSC->m_fMeasurePerf, pSC->m_ptEncDecPerf);
     PERFTIMER_COPYSTARTTIME(pSC->m_fMeasurePerf, pSC->m_ptEncDecPerf, pSC->m_ptEndToEndPerf);
 
-    pSC->m_Dparam = (CWMDecoderParameters*)pb; pb += sizeof(CWMDecoderParameters);
     pSC->cbChannel = memoryLayout.channelBytes;
     //pSC->cNumChannels = SC.WMISCP.cChannel;
     pSC->bUseHardTileBoundaries = bUseHardTileBoundaries;
@@ -332,18 +335,9 @@ Int ImageStrDecInit(
     InitializeStrDec(pSC, &SC.m_param, &SC);
 
     //================================================
-    // 2 Macro Row buffers for each channel
-    pb = ALIGNUP(pb, 128);
-    for (i = 0; i < pSC->m_param.cNumChannels; i++) {
-        pSC->a0MBbuffer[i] = (PixelI*)pb; pb += cbMacBlockStride * pSC->cmbWidth;
-        pSC->a1MBbuffer[i] = (PixelI*)pb; pb += cbMacBlockStride * pSC->cmbWidth;
-        cbMacBlockStride = cbMacBlockChroma;
-    }
-
-    //================================================
-    // lay 2 aligned IO buffers just below pIO struct
-    pb = (char*)ALIGNUP(pb, PACKETLENGTH * 4) + PACKETLENGTH * 2;
-    pSC->pIOHeader = (BitIOInfo*)pb; pb += sizeof(*pSC->pIOHeader);
+    // Bind the primary plane buffers from their explicit allocation offsets.
+    JxrDecoderBufferRegionLayoutBind(pSC, (U8*)pb, &bufferLayout,
+        cbMacBlockStride, cbMacBlockChroma);
 
     // Create and read the alpha plane before the shared decoder initialization pipeline.
     if (pSC->m_param.bAlphaChannel) {
