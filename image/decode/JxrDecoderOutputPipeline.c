@@ -5,6 +5,7 @@
 #include "JxrFloatSampleConversion.h"
 #include "JxrMonochromeExpansion.h"
 #include "JxrDecoderRoiRowRange.h"
+#include "JxrDecoderOutputRowPlan.h"
 #include "JxrDecoderUvInterpolator.h"
 #include "JxrDecoderNChannelOutputWriter.h"
 #include "JxrDecoderAlphaOutputWriter.h"
@@ -19,12 +20,11 @@ Void JxrDecoderOutputPipelinePlanInitialize(JxrDecoderOutputPipelinePlan* plan,
 // write one MB row of Y_ONLY/CF_ALPHA/YUV_444/N_CHANNEL to output buffer
 Int JxrDecoderOutputPipelineWriteStandardRow(CWMImageStrCodec * pSC)
 {
-    const COLORFORMAT cfExt = (pSC->m_param.cfColorFormat == Y_ONLY ? Y_ONLY : pSC->WMII.cfColorFormat);
-    const BITDEPTH_BITS bd = pSC->WMII.bdBitDepth;
+    JxrDecoderOutputRowPlan outputPlan;
     const PixelI iShift = (pSC->m_param.bScaledArith ? SHIFTZERO + QPFRACBITS : 0);
-    const size_t cHeight = JxrDecoderRoiRowRangeGetOutputHeight(pSC->m_Dparam->cROIBottomY + 1, pSC->cRow);
-    const size_t cWidth = (pSC->m_Dparam->cROIRightX + 1);
-    const size_t iFirstRow = ((pSC->cRow - 1) * 16 > pSC->m_Dparam->cROITopY ? 0 : (pSC->m_Dparam->cROITopY & 0xf)), iFirstColumn = pSC->m_Dparam->cROILeftX;
+    COLORFORMAT cfExt;
+    BITDEPTH_BITS bd;
+    size_t cHeight, cWidth, iFirstRow, iFirstColumn;
     const PixelI *pY = pSC->a0MBbuffer[0];
     const PixelI *pU = (pSC->m_bUVResolutionChange ? pSC->pResU : pSC->a0MBbuffer[1]);
     const PixelI *pV = (pSC->m_bUVResolutionChange ? pSC->pResV : pSC->a0MBbuffer[2]);
@@ -34,6 +34,14 @@ Int JxrDecoderOutputPipelineWriteStandardRow(CWMImageStrCodec * pSC)
     const U8 nLen = pSC->WMISCP.nLenMantissaOrShift;
     const I8 nExpBias = pSC->WMISCP.nExpBias;
     size_t iRow, iColumn, iIdx;
+    JxrDecoderOutputRowPlanInitializeStandard(&outputPlan, pSC);
+    cfExt = outputPlan.outputColorFormat;
+    bd = outputPlan.bitDepth;
+    cHeight = outputPlan.outputHeight;
+    cWidth = outputPlan.outputWidth;
+    iFirstRow = outputPlan.firstRow;
+    iFirstColumn = outputPlan.firstColumn;
+
     size_t * pOffsetX = pSC->m_Dparam->pOffsetX, * pOffsetY = pSC->m_Dparam->pOffsetY + (pSC->cRow - 1) * (cfExt == YUV_420 ? 8 : 16), iY;
 
 
@@ -1016,14 +1024,10 @@ static Void JxrDecoderOutputPipelineWriteNChannelThumbnail(CWMImageStrCodec * pS
 // centralized alpha channel thumbnail, small perf penalty
 Int JxrDecoderOutputPipelineWriteThumbnailRow(CWMImageStrCodec * pSC)
 {
-    const size_t tScale = pSC->m_Dparam->cThumbnailScale;
-    const size_t cHeight = JxrDecoderRoiRowRangeGetOutputHeight(pSC->m_Dparam->bDecodeFullFrame ? pSC->WMII.cHeight : pSC->m_Dparam->cROIBottomY + 1, pSC->cRow);
-    const size_t cWidth = (pSC->m_Dparam->bDecodeFullFrame ? pSC->WMII.cWidth : pSC->m_Dparam->cROIRightX + 1);
-    const size_t iFirstRow = ((((pSC->cRow - 1) * 16 > pSC->m_Dparam->cROITopY ? 0 : (pSC->m_Dparam->cROITopY & 0xf)) + tScale - 1) / tScale * tScale);
-    const size_t iFirstColumn = (pSC->m_Dparam->cROILeftX + tScale - 1) / tScale * tScale;
-    const COLORFORMAT cfInt = pSC->m_param.cfColorFormat;
-    const COLORFORMAT cfExt = (pSC->m_param.cfColorFormat == Y_ONLY ? Y_ONLY : pSC->WMII.cfColorFormat);
-    const BITDEPTH_BITS bd = pSC->WMII.bdBitDepth;
+    JxrDecoderOutputRowPlan outputPlan;
+    size_t tScale, cHeight, cWidth, iFirstRow, iFirstColumn;
+    COLORFORMAT cfInt, cfExt;
+    BITDEPTH_BITS bd;
     const OVERLAP ol = pSC->WMISCP.olOverlap;
 	const size_t iB = (pSC->WMII.bRGB ? 2 : 0);
     const size_t iR = 2 - iB;
@@ -1031,18 +1035,25 @@ Int JxrDecoderOutputPipelineWriteThumbnailRow(CWMImageStrCodec * pSC)
     const U8 nLen = pSC->WMISCP.nLenMantissaOrShift;
     const I8 nExpBias = pSC->WMISCP.nExpBias;
     PixelI offset;
-    size_t iRow, iColumn, iIdx1, iIdx2, iIdx3 = 0, nBits = 0;
+    size_t iRow, iColumn, iIdx1, iIdx2, iIdx3 = 0, nBits;
     PixelI * pSrcY = pSC->a0MBbuffer[0];
     PixelI * pSrcU = pSC->a0MBbuffer[1], * pSrcV = pSC->a0MBbuffer[2];
+
+    JxrDecoderOutputRowPlanInitializeThumbnail(&outputPlan, pSC);
+    tScale = outputPlan.thumbnailScale;
+    cHeight = outputPlan.outputHeight;
+    cWidth = outputPlan.outputWidth;
+    iFirstRow = outputPlan.firstRow;
+    iFirstColumn = outputPlan.firstColumn;
+    cfInt = outputPlan.internalColorFormat;
+    cfExt = outputPlan.outputColorFormat;
+    bd = outputPlan.bitDepth;
+    nBits = outputPlan.thumbnailBits;
+
     size_t * pOffsetX = pSC->m_Dparam->pOffsetX, * pOffsetY = pSC->m_Dparam->pOffsetY + (pSC->cRow - 1) * 16 / tScale, iY;
     const PixelI cMul = (tScale >= 16 ? (ol == OL_NONE ? 16 : (ol == OL_ONE ? 23 : 34)) : (tScale >= 4 ? (ol == OL_NONE ? 64 : 93) : 258));
     const size_t rShiftY = 8 + (pSC->m_param.bScaledArith ? (SHIFTZERO + QPFRACBITS) : 0);
     const size_t rShiftUV = rShiftY - ((pSC->m_param.bScaledArith && tScale >= 16) ? ((cfInt == YUV_420 || cfInt == YUV_422) ? 2 : 1) : 0);
-
-    while((size_t)(1U << nBits) < tScale)
-        nBits ++;
-
-    assert(tScale == (size_t)(1U << nBits));
 
     // guard output buffer
     if(checkImageBuffer(pSC, pSC->WMII.oOrientation < O_RCW ? pSC->WMII.cROIWidth : pSC->WMII.cROIHeight, (cHeight - iFirstRow) / pSC->m_Dparam->cThumbnailScale) != ICERR_OK)

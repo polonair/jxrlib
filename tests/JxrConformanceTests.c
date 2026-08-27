@@ -82,6 +82,7 @@
 #include "../image/decode/JxrSecondaryPlaneFactory.h"
 #include "../image/decode/JxrSecondaryPlaneMemoryLayoutPlan.h"
 #include "../image/decode/JxrDecoderOutputPipeline.h"
+#include "../image/decode/JxrDecoderOutputRowPlan.h"
 #include "../image/decode/JxrDecoderTransformPipeline.h"
 #include "JxrDecoderSubbandContext.h"
 #include "JxrHpCoefficientBlockResolver.h"
@@ -1031,6 +1032,45 @@ static int test_decoder_output_pipeline_plan_vectors(void)
     return plan.usesLegacyLoadCallback;
 }
 
+static int test_decoder_output_row_plan_vectors(void)
+{
+    CWMImageStrCodec codec;
+    CWMDecoderParameters parameters;
+    JxrDecoderOutputRowPlan plan;
+
+    memset(&codec, 0, sizeof(codec));
+    memset(&parameters, 0, sizeof(parameters));
+    codec.m_Dparam = &parameters;
+    codec.cRow = 2;
+    codec.m_param.cfColorFormat = YUV_420;
+    codec.WMII.cfColorFormat = YUV_444;
+    codec.WMII.bdBitDepth = BD_8;
+    codec.WMII.cWidth = 64;
+    codec.WMII.cHeight = 48;
+    parameters.cROITopY = 17;
+    parameters.cROIBottomY = 31;
+    parameters.cROILeftX = 3;
+    parameters.cROIRightX = 47;
+    parameters.cThumbnailScale = 4;
+
+    JxrDecoderOutputRowPlanInitializeStandard(&plan, &codec);
+    if (plan.internalColorFormat != YUV_420 || plan.outputColorFormat != YUV_444 ||
+        plan.bitDepth != BD_8 || plan.outputHeight != 16 || plan.outputWidth != 48 ||
+        plan.firstRow != 1 || plan.firstColumn != 3 || plan.thumbnailScale != 1 ||
+        plan.thumbnailBits != 0)
+        return 0;
+
+    JxrDecoderOutputRowPlanInitializeThumbnail(&plan, &codec);
+    if (plan.internalColorFormat != YUV_420 || plan.outputColorFormat != YUV_444 ||
+        plan.bitDepth != BD_8 || plan.outputHeight != 16 || plan.outputWidth != 48 ||
+        plan.firstRow != 4 || plan.firstColumn != 4 || plan.thumbnailScale != 4 ||
+        plan.thumbnailBits != 2)
+        return 0;
+
+    parameters.bDecodeFullFrame = TRUE;
+    JxrDecoderOutputRowPlanInitializeThumbnail(&plan, &codec);
+    return plan.outputHeight == 16 && plan.outputWidth == 64;
+}
 static int test_decoder_transform_pipeline_state_vectors(void)
 {
     CWMImageStrCodec codec;
@@ -4975,6 +5015,7 @@ int main(int argc, char** argv)
         { "header_decode_pipeline_vectors", test_header_decode_pipeline_vectors },
         { "decoder_initialization_pipeline_vectors", test_decoder_initialization_pipeline_vectors },
         { "decoder_output_pipeline_plan_vectors", test_decoder_output_pipeline_plan_vectors },
+        { "decoder_output_row_plan_vectors", test_decoder_output_row_plan_vectors },
         { "decoder_transform_pipeline_state_vectors", test_decoder_transform_pipeline_state_vectors },
         { "decoder_codec_state_initializer_vectors", test_decoder_codec_state_initializer_vectors },
         { "secondary_plane_initializer_vectors", test_secondary_plane_initializer_vectors },
