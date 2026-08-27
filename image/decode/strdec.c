@@ -41,9 +41,9 @@
 #include "JxrHeaderDecodePipeline.h"
 #include "JxrDecoderInitializationPipeline.h"
 #include "JxrDecoderInputInitializer.h"
-#include "JxrDecoderMemoryLayoutPlan.h"
 #include "JxrDecoderSessionPreparation.h"
 #include "JxrDecoderPrimaryPlaneFactory.h"
+#include "JxrDecoderSessionFactory.h"
 #include "JxrDecoderResourceInitializer.h"
 #include "JxrDecoderOutputPipeline.h"
 #include "JxrDecoderTransformPipeline.h"
@@ -209,76 +209,18 @@ Int ImageStrDecInit(
     CWMIStrCodecParam *pSCP,
     CTXSTRCODEC* pctxSC)
 {
-    JxrDecoderMemoryLayoutPlan memoryLayout;
     JxrDecoderSessionPreparation preparation;
-    size_t cMacBlock = 0;
-
-    CWMImageStrCodec *pSC = NULL, *pNextSC = NULL;
-
-    Bool bLessThan64Bit = sizeof(void *) < 8;
+    CWMImageStrCodec* primaryCodec = NULL;
+    Int result;
 
     *pctxSC = NULL;
-
     if (JxrDecoderSessionPreparationPrepare(pII, pSCP, &preparation) != ICERR_OK)
         return ICERR_ERROR;
-
-    //================================================
-    JxrDecoderMemoryLayoutPlanInitialize(&memoryLayout,
-        preparation.templateCodec.WMISCP.bdBitDepth,
-        preparation.templateCodec.m_param.cfColorFormat,
-        preparation.templateCodec.m_param.cNumChannels,
-        preparation.templateCodec.WMII.cWidth, sizeof(*pSC),
-        sizeof(CWMDecoderParameters), sizeof(BitIOInfo),
-        bLessThan64Bit);
-    cMacBlock = memoryLayout.macroblockCount;
-
-    //================================================
-    if (!memoryLayout.allocationIsSafe) {
-        /** potential overflow - 32 bit pointers insufficient to address cache **/
-        return ICERR_ERROR;
-    }
-
-    {
-        Int primaryResult = JxrDecoderPrimaryPlaneFactoryCreate(&memoryLayout,
-            &preparation.templateCodec.m_param, &preparation.templateCodec,
-            preparation.usesHardTileBoundaries, pSCP->fMeasurePerf, &pSC);
-        if (primaryResult != ICERR_OK)
-            return primaryResult;
-    }
-
-    // Create and read the alpha plane before the shared decoder initialization pipeline.
-    if (pSC->m_param.bAlphaChannel) {
-        JxrSecondaryPlaneInitializer secondaryInitializer;
-        Int secondaryResult;
-        JxrSecondaryPlaneInitializerInit(&secondaryInitializer, pSC,
-            &preparation.templateCodec.m_param, &preparation.templateCodec,
-            memoryLayout.channelBytes, cMacBlock);
-        secondaryResult = JxrSecondaryPlaneInitializerRun(&secondaryInitializer, &pNextSC);
-        if (secondaryResult != ICERR_OK)
-            return secondaryResult;
-    }
-    else
-        pSC->WMISCP.uAlphaMode = 0;
-    //================================================
-    {
-        JxrDecoderInitializationPipeline initialization;
-        JxrDecoderInitializationPipelineInit(&initialization, pSC, pNextSC);
-        if (JxrDecoderInitializationPipelineRun(&initialization) != ICERR_OK)
-            return ICERR_ERROR;
-    }
-    //================================================
-    *pII = pSC->WMII;
-    *pSCP = pSC->WMISCP;
-    *pctxSC = (CTXSTRCODEC)pSC;
-
-    if(pSC->WMII.cPostProcStrength){
-        initPostProc(pSC->pPostProcInfo, pSC->cmbWidth, pSC->m_param.cNumChannels);
-        if (pSC->m_param.bAlphaChannel) 
-            initPostProc(pNextSC->pPostProcInfo, pNextSC->cmbWidth, pNextSC->m_param.cNumChannels);
-    }
-
-    PERFTIMER_STOP(pSC->m_fMeasurePerf, pSC->m_ptEncDecPerf);
-
+    result = JxrDecoderSessionFactoryCreate(&preparation, pSCP->fMeasurePerf,
+        pII, pSCP, &primaryCodec);
+    if (result != ICERR_OK)
+        return result;
+    *pctxSC = (CTXSTRCODEC)primaryCodec;
     return ICERR_OK;
 }
 

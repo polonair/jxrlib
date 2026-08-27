@@ -67,6 +67,7 @@
 #include "../image/decode/JxrDecoderBufferRegionLayout.h"
 #include "../image/decode/JxrDecoderMemoryLayoutPlan.h"
 #include "../image/decode/JxrDecoderPrimaryPlaneFactory.h"
+#include "../image/decode/JxrDecoderSessionFactory.h"
 #include "../image/decode/JxrDecoderSessionPreparation.h"
 #include "../image/decode/JxrSecondaryPlaneBufferRegionLayout.h"
 #include "../image/decode/JxrSecondaryPlaneFactory.h"
@@ -4049,6 +4050,26 @@ static int test_decoder_session_preparation_vectors(void)
         &codecParameters, NULL) == ICERR_ERROR;
 }
 
+static int test_decoder_session_factory_vectors(void)
+{
+    JxrDecoderSessionPreparation preparation;
+    CWMImageInfo imageInfo;
+    CWMIStrCodecParam codecParameters;
+    CWMImageStrCodec* codec = NULL;
+
+    memset(&preparation, 0, sizeof(preparation));
+    memset(&imageInfo, 0, sizeof(imageInfo));
+    memset(&codecParameters, 0, sizeof(codecParameters));
+    return JxrDecoderSessionFactoryCreate(NULL, FALSE, &imageInfo,
+        &codecParameters, &codec) == ICERR_ERROR && codec == NULL &&
+        JxrDecoderSessionFactoryCreate(&preparation, FALSE, NULL,
+        &codecParameters, &codec) == ICERR_ERROR &&
+        JxrDecoderSessionFactoryCreate(&preparation, FALSE, &imageInfo,
+        NULL, &codec) == ICERR_ERROR &&
+        JxrDecoderSessionFactoryCreate(&preparation, FALSE, &imageInfo,
+        &codecParameters, NULL) == ICERR_ERROR;
+}
+
 static int test_secondary_plane_memory_layout_plan_vectors(void)
 {
     JxrSecondaryPlaneMemoryLayoutPlan plan;
@@ -4806,6 +4827,7 @@ int main(int argc, char** argv)
         { "decoder_buffer_region_layout_vectors", test_decoder_buffer_region_layout_vectors },
         { "decoder_primary_plane_factory_vectors", test_decoder_primary_plane_factory_vectors },
         { "decoder_session_preparation_vectors", test_decoder_session_preparation_vectors },
+        { "decoder_session_factory_vectors", test_decoder_session_factory_vectors },
         { "secondary_plane_memory_layout_plan_vectors", test_secondary_plane_memory_layout_plan_vectors },
         { "secondary_plane_buffer_region_layout_vectors", test_secondary_plane_buffer_region_layout_vectors },
         { "secondary_plane_factory_vectors", test_secondary_plane_factory_vectors },
