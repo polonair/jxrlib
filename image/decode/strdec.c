@@ -42,6 +42,7 @@
 #include "JxrDecoderInitializationPipeline.h"
 #include "JxrDecoderInputInitializer.h"
 #include "JxrDecoderMemoryLayoutPlan.h"
+#include "JxrDecoderSessionPreparation.h"
 #include "JxrDecoderPrimaryPlaneFactory.h"
 #include "JxrDecoderResourceInitializer.h"
 #include "JxrDecoderOutputPipeline.h"
@@ -209,49 +210,25 @@ Int ImageStrDecInit(
     CTXSTRCODEC* pctxSC)
 {
     JxrDecoderMemoryLayoutPlan memoryLayout;
+    JxrDecoderSessionPreparation preparation;
     size_t cMacBlock = 0;
 
-    CWMImageStrCodec SC = {0};
     CWMImageStrCodec *pSC = NULL, *pNextSC = NULL;
 
-    Bool bLossyTranscoding = FALSE;
-    Bool bUseHardTileBoundaries = FALSE; //default is soft tile boundaries
     Bool bLessThan64Bit = sizeof(void *) < 8;
 
     *pctxSC = NULL;
 
-    if(WMPhotoValidate(pII, pSCP) != ICERR_OK)
+    if (JxrDecoderSessionPreparationPrepare(pII, pSCP, &preparation) != ICERR_OK)
         return ICERR_ERROR;
 
-    if(pSCP->sbSubband == SB_ISOLATED) // can not do anything with isolated bitstream
-        return ICERR_ERROR;
-
-    //================================================
-    SC.WMISCP.pWStream = pSCP->pWStream;
-    if (ReadWMIHeader(&SC.WMII, &SC.WMISCP, &SC.m_param) != ICERR_OK) {
-        return ICERR_ERROR;
-    }
-
-    bUseHardTileBoundaries = SC.WMISCP.bUseHardTileBoundaries;
-    if(SC.WMII.cfColorFormat == CMYK && pII->cfColorFormat == CF_RGB)
-        bLossyTranscoding = TRUE;
-    if(pSCP->cfColorFormat != CMYK && (pII->cfColorFormat == CMYK))
-        return ICERR_ERROR;
-
-    //================================================
-    SC.WMISCP = *pSCP;
-    SC.WMII   = *pII;
-
-    // original image size
-    SC.WMII.cWidth += SC.m_param.cExtraPixelsLeft + SC.m_param.cExtraPixelsRight;
-    SC.WMII.cHeight += SC.m_param.cExtraPixelsTop + SC.m_param.cExtraPixelsBottom;
-    pII->cROILeftX += SC.m_param.cExtraPixelsLeft;
-    pII->cROITopY += SC.m_param.cExtraPixelsTop;
-    
     //================================================
     JxrDecoderMemoryLayoutPlanInitialize(&memoryLayout,
-        SC.WMISCP.bdBitDepth, SC.m_param.cfColorFormat, SC.m_param.cNumChannels,
-        SC.WMII.cWidth, sizeof(*pSC), sizeof(CWMDecoderParameters), sizeof(BitIOInfo),
+        preparation.templateCodec.WMISCP.bdBitDepth,
+        preparation.templateCodec.m_param.cfColorFormat,
+        preparation.templateCodec.m_param.cNumChannels,
+        preparation.templateCodec.WMII.cWidth, sizeof(*pSC),
+        sizeof(CWMDecoderParameters), sizeof(BitIOInfo),
         bLessThan64Bit);
     cMacBlock = memoryLayout.macroblockCount;
 
@@ -263,7 +240,8 @@ Int ImageStrDecInit(
 
     {
         Int primaryResult = JxrDecoderPrimaryPlaneFactoryCreate(&memoryLayout,
-            &SC.m_param, &SC, bUseHardTileBoundaries, pSCP->fMeasurePerf, &pSC);
+            &preparation.templateCodec.m_param, &preparation.templateCodec,
+            preparation.usesHardTileBoundaries, pSCP->fMeasurePerf, &pSC);
         if (primaryResult != ICERR_OK)
             return primaryResult;
     }
@@ -272,7 +250,8 @@ Int ImageStrDecInit(
     if (pSC->m_param.bAlphaChannel) {
         JxrSecondaryPlaneInitializer secondaryInitializer;
         Int secondaryResult;
-        JxrSecondaryPlaneInitializerInit(&secondaryInitializer, pSC, &SC.m_param, &SC,
+        JxrSecondaryPlaneInitializerInit(&secondaryInitializer, pSC,
+            &preparation.templateCodec.m_param, &preparation.templateCodec,
             memoryLayout.channelBytes, cMacBlock);
         secondaryResult = JxrSecondaryPlaneInitializerRun(&secondaryInitializer, &pNextSC);
         if (secondaryResult != ICERR_OK)

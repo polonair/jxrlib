@@ -67,6 +67,7 @@
 #include "../image/decode/JxrDecoderBufferRegionLayout.h"
 #include "../image/decode/JxrDecoderMemoryLayoutPlan.h"
 #include "../image/decode/JxrDecoderPrimaryPlaneFactory.h"
+#include "../image/decode/JxrDecoderSessionPreparation.h"
 #include "../image/decode/JxrSecondaryPlaneBufferRegionLayout.h"
 #include "../image/decode/JxrSecondaryPlaneFactory.h"
 #include "../image/decode/JxrSecondaryPlaneMemoryLayoutPlan.h"
@@ -4033,6 +4034,21 @@ static int test_decoder_primary_plane_factory_vectors(void)
         FALSE, FALSE, &codec) == ICERR_ERROR && codec == NULL;
 }
 
+static int test_decoder_session_preparation_vectors(void)
+{
+    CWMImageInfo imageInfo;
+    CWMIStrCodecParam codecParameters;
+    JxrDecoderSessionPreparation preparation;
+
+    memset(&imageInfo, 0, sizeof(imageInfo));
+    memset(&codecParameters, 0, sizeof(codecParameters));
+    memset(&preparation, 0, sizeof(preparation));
+    return JxrDecoderSessionPreparationPrepare(NULL, &codecParameters, &preparation) ==
+        ICERR_ERROR && JxrDecoderSessionPreparationPrepare(&imageInfo, NULL,
+        &preparation) == ICERR_ERROR && JxrDecoderSessionPreparationPrepare(&imageInfo,
+        &codecParameters, NULL) == ICERR_ERROR;
+}
+
 static int test_secondary_plane_memory_layout_plan_vectors(void)
 {
     JxrSecondaryPlaneMemoryLayoutPlan plan;
@@ -4789,6 +4805,7 @@ int main(int argc, char** argv)
         { "decoder_memory_layout_plan_vectors", test_decoder_memory_layout_plan_vectors },
         { "decoder_buffer_region_layout_vectors", test_decoder_buffer_region_layout_vectors },
         { "decoder_primary_plane_factory_vectors", test_decoder_primary_plane_factory_vectors },
+        { "decoder_session_preparation_vectors", test_decoder_session_preparation_vectors },
         { "secondary_plane_memory_layout_plan_vectors", test_secondary_plane_memory_layout_plan_vectors },
         { "secondary_plane_buffer_region_layout_vectors", test_secondary_plane_buffer_region_layout_vectors },
         { "secondary_plane_factory_vectors", test_secondary_plane_factory_vectors },
