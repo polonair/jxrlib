@@ -222,6 +222,7 @@
     <ClCompile Include="..\decode\JxrDecoderResourceInitializer.c" />
     <ClCompile Include="..\decode\JxrDecoderRequestValidator.c" />
     <ClCompile Include="..\decode\JxrDecoderSessionFactory.c" />
+    <ClCompile Include="..\decode\JxrDecoderSessionExecutor.c" />
     <ClCompile Include="..\decode\JxrDecoderSessionReleaser.c" />
     <ClCompile Include="..\decode\JxrDecoderSessionPreparation.c" />
     <ClCompile Include="..\decode\JxrDecoderOutputPipeline.c" />

@@ -26,7 +26,7 @@
 //
 //*@@@---@@@@******************************************************************
 #include "strcodec.h"
-#include "JXRTrace.h"
+
 #include "decode.h"
 #include "JxrMacroblockRegionState.h"
 #include "JxrDecoderTileQuantizerSyntaxReader.h"
@@ -45,11 +45,12 @@
 #include "JxrDecoderRequestValidator.h"
 #include "JxrDecoderSessionReleaser.h"
 #include "JxrDecoderSessionFactory.h"
+#include "JxrDecoderSessionExecutor.h"
 
-#include "JxrDecoderOutputPipeline.h"
+
 #include "JxrDecoderTransformPipeline.h"
 #include "JxrDecoderMacroblockProcessingPipeline.h"
-#include "JxrDecoderExecutionPipeline.h"
+
 #include "JxrSecondaryPlaneInitializer.h"
 #include "JxrDecoderDcQuantizerHeaderApplier.h"
 #include "JxrDecoderLpQuantizerHeaderApplier.h"
@@ -70,7 +71,7 @@
 #include "JxrPacketHeaderSyntaxReader.h"
 #include "strTransform.h"
 #include <math.h>
-#include "perfTimer.h"
+
 
 #ifdef MEM_TRACE
 #define TRACE_MALLOC    1
@@ -149,38 +150,16 @@ Int ImageStrDecDecode(
     CTXSTRCODEC ctxSC,
     const CWMImageBufferInfo* pBI
 #ifdef REENTRANT_MODE
-    , size_t *pcDecodedLines
+    , size_t* pcDecodedLines
 #endif
     )
 {
-    CWMImageStrCodec* pSC = (CWMImageStrCodec*)ctxSC;
-    JXRTraceDumpCodecState("decoder", pSC);
-    JxrDecoderExecutionPreparation preparation;
-    if (sizeof(*pSC) != pSC->cbStruct)
-    {
-        return ICERR_ERROR;
-    }
-
-    //================================
-    PERFTIMER_START(pSC->m_fMeasurePerf, pSC->m_ptEncDecPerf);
-
-    if (JxrDecoderExecutionPipelinePrepare(pSC, pBI, &preparation) != ICERR_OK)
-        return ICERR_ERROR;
-    if (JxrDecoderExecutionPipelineRun(pSC, preparation.macroblockRowCount,
-        preparation.usesLegacyLoadCallback
+    return JxrDecoderSessionExecutorExecute((CWMImageStrCodec*)ctxSC, pBI
 #ifdef REENTRANT_MODE
         , pcDecodedLines
 #endif
-        ) != ICERR_OK)
-        return ICERR_ERROR;
-#ifndef REENTRANT_MODE
-    JxrDecoderOutputPipelineFinalize(pSC, pBI);
-#endif // REENTRANT_MODE
-
-    PERFTIMER_STOP(pSC->m_fMeasurePerf, pSC->m_ptEncDecPerf);
-    return ICERR_OK;
+        );
 }
-
 Int ImageStrDecTerm(
     CTXSTRCODEC ctxSC)
 {

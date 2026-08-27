@@ -69,6 +69,7 @@
 #include "../image/decode/JxrDecoderPrimaryPlaneFactory.h"
 #include "../image/decode/JxrDecoderSessionFactory.h"
 #include "../image/decode/JxrDecoderSessionReleaser.h"
+#include "../image/decode/JxrDecoderSessionExecutor.h"
 #include "../image/decode/JxrDecoderRequestValidator.h"
 #include "../image/decode/JxrDecoderSessionPreparation.h"
 #include "../image/decode/JxrSecondaryPlaneBufferRegionLayout.h"
@@ -4108,6 +4109,18 @@ static int test_decoder_session_factory_vectors(void)
         &codecParameters, NULL) == ICERR_ERROR;
 }
 
+static int test_decoder_session_executor_vectors(void)
+{
+    CWMImageStrCodec invalidCodec;
+    CWMImageBufferInfo outputBuffer;
+    size_t decodedLines = 0;
+
+    memset(&invalidCodec, 0, sizeof(invalidCodec));
+    memset(&outputBuffer, 0, sizeof(outputBuffer));
+    return JxrDecoderSessionExecutorExecute(NULL, &outputBuffer, &decodedLines) == ICERR_ERROR &&
+        JxrDecoderSessionExecutorExecute(&invalidCodec, &outputBuffer, &decodedLines) ==
+            ICERR_ERROR;
+}
 static int test_decoder_session_releaser_vectors(void)
 {
     CWMImageStrCodec invalidCodec;
@@ -4876,6 +4889,7 @@ int main(int argc, char** argv)
         { "decoder_request_validator_normalization_vectors", test_decoder_request_validator_normalization_vectors },
         { "decoder_session_preparation_vectors", test_decoder_session_preparation_vectors },
         { "decoder_session_factory_vectors", test_decoder_session_factory_vectors },
+        { "decoder_session_executor_vectors", test_decoder_session_executor_vectors },
         { "decoder_session_releaser_vectors", test_decoder_session_releaser_vectors },
         { "secondary_plane_memory_layout_plan_vectors", test_secondary_plane_memory_layout_plan_vectors },
         { "secondary_plane_buffer_region_layout_vectors", test_secondary_plane_buffer_region_layout_vectors },
