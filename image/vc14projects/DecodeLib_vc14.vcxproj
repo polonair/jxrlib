@@ -230,6 +230,7 @@
     <ClCompile Include="..\decode\JxrDecoderSessionPreparation.c" />
     <ClCompile Include="..\decode\JxrDecoderOutputPipeline.c" />
     <ClCompile Include="..\decode\JxrDecoderNChannelOutputWriter.c" />
+    <ClCompile Include="..\decode\JxrDecoderAlphaOutputWriter.c" />
     <ClCompile Include="..\decode\JxrDecoderTransformPipeline.c" />
     <ClCompile Include="..\decode\JxrDecoderMacroblockProcessingPipeline.c" />
     <ClCompile Include="..\decode\JxrDecoderExecutionPipeline.c" />

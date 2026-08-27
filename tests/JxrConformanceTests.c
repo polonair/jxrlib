@@ -74,6 +74,7 @@
 #include "../image/decode/JxrDecoderCoefficientPredictor.h"
 #include "../image/decode/JxrDecoderUvInterpolator.h"
 #include "../image/decode/JxrDecoderNChannelOutputWriter.h"
+#include "../image/decode/JxrDecoderAlphaOutputWriter.h"
 #include "../image/decode/JxrDecoderRequestValidator.h"
 #include "../image/decode/JxrDecoderSessionPreparation.h"
 #include "../image/decode/JxrSecondaryPlaneBufferRegionLayout.h"
@@ -2846,6 +2847,38 @@ static int test_decoder_nchannel_output_writer_vectors(void)
     JxrDecoderNChannelOutputWriterWrite(&codec, 0, 0, 1, 1, 0, 0);
     return output[0] == 10;
 }
+
+static int test_decoder_alpha_output_writer_vectors(void)
+{
+    CWMImageStrCodec codec;
+    CWMImageStrCodec alphaCodec;
+    CWMDecoderParameters parameters;
+    PixelI alpha[256];
+    U8 output[8];
+    size_t offsetX[16];
+    size_t offsetY[16];
+
+    memset(&codec, 0, sizeof(codec));
+    memset(&alphaCodec, 0, sizeof(alphaCodec));
+    memset(&parameters, 0, sizeof(parameters));
+    memset(alpha, 0, sizeof(alpha));
+    memset(output, 0, sizeof(output));
+    memset(offsetX, 0, sizeof(offsetX));
+    memset(offsetY, 0, sizeof(offsetY));
+    codec.m_Dparam = &parameters;
+    codec.m_pNextSC = &alphaCodec;
+    codec.cRow = 1;
+    codec.WMII.cfColorFormat = CMYK;
+    codec.WMII.bdBitDepth = BD_8;
+    codec.WMIBI.pv = output;
+    parameters.cROIBottomY = 0;
+    parameters.cROIRightX = 0;
+    parameters.pOffsetX = offsetX;
+    parameters.pOffsetY = offsetY;
+    alphaCodec.a0MBbuffer[0] = alpha;
+    alpha[idxCC[0][0]] = 10;
+    return JxrDecoderAlphaOutputWriterWrite(&codec) == ICERR_OK && output[4] == 138;
+}
 static int test_prediction_math_vectors(void)
 {
     return JxrPredictionMathDequantize(0, 17) == 0 &&
@@ -4963,6 +4996,7 @@ int main(int argc, char** argv)
         { "decoder_uv_interpolator_vectors", test_decoder_uv_interpolator_vectors },
         { "decoder_dequantizer_vectors", test_decoder_dequantizer_vectors },
         { "decoder_nchannel_output_writer_vectors", test_decoder_nchannel_output_writer_vectors },
+        { "decoder_alpha_output_writer_vectors", test_decoder_alpha_output_writer_vectors },
         { "prediction_math_vectors", test_prediction_math_vectors },
         { "inverse_transform_macroblock_geometry_vectors", test_inverse_transform_macroblock_geometry_vectors },
         { "hard_tile_boundary_state_vectors", test_hard_tile_boundary_state_vectors },
