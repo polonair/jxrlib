@@ -72,6 +72,7 @@
 #include "../image/decode/JxrDecoderSessionExecutor.h"
 #include "../image/decode/JxrDecoderDequantizer.h"
 #include "../image/decode/JxrDecoderCoefficientPredictor.h"
+#include "../image/decode/JxrDecoderUvInterpolator.h"
 #include "../image/decode/JxrDecoderRequestValidator.h"
 #include "../image/decode/JxrDecoderSessionPreparation.h"
 #include "../image/decode/JxrSecondaryPlaneBufferRegionLayout.h"
@@ -2749,6 +2750,47 @@ static int test_decoder_coefficient_predictor_vectors(void)
     JxrDecoderCoefficientPredictorApplyAc(&codec);
     return macroblockBuffer[65] == 7;
 }
+static int test_decoder_uv_interpolator_vectors(void)
+{
+    CWMImageStrCodec codec;
+    PixelI sourceU[128];
+    PixelI sourceV[128];
+    PixelI destinationU[256];
+    PixelI destinationV[256];
+
+    memset(&codec, 0, sizeof(codec));
+    memset(sourceU, 0, sizeof(sourceU));
+    memset(sourceV, 0, sizeof(sourceV));
+    memset(destinationU, 0, sizeof(destinationU));
+    memset(destinationV, 0, sizeof(destinationV));
+    codec.m_param.cfColorFormat = YUV_422;
+    codec.WMII.cfColorFormat = YUV_444;
+    codec.cmbWidth = 1;
+    codec.a0MBbuffer[1] = sourceU;
+    codec.a0MBbuffer[2] = sourceV;
+    codec.pResU = destinationU;
+    codec.pResV = destinationV;
+    sourceU[idxCC[0][0]] = 10;
+    sourceU[idxCC[0][1]] = 20;
+    sourceV[idxCC[0][0]] = 30;
+    sourceV[idxCC[0][1]] = 40;
+    JxrDecoderUvInterpolatorInterpolate(&codec);
+    if (destinationU[idxCC[0][0]] != 10 || destinationU[idxCC[0][1]] != 15 ||
+        destinationU[idxCC[0][2]] != 20 || destinationV[idxCC[0][1]] != 35) return 0;
+
+    memset(sourceU, 0, sizeof(sourceU));
+    memset(destinationU, 0, sizeof(destinationU));
+    memset(destinationV, 0, sizeof(destinationV));
+    codec.m_param.cfColorFormat = YUV_420;
+    codec.WMII.cfColorFormat = YUV_422;
+    codec.cRow = codec.cmbHeight = 1;
+    sourceU[idxCC_420[0][0]] = 10;
+    sourceU[idxCC_420[1][0]] = 20;
+    JxrDecoderUvInterpolatorInterpolate(&codec);
+    return destinationU[idxCC[0][0]] == 10 && destinationU[idxCC[1][0]] == 15 &&
+        destinationU[idxCC[2][0]] == 20;
+}
+
 static int test_decoder_dequantizer_vectors(void)
 {
     PixelI destination[128];
@@ -4888,6 +4930,7 @@ int main(int argc, char** argv)
         { "macroblock_cbp_state_vectors", test_macroblock_cbp_state_vectors },
         { "bit_math_vectors", test_bit_math_vectors },
         { "decoder_coefficient_predictor_vectors", test_decoder_coefficient_predictor_vectors },
+        { "decoder_uv_interpolator_vectors", test_decoder_uv_interpolator_vectors },
         { "decoder_dequantizer_vectors", test_decoder_dequantizer_vectors },
         { "prediction_math_vectors", test_prediction_math_vectors },
         { "inverse_transform_macroblock_geometry_vectors", test_inverse_transform_macroblock_geometry_vectors },

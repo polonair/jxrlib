@@ -202,6 +202,7 @@
     <ClCompile Include="..\decode\JxrDecoderLpQuantizerHeaderApplier.c" />
     <ClCompile Include="..\decode\JxrDecoderHpQuantizerHeaderApplier.c" />
     <ClCompile Include="..\decode\JxrDecoderTileHeaderReader.c" />
+    <ClCompile Include="..\decode\JxrDecoderUvInterpolator.c" />
     <ClCompile Include="..\decode\JxrDecoderCodingContextResetter.c" />
     <ClCompile Include="..\decode\JxrDecoderPacketRowReader.c" />
     <ClCompile Include="..\decode\JxrDecoderPacketPipeline.c" />

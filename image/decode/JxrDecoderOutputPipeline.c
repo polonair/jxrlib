@@ -5,105 +5,12 @@
 #include "JxrFloatSampleConversion.h"
 #include "JxrMonochromeExpansion.h"
 #include "JxrDecoderRoiRowRange.h"
+#include "JxrDecoderUvInterpolator.h"
 
 Void JxrDecoderOutputPipelinePlanInitialize(JxrDecoderOutputPipelinePlan* plan,
     Bool hasOptimizedLoadOverride)
 {
     plan->usesLegacyLoadCallback = hasOptimizedLoadOverride;
-}
-
-static Void JxrDecoderOutputPipelineInterpolateUv(CWMImageStrCodec * pSC)
-{
-    const COLORFORMAT cfExt = pSC->WMII.cfColorFormat;
-    const size_t cWidth = pSC->cmbWidth * 16;
-    PixelI * pSrcU = pSC->a0MBbuffer[1], * pSrcV = pSC->a0MBbuffer[2];
-    PixelI * pDstU = pSC->pResU, * pDstV = pSC->pResV;
-    size_t iRow, iColumn;
-    size_t iIdxS = 0, iIdxD = 0;
-
-    if(pSC->m_param.cfColorFormat == YUV_422){  // 422 => 444, interpolate horizontally
-        for(iRow = 0; iRow < 16; iRow ++){
-            for(iColumn = 0; iColumn < cWidth; iColumn += 2){
-                iIdxS = ((iColumn >> 4) << 7) + idxCC[iRow][(iColumn >> 1) & 7];
-                iIdxD = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 15];
-
-                // copy over
-                pDstU[iIdxD] = pSrcU[iIdxS];
-                pDstV[iIdxD] = pSrcV[iIdxS];
-
-                if(iColumn > 0){
-                    size_t iL = iColumn - 2, iIdxL = ((iL >> 4) << 8) + idxCC[iRow][iL & 15];
-                    size_t iC = iColumn - 1, iIdxC = ((iC >> 4) << 8) + idxCC[iRow][iC & 15];
-
-                    // interpolate
-                    pDstU[iIdxC] = ((pDstU[iIdxL] + pDstU[iIdxD] + 1) >> 1);
-                    pDstV[iIdxC] = ((pDstV[iIdxL] + pDstV[iIdxD] + 1) >> 1);
-                }
-            }
-
-            //last pixel
-            iIdxS = (((iColumn - 1) >> 4) << 8) + idxCC[iRow][(iColumn - 1) & 15];
-            pDstU[iIdxS] = pDstU[iIdxD];
-            pDstV[iIdxS] = pDstV[iIdxD];
-        }
-    }
-    else{ // 420 => 422 or 444, interpolate vertically
-        const size_t cShift = (cfExt == YUV_422 ? 3 : 4);
-
-        for(iColumn = 0; iColumn < cWidth; iColumn += 2){
-            const size_t cMB = ((iColumn >> 4) << (4 + cShift)), cPix = (iColumn >> (4 - cShift)) & ((1 << cShift) - 1);
-
-            for(iRow = 0; iRow < 16; iRow += 2){
-                iIdxS = ((iColumn >> 4) << 6) + idxCC_420[iRow >> 1][(iColumn >> 1) & 7];
-                iIdxD = cMB + idxCC[iRow][cPix];
-
-                // copy over
-                pDstU[iIdxD] = pSrcU[iIdxS];
-                pDstV[iIdxD] = pSrcV[iIdxS];
-
-                if(iRow > 0){
-                    size_t iIdxT = cMB + idxCC[iRow - 2][cPix];
-                    size_t iIdxC = cMB + idxCC[iRow - 1][cPix];
-
-                    // interpolate
-                    pDstU[iIdxC] = ((pDstU[iIdxT] + pDstU[iIdxD] + 1) >> 1);
-                    pDstV[iIdxC] = ((pDstV[iIdxT] + pDstV[iIdxD] + 1) >> 1);
-                }
-            }
-
-            //last row
-            iIdxS = cMB + idxCC[15][cPix];
-            if(pSC->cRow == pSC->cmbHeight){ // image boundary
-                pDstU[iIdxS] = pDstU[iIdxD];
-                pDstV[iIdxS] = pDstV[iIdxD];
-            }
-            else{ // need next MB row
-                size_t iIdxB = ((iColumn >> 4) << 6) + idxCC_420[0][(iColumn >> 1) & 7];
-
-                pDstU[iIdxS] = ((pSC->a1MBbuffer[1][iIdxB] + pDstU[iIdxD] + 1) >> 1);
-                pDstV[iIdxS] = ((pSC->a1MBbuffer[2][iIdxB] + pDstV[iIdxD] + 1) >> 1);
-            }
-        }
-
-        if(cfExt != YUV_422){ // 420 => 444, interpolate horizontally
-            for(iRow = 0; iRow < 16; iRow ++){
-                for(iColumn = 1; iColumn < cWidth - 2; iColumn += 2){
-                    size_t iIdxL = (((iColumn - 1) >> 4) << 8) + idxCC[iRow][(iColumn - 1) & 15];
-
-                    iIdxD = ((iColumn >> 4) << 8) + idxCC[iRow][iColumn & 15];
-                    iIdxS = (((iColumn + 1) >> 4) << 8) + idxCC[iRow][(iColumn + 1) & 15];
-
-                    pDstU[iIdxD] = ((pDstU[iIdxS] + pDstU[iIdxL] + 1) >> 1);
-                    pDstV[iIdxD] = ((pDstV[iIdxS] + pDstV[iIdxL] + 1) >> 1);
-                }
-
-                // last pixel
-                iIdxD = (((cWidth - 1) >> 4) << 8) + idxCC[iRow][(cWidth - 1) & 15];
-                pDstU[iIdxD] = pDstU[iIdxS];
-                pDstV[iIdxD] = pDstV[iIdxS];
-            }
-        }
-    }
 }
 
 // write one MB row of Y_ONLY/CF_ALPHA/YUV_444/N_CHANNEL to output buffer
@@ -348,7 +255,7 @@ Int JxrDecoderOutputPipelineWriteStandardRow(CWMImageStrCodec * pSC)
         return ICERR_ERROR;
 
     if(pSC->m_bUVResolutionChange)
-        JxrDecoderOutputPipelineInterpolateUv(pSC);
+        JxrDecoderUvInterpolatorInterpolate(pSC);
 
     if(pSC->WMISCP.bYUVData){
         I32 * pDst = (I32 *)pSC->WMIBI.pv + (pSC->cRow - 1) *
