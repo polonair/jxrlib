@@ -42,9 +42,9 @@
 #include "JxrDecoderInitializationPipeline.h"
 #include "JxrDecoderInputInitializer.h"
 #include "JxrDecoderSessionPreparation.h"
-#include "JxrDecoderPrimaryPlaneFactory.h"
+#include "JxrDecoderSessionReleaser.h"
 #include "JxrDecoderSessionFactory.h"
-#include "JxrDecoderResourceInitializer.h"
+
 #include "JxrDecoderOutputPipeline.h"
 #include "JxrDecoderTransformPipeline.h"
 #include "JxrDecoderMacroblockProcessingPipeline.h"
@@ -263,27 +263,6 @@ Int ImageStrDecDecode(
 Int ImageStrDecTerm(
     CTXSTRCODEC ctxSC)
 {
-    CWMImageStrCodec* pSC = (CWMImageStrCodec*)ctxSC;
-    JXRTraceDumpCodecState("decoder", pSC);
-    if (NULL == pSC)
-    {
-        return ICERR_OK;
-    }
-    if (sizeof(*pSC) != pSC->cbStruct)
-    {
-        return ICERR_ERROR;
-    }
-
-    PERFTIMER_START(pSC->m_fMeasurePerf, pSC->m_ptEncDecPerf);
-
-    JxrDecoderResourceInitializerRelease(pSC);
-    PERFTIMER_STOP(pSC->m_fMeasurePerf, pSC->m_ptEncDecPerf);
-    PERFTIMER_REPORT(pSC->m_fMeasurePerf, pSC);
-    PERFTIMER_DELETE(pSC->m_fMeasurePerf, pSC->m_ptEncDecPerf);
-    PERFTIMER_DELETE(pSC->m_fMeasurePerf, pSC->m_ptEndToEndPerf);
-
-    JxrDecoderPrimaryPlaneFactoryRelease(pSC);
-
-    return ICERR_OK;
+    return JxrDecoderSessionReleaserRelease((CWMImageStrCodec*)ctxSC);
 }
 

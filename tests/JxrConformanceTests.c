@@ -68,6 +68,7 @@
 #include "../image/decode/JxrDecoderMemoryLayoutPlan.h"
 #include "../image/decode/JxrDecoderPrimaryPlaneFactory.h"
 #include "../image/decode/JxrDecoderSessionFactory.h"
+#include "../image/decode/JxrDecoderSessionReleaser.h"
 #include "../image/decode/JxrDecoderSessionPreparation.h"
 #include "../image/decode/JxrSecondaryPlaneBufferRegionLayout.h"
 #include "../image/decode/JxrSecondaryPlaneFactory.h"
@@ -4070,6 +4071,15 @@ static int test_decoder_session_factory_vectors(void)
         &codecParameters, NULL) == ICERR_ERROR;
 }
 
+static int test_decoder_session_releaser_vectors(void)
+{
+    CWMImageStrCodec invalidCodec;
+
+    memset(&invalidCodec, 0, sizeof(invalidCodec));
+    return JxrDecoderSessionReleaserRelease(NULL) == ICERR_OK &&
+        JxrDecoderSessionReleaserRelease(&invalidCodec) == ICERR_ERROR;
+}
+
 static int test_secondary_plane_memory_layout_plan_vectors(void)
 {
     JxrSecondaryPlaneMemoryLayoutPlan plan;
@@ -4828,6 +4838,7 @@ int main(int argc, char** argv)
         { "decoder_primary_plane_factory_vectors", test_decoder_primary_plane_factory_vectors },
         { "decoder_session_preparation_vectors", test_decoder_session_preparation_vectors },
         { "decoder_session_factory_vectors", test_decoder_session_factory_vectors },
+        { "decoder_session_releaser_vectors", test_decoder_session_releaser_vectors },
         { "secondary_plane_memory_layout_plan_vectors", test_secondary_plane_memory_layout_plan_vectors },
         { "secondary_plane_buffer_region_layout_vectors", test_secondary_plane_buffer_region_layout_vectors },
         { "secondary_plane_factory_vectors", test_secondary_plane_factory_vectors },
