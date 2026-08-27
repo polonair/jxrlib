@@ -1,5 +1,6 @@
 #include "JxrDecoderMacroblockProcessingPipeline.h"
 #include "JxrDecoderDequantizer.h"
+#include "JxrDecoderCoefficientPredictor.h"
 
 #include "JXRTrace.h"
 #include "decode.h"
@@ -80,7 +81,7 @@ Int JxrDecoderMacroblockProcessingPipelineProcess(CWMImageStrCodec* codec)
 
                 JXRTraceDumpStage("decoder", "after_lp", currentCodec,
                     (Int)currentCodec->cColumn, (Int)currentCodec->cRow, JXRTraceCoefficients);
-                predDCACDec(currentCodec);
+                JxrDecoderCoefficientPredictorApplyDcAc(currentCodec);
                 JXRTraceDumpStage("decoder", "after_dc_lp_prediction", currentCodec,
                     (Int)currentCodec->cColumn, (Int)currentCodec->cRow, JXRTraceCoefficients);
 
@@ -99,7 +100,7 @@ Int JxrDecoderMacroblockProcessingPipelineProcess(CWMImageStrCodec* codec)
                         JXRTraceBitPosition(codingContext->m_pIOAC, FALSE));
                     JXRTraceDumpStage("decoder", "after_hp", currentCodec,
                         (Int)currentCodec->cColumn, (Int)currentCodec->cRow, JXRTraceCoefficients);
-                    predACDec(currentCodec);
+                    JxrDecoderCoefficientPredictorApplyAc(currentCodec);
                     JXRTraceDumpStage("decoder", "after_ac_prediction", currentCodec,
                         (Int)currentCodec->cColumn, (Int)currentCodec->cRow, JXRTraceCoefficients);
                 }

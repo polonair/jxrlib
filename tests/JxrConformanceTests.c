@@ -71,6 +71,7 @@
 #include "../image/decode/JxrDecoderSessionReleaser.h"
 #include "../image/decode/JxrDecoderSessionExecutor.h"
 #include "../image/decode/JxrDecoderDequantizer.h"
+#include "../image/decode/JxrDecoderCoefficientPredictor.h"
 #include "../image/decode/JxrDecoderRequestValidator.h"
 #include "../image/decode/JxrDecoderSessionPreparation.h"
 #include "../image/decode/JxrSecondaryPlaneBufferRegionLayout.h"
@@ -2725,6 +2726,29 @@ static int test_bit_math_vectors(void)
         JxrBitMathLowMask32(32) == 0xffffffffU;
 }
 
+static int test_decoder_coefficient_predictor_vectors(void)
+{
+    CWMImageStrCodec codec;
+    PixelI macroblockBuffer[256];
+
+    memset(&codec, 0, sizeof(codec));
+    memset(macroblockBuffer, 0, sizeof(macroblockBuffer));
+    codec.m_param.cfColorFormat = CF_RGB;
+    codec.m_param.cNumChannels = 1;
+    codec.p1MBbuffer[0] = macroblockBuffer;
+    codec.MBInfo.iOrientation = 1;
+    macroblockBuffer[2] = 3;
+    macroblockBuffer[18] = 4;
+    JxrDecoderCoefficientPredictorApplyAc(&codec);
+    if (macroblockBuffer[18] != 7) return 0;
+
+    memset(macroblockBuffer, 0, sizeof(macroblockBuffer));
+    codec.MBInfo.iOrientation = 2;
+    macroblockBuffer[1] = 3;
+    macroblockBuffer[65] = 4;
+    JxrDecoderCoefficientPredictorApplyAc(&codec);
+    return macroblockBuffer[65] == 7;
+}
 static int test_decoder_dequantizer_vectors(void)
 {
     PixelI destination[128];
@@ -4863,6 +4887,7 @@ int main(int argc, char** argv)
         { "lowpass_cbp_state_vectors", test_lowpass_cbp_state_vectors },
         { "macroblock_cbp_state_vectors", test_macroblock_cbp_state_vectors },
         { "bit_math_vectors", test_bit_math_vectors },
+        { "decoder_coefficient_predictor_vectors", test_decoder_coefficient_predictor_vectors },
         { "decoder_dequantizer_vectors", test_decoder_dequantizer_vectors },
         { "prediction_math_vectors", test_prediction_math_vectors },
         { "inverse_transform_macroblock_geometry_vectors", test_inverse_transform_macroblock_geometry_vectors },

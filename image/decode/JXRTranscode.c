@@ -36,6 +36,7 @@
 #include "JxrTranscodeCoefficientTransform.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
+#include "JxrDecoderCoefficientPredictor.h"
 #include "JxrDecoderPacketPipeline.h"
 
 EXTERN_C Void freePredInfo(CWMImageStrCodec *);
@@ -47,8 +48,6 @@ EXTERN_C Int ReadWMIHeader(CWMImageInfo *, CWMIStrCodecParam *, CCoreParameters 
 EXTERN_C Int DecodeMacroblockDC(CWMImageStrCodec *, CCodingContext *, Int, Int);
 EXTERN_C Int DecodeMacroblockLowpass(CWMImageStrCodec *, CCodingContext *, Int, Int);
 EXTERN_C Int DecodeMacroblockHighpass(CWMImageStrCodec *, CCodingContext *, Int, Int);
-EXTERN_C Void predDCACDec(CWMImageStrCodec *);
-EXTERN_C Void predACDec(CWMImageStrCodec *);
 EXTERN_C Void FreeCodingContextDec(CWMImageStrCodec *);
 
 EXTERN_C Int StrEncInit(CWMImageStrCodec *);
@@ -549,13 +548,13 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
                     if(DecodeMacroblockLowpass(pSCDec, pContext, cColumn, cRow) != ICERR_OK)
                         return ICERR_ERROR;
 
-                predDCACDec(pSCDec);
+                JxrDecoderCoefficientPredictorApplyDcAc(pSCDec);
 
                 if(pSCDec->cSB > 2)
                     if(DecodeMacroblockHighpass(pSCDec, pContext, cColumn, cRow) != ICERR_OK)
                         return ICERR_ERROR;
 
-                predACDec(pSCDec);
+                JxrDecoderCoefficientPredictorApplyAc(pSCDec);
                 
                 updatePredInfo(pSCDec, &pSCDec->MBInfo, cColumn, pSCDec->WMISCP.cfColorFormat);
 
