@@ -73,6 +73,7 @@
 #include "../image/decode/JxrDecoderDequantizer.h"
 #include "../image/decode/JxrDecoderCoefficientPredictor.h"
 #include "../image/decode/JxrDecoderUvInterpolator.h"
+#include "../image/decode/JxrDecoderNChannelOutputWriter.h"
 #include "../image/decode/JxrDecoderRequestValidator.h"
 #include "../image/decode/JxrDecoderSessionPreparation.h"
 #include "../image/decode/JxrSecondaryPlaneBufferRegionLayout.h"
@@ -2816,6 +2817,35 @@ static int test_decoder_dequantizer_vectors(void)
     JxrDecoderDequantizerWrite2x2(destination, coefficients, 3);
     return destination[32] == 3 && destination[16] == 6 && destination[48] == 9;
 }
+
+static int test_decoder_nchannel_output_writer_vectors(void)
+{
+    CWMImageStrCodec codec;
+    CWMDecoderParameters parameters;
+    PixelI source[256];
+    U8 output[64];
+    size_t offsetX[16];
+    size_t offsetY[16];
+
+    memset(&codec, 0, sizeof(codec));
+    memset(&parameters, 0, sizeof(parameters));
+    memset(source, 0, sizeof(source));
+    memset(output, 0, sizeof(output));
+    memset(offsetX, 0, sizeof(offsetX));
+    memset(offsetY, 0, sizeof(offsetY));
+    codec.m_Dparam = &parameters;
+    codec.cRow = 1;
+    codec.WMII.cfColorFormat = Y_ONLY;
+    codec.WMII.bdBitDepth = BD_8;
+    codec.WMISCP.cChannel = 1;
+    codec.WMIBI.pv = output;
+    parameters.pOffsetX = offsetX;
+    parameters.pOffsetY = offsetY;
+    codec.a0MBbuffer[0] = source;
+    source[idxCC[0][0]] = 10;
+    JxrDecoderNChannelOutputWriterWrite(&codec, 0, 0, 1, 1, 0, 0);
+    return output[0] == 10;
+}
 static int test_prediction_math_vectors(void)
 {
     return JxrPredictionMathDequantize(0, 17) == 0 &&
@@ -4932,6 +4962,7 @@ int main(int argc, char** argv)
         { "decoder_coefficient_predictor_vectors", test_decoder_coefficient_predictor_vectors },
         { "decoder_uv_interpolator_vectors", test_decoder_uv_interpolator_vectors },
         { "decoder_dequantizer_vectors", test_decoder_dequantizer_vectors },
+        { "decoder_nchannel_output_writer_vectors", test_decoder_nchannel_output_writer_vectors },
         { "prediction_math_vectors", test_prediction_math_vectors },
         { "inverse_transform_macroblock_geometry_vectors", test_inverse_transform_macroblock_geometry_vectors },
         { "hard_tile_boundary_state_vectors", test_hard_tile_boundary_state_vectors },
