@@ -70,6 +70,7 @@
 #include "../image/decode/JxrDecoderSessionFactory.h"
 #include "../image/decode/JxrDecoderSessionReleaser.h"
 #include "../image/decode/JxrDecoderSessionExecutor.h"
+#include "../image/decode/JxrDecoderDequantizer.h"
 #include "../image/decode/JxrDecoderRequestValidator.h"
 #include "../image/decode/JxrDecoderSessionPreparation.h"
 #include "../image/decode/JxrSecondaryPlaneBufferRegionLayout.h"
@@ -2724,6 +2725,31 @@ static int test_bit_math_vectors(void)
         JxrBitMathLowMask32(32) == 0xffffffffU;
 }
 
+static int test_decoder_dequantizer_vectors(void)
+{
+    PixelI destination[128];
+    Int coefficients[16];
+    Int indexes[16];
+    Int index;
+
+    memset(destination, 0, sizeof(destination));
+    for (index = 0; index < 16; index++) {
+        coefficients[index] = index;
+        indexes[index] = index;
+    }
+    JxrDecoderDequantizerWrite4x4(destination, coefficients, indexes, 3);
+    if (destination[0] != 0 || destination[1] != 3 || destination[15] != 45) return 0;
+
+    memset(destination, 0, sizeof(destination));
+    JxrDecoderDequantizerWrite4x2(destination, coefficients, 3);
+    if (destination[64] != 3 || destination[16] != 6 || destination[80] != 9 ||
+        destination[32] != 12 || destination[96] != 15 || destination[48] != 18 ||
+        destination[112] != 21) return 0;
+
+    memset(destination, 0, sizeof(destination));
+    JxrDecoderDequantizerWrite2x2(destination, coefficients, 3);
+    return destination[32] == 3 && destination[16] == 6 && destination[48] == 9;
+}
 static int test_prediction_math_vectors(void)
 {
     return JxrPredictionMathDequantize(0, 17) == 0 &&
@@ -4837,6 +4863,7 @@ int main(int argc, char** argv)
         { "lowpass_cbp_state_vectors", test_lowpass_cbp_state_vectors },
         { "macroblock_cbp_state_vectors", test_macroblock_cbp_state_vectors },
         { "bit_math_vectors", test_bit_math_vectors },
+        { "decoder_dequantizer_vectors", test_decoder_dequantizer_vectors },
         { "prediction_math_vectors", test_prediction_math_vectors },
         { "inverse_transform_macroblock_geometry_vectors", test_inverse_transform_macroblock_geometry_vectors },
         { "hard_tile_boundary_state_vectors", test_hard_tile_boundary_state_vectors },

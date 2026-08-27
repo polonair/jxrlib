@@ -55,7 +55,6 @@ Void predCBPDec(CWMImageStrCodec *, CCodingContext *);
 Void predDCACDec(CWMImageStrCodec *);
 Void predACDec(CWMImageStrCodec *);
 
-Int dequantizeMacroblock(CWMImageStrCodec *);
 Int invTransformMacroblock(CWMImageStrCodec * pSC);
 Int invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC);
 

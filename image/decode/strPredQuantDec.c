@@ -31,58 +31,6 @@
 #include "JxrPredictionMath.h"
 
 
-Void dequantizeBlock4x4(PixelI * pRec, Int * pOrg, const Int * pIndex, Int iQPLP)
-{
-    Int i;
-    
-    for(i = 1; i < 16; i ++)
-        pRec[pIndex[i]] = JxrPredictionMathDequantize(pOrg[i], iQPLP);
-}
-
-Void dequantizeBlock2x2(PixelI * pRec, Int * pOrg, Int iQPLP)
-{
-    pRec[32] = JxrPredictionMathDequantize(pOrg[1], iQPLP);
-    pRec[16] = JxrPredictionMathDequantize(pOrg[2], iQPLP);
-    pRec[48] = JxrPredictionMathDequantize(pOrg[3], iQPLP);
-}
-
-Void dequantizeBlock4x2(PixelI * pRec, Int * pOrg, Int iQPLP)
-{
-    pRec[ 64] = JxrPredictionMathDequantize(pOrg[1], iQPLP);
-    pRec[ 16] = JxrPredictionMathDequantize(pOrg[2], iQPLP);
-    pRec[ 80] = JxrPredictionMathDequantize(pOrg[3], iQPLP);
-    pRec[ 32] = JxrPredictionMathDequantize(pOrg[4], iQPLP);
-    pRec[ 96] = JxrPredictionMathDequantize(pOrg[5], iQPLP);
-    pRec[ 48] = JxrPredictionMathDequantize(pOrg[6], iQPLP);
-    pRec[112] = JxrPredictionMathDequantize(pOrg[7], iQPLP);
-}
-
-
-Int dequantizeMacroblock(CWMImageStrCodec * pSC)
-{
-    const COLORFORMAT cf = pSC->m_param.cfColorFormat;
-    CWMIMBInfo *pMBInfo = &pSC->MBInfo;
-    CWMITile * pTile = pSC->pTile + pSC->cTileColumn;
-    const size_t iChannels = pSC->m_param.cNumChannels;
-    size_t i;
-
-    for(i = 0; i < iChannels; i ++){
-        //dequantize DC
-        pSC->p1MBbuffer[i][0] = JxrPredictionMathDequantize(pMBInfo->iBlockDC[i][0], pTile->pQuantizerDC[i]->iQP);
-
-        // dequantize LP
-        if(pSC->WMISCP.sbSubband != SB_DC_ONLY)
-            if(i == 0 || (cf != YUV_422 && cf != YUV_420))
-                dequantizeBlock4x4(pSC->p1MBbuffer[i] , pMBInfo->iBlockDC[i], dctIndex[2], pTile->pQuantizerLP[i][pMBInfo->iQIndexLP].iQP);
-            else if(cf == YUV_422)
-                dequantizeBlock4x2(pSC->p1MBbuffer[i], pMBInfo->iBlockDC[i], pTile->pQuantizerLP[i][pMBInfo->iQIndexLP].iQP);
-            else // 420
-                dequantizeBlock2x2(pSC->p1MBbuffer[i], pMBInfo->iBlockDC[i], pTile->pQuantizerLP[i][pMBInfo->iQIndexLP].iQP);
-    }
-
-    return ICERR_OK;
-}
-
 /* frequency domain inverse DCAC prediction */
 Void predDCACDec(CWMImageStrCodec * pSC)
 {

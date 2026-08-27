@@ -1,4 +1,5 @@
 #include "JxrDecoderMacroblockProcessingPipeline.h"
+#include "JxrDecoderDequantizer.h"
 
 #include "JXRTrace.h"
 #include "decode.h"
@@ -83,7 +84,7 @@ Int JxrDecoderMacroblockProcessingPipelineProcess(CWMImageStrCodec* codec)
                 JXRTraceDumpStage("decoder", "after_dc_lp_prediction", currentCodec,
                     (Int)currentCodec->cColumn, (Int)currentCodec->cRow, JXRTraceCoefficients);
 
-                dequantizeMacroblock(currentCodec);
+                JxrDecoderDequantizerDequantizeMacroblock(currentCodec);
                 JXRTraceDumpStage("decoder", "after_dequantization", currentCodec,
                     (Int)currentCodec->cColumn, (Int)currentCodec->cRow, JXRTraceCoefficients);
 
