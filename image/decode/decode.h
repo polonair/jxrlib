@@ -51,7 +51,6 @@ typedef struct CWMDecoderParameters {
     size_t * pOffsetY;
 } CWMDecoderParameters;
 
-Void predCBPDec(CWMImageStrCodec *, CCodingContext *);
 
 Int invTransformMacroblock(CWMImageStrCodec * pSC);
 Int invTransformMacroblock_alteredOperators_hard(CWMImageStrCodec * pSC);

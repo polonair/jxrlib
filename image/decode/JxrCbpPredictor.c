@@ -280,10 +280,3 @@ Void JxrCbpPredictorDecode(JxrDecoderSubbandContext* state)
         JxrCbpPredictorSetCurrentCbp(codec, 2, macroblockX, cbpV);
     }
 }
-
-Void predCBPDec(CWMImageStrCodec* codec, CCodingContext* entropy)
-{
-    JxrDecoderSubbandContext state;
-    JxrDecoderSubbandContextInit(&state, codec, entropy);
-    JxrCbpPredictorDecode(&state);
-}
