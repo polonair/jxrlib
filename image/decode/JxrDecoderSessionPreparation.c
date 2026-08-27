@@ -1,5 +1,6 @@
 #include "JxrDecoderSessionPreparation.h"
 #include "JxrHeaderDecodePipeline.h"
+#include "JxrDecoderRequestValidator.h"
 #include <string.h>
 
 Int JxrDecoderSessionPreparationPrepare(CWMImageInfo* imageInfo,
@@ -10,7 +11,7 @@ Int JxrDecoderSessionPreparationPrepare(CWMImageInfo* imageInfo,
     if (imageInfo == NULL || codecParameters == NULL || preparation == NULL)
         return ICERR_ERROR;
     memset(preparation, 0, sizeof(*preparation));
-    if (WMPhotoValidate(imageInfo, codecParameters) != ICERR_OK ||
+    if (JxrDecoderRequestValidatorValidateAndNormalize(imageInfo, codecParameters) != ICERR_OK ||
         codecParameters->sbSubband == SB_ISOLATED) return ICERR_ERROR;
 
     templateCodec = &preparation->templateCodec;

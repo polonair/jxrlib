@@ -220,6 +220,7 @@
     <ClCompile Include="..\decode\JxrDecoderMemoryLayoutPlan.c" />
     <ClCompile Include="..\decode\JxrDecoderPrimaryPlaneFactory.c" />
     <ClCompile Include="..\decode\JxrDecoderResourceInitializer.c" />
+    <ClCompile Include="..\decode\JxrDecoderRequestValidator.c" />
     <ClCompile Include="..\decode\JxrDecoderSessionFactory.c" />
     <ClCompile Include="..\decode\JxrDecoderSessionReleaser.c" />
     <ClCompile Include="..\decode\JxrDecoderSessionPreparation.c" />

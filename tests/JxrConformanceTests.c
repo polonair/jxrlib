@@ -69,6 +69,7 @@
 #include "../image/decode/JxrDecoderPrimaryPlaneFactory.h"
 #include "../image/decode/JxrDecoderSessionFactory.h"
 #include "../image/decode/JxrDecoderSessionReleaser.h"
+#include "../image/decode/JxrDecoderRequestValidator.h"
 #include "../image/decode/JxrDecoderSessionPreparation.h"
 #include "../image/decode/JxrSecondaryPlaneBufferRegionLayout.h"
 #include "../image/decode/JxrSecondaryPlaneFactory.h"
@@ -4036,6 +4037,42 @@ static int test_decoder_primary_plane_factory_vectors(void)
         FALSE, FALSE, &codec) == ICERR_ERROR && codec == NULL;
 }
 
+static int test_decoder_request_validator_normalization_vectors(void)
+{
+    CWMImageInfo imageInfo;
+    CWMImageInfo sourceImageInfo;
+    CWMIStrCodecParam codecParameters;
+    CWMIStrCodecParam sourceCodecParameters;
+
+    memset(&imageInfo, 0, sizeof(imageInfo));
+    memset(&sourceImageInfo, 0, sizeof(sourceImageInfo));
+    memset(&codecParameters, 0, sizeof(codecParameters));
+    memset(&sourceCodecParameters, 0, sizeof(sourceCodecParameters));
+    sourceImageInfo.bdBitDepth = BD_8;
+    sourceImageInfo.cWidth = 100;
+    sourceImageInfo.cHeight = 80;
+    sourceImageInfo.cfColorFormat = YUV_420;
+    sourceCodecParameters.bVerbose = TRUE;
+    sourceCodecParameters.cbStream = 1234;
+    codecParameters.cfColorFormat = YUV_444;
+    imageInfo.cfColorFormat = YUV_420;
+    imageInfo.cThumbnailWidth = 30;
+    imageInfo.cThumbnailHeight = 30;
+    imageInfo.cROILeftX = 24;
+    imageInfo.cROITopY = 19;
+    imageInfo.cROIWidth = 5;
+    imageInfo.cROIHeight = 5;
+    if (JxrDecoderRequestValidatorNormalize(&imageInfo, &codecParameters,
+        &sourceImageInfo, &sourceCodecParameters) != ICERR_OK ||
+        imageInfo.bdBitDepth != BD_8 || imageInfo.cfColorFormat != YUV_444 ||
+        imageInfo.cThumbnailWidth != 25 || imageInfo.cThumbnailHeight != 20 ||
+        imageInfo.cROIWidth != 1 || imageInfo.cROIHeight != 1 ||
+        !codecParameters.bVerbose || codecParameters.cbStream != 1234) return 0;
+
+    sourceImageInfo.cWidth = 0;
+    return JxrDecoderRequestValidatorNormalize(&imageInfo, &codecParameters,
+        &sourceImageInfo, &sourceCodecParameters) == ICERR_ERROR;
+}
 static int test_decoder_session_preparation_vectors(void)
 {
     CWMImageInfo imageInfo;
@@ -4836,6 +4873,7 @@ int main(int argc, char** argv)
         { "decoder_memory_layout_plan_vectors", test_decoder_memory_layout_plan_vectors },
         { "decoder_buffer_region_layout_vectors", test_decoder_buffer_region_layout_vectors },
         { "decoder_primary_plane_factory_vectors", test_decoder_primary_plane_factory_vectors },
+        { "decoder_request_validator_normalization_vectors", test_decoder_request_validator_normalization_vectors },
         { "decoder_session_preparation_vectors", test_decoder_session_preparation_vectors },
         { "decoder_session_factory_vectors", test_decoder_session_factory_vectors },
         { "decoder_session_releaser_vectors", test_decoder_session_releaser_vectors },

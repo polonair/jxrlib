@@ -36,12 +36,13 @@
 #include "JxrHeaderStateApplier.h"
 #include "JxrHeaderValidation.h"
 #include "JxrHeaderStreamReader.h"
-#include "JxrStreamPositionScope.h"
+
 #include "JxrHeaderMetadataFinalizer.h"
 #include "JxrHeaderDecodePipeline.h"
 #include "JxrDecoderInitializationPipeline.h"
 #include "JxrDecoderInputInitializer.h"
 #include "JxrDecoderSessionPreparation.h"
+#include "JxrDecoderRequestValidator.h"
 #include "JxrDecoderSessionReleaser.h"
 #include "JxrDecoderSessionFactory.h"
 
@@ -110,97 +111,17 @@ Int ReadWMIHeader(
 // streaming api init/decode/term
 EXTERN_C Int ImageStrDecGetInfo(
     CWMImageInfo* pII,
-    CWMIStrCodecParam *pSCP)
+    CWMIStrCodecParam* pSCP)
 {
-    JxrStreamPositionScope positionScope;
-    CCoreParameters dummyParameters;
-    Int readResult;
-    Bool restored;
-
-    if (pII == NULL || pSCP == NULL ||
-        !JxrStreamPositionScopeCapture(&positionScope, pSCP->pWStream))
-        return ICERR_ERROR;
-    readResult = ReadWMIHeader(pII, pSCP, &dummyParameters);
-    restored = JxrStreamPositionScopeRestore(&positionScope);
-    return readResult == ICERR_OK && restored ? ICERR_OK : ICERR_ERROR;
+    return JxrDecoderRequestValidatorReadInfo(pII, pSCP);
 }
+
 EXTERN_C Int WMPhotoValidate(
-    CWMImageInfo * pII,
-    CWMIStrCodecParam * pSCP)
+    CWMImageInfo* pII,
+    CWMIStrCodecParam* pSCP)
 {
-    CWMImageInfo cII;
-    CWMIStrCodecParam cSCP = *pSCP;
-    size_t cScale = 1;
-
-    if(ImageStrDecGetInfo(&cII, pSCP) != ICERR_OK)
-        return ICERR_ERROR;
-
-    // copy over un-overwritable ImageInfo parameters
-    pII->bdBitDepth = cII.bdBitDepth;
-    pII->cWidth = cII.cWidth;
-    pII->cHeight = cII.cHeight;
-
-    if(pII->cWidth == 0 || pII->cHeight == 0)
-        return ICERR_ERROR;
-
-    // copy over overwritable CodecParam parameters
-    pSCP->bVerbose = cSCP.bVerbose;
-    pSCP->cbStream = cSCP.cbStream;
-    pSCP->pWStream = cSCP.pWStream;
-    if(pSCP->uAlphaMode > 1) // something + alpha
-        pSCP->uAlphaMode = cSCP.uAlphaMode; // something + alpha to alpha or something transcoding!
-
-    // validate color transcoding
-    if(pSCP->cfColorFormat == NCOMPONENT)
-        pII->cfColorFormat = NCOMPONENT;
-    if(pSCP->cfColorFormat == CMYK && pII->cfColorFormat != Y_ONLY && pII->cfColorFormat != CF_RGB)
-        pII->cfColorFormat = CMYK;
-    if(pSCP->cfColorFormat == YUV_422 && pII->cfColorFormat == YUV_420)
-        pII->cfColorFormat = YUV_422;
-    if(pSCP->cfColorFormat == YUV_444 && (pII->cfColorFormat == YUV_422 || pII->cfColorFormat == YUV_420))
-        pII->cfColorFormat = YUV_444;
-    if(cII.cfColorFormat == CF_RGB && pII->cfColorFormat != Y_ONLY && 
-        pII->cfColorFormat != NCOMPONENT)  // no guarantee that number of channels will be >= 3
-        pII->cfColorFormat = cII.cfColorFormat;
-    if(cII.cfColorFormat == CF_RGBE)
-        pII->cfColorFormat = CF_RGBE;
-
-    // validate thumbnail parameters
-    if(pII->cThumbnailWidth == 0 || pII->cThumbnailWidth > pII->cWidth)
-        pII->cThumbnailWidth = pII->cWidth;
-    if(pII->cThumbnailHeight == 0 || pII->cThumbnailHeight > pII->cHeight)
-        pII->cThumbnailHeight = pII->cHeight;
-    if((pII->cWidth + pII->cThumbnailWidth - 1) / pII->cThumbnailWidth != (pII->cHeight + pII->cThumbnailHeight - 1) / pII->cThumbnailHeight) {
-        while((pII->cWidth + cScale - 1) / cScale > pII->cThumbnailWidth &&
-            (pII->cHeight + cScale - 1) / cScale > pII->cThumbnailHeight && (cScale << 1))
-            cScale <<= 1;
-    }
-    else {
-        cScale = (pII->cWidth + pII->cThumbnailWidth - 1) / pII->cThumbnailWidth;    
-        if (cScale == 0)
-            cScale = 1;
-    }
-    pII->cThumbnailWidth = (pII->cWidth + cScale - 1) / cScale;
-    pII->cThumbnailHeight = (pII->cHeight + cScale - 1) / cScale;
-
-    // validate region decode parameters
-    if(pII->cROIHeight == 0 || pII->cROIWidth == 0){
-        pII->cROILeftX = pII->cROITopY = 0;
-        pII->cROIWidth = pII->cThumbnailWidth;
-        pII->cROIHeight = pII->cThumbnailHeight;
-    }
-    if(pII->cROILeftX >= pII->cThumbnailWidth)
-        pII->cROILeftX = 0;
-    if(pII->cROITopY >= pII->cThumbnailHeight)
-        pII->cROITopY = 0;
-    if(pII->cROILeftX + pII->cROIWidth > pII->cThumbnailWidth)
-        pII->cROIWidth = pII->cThumbnailWidth - pII->cROILeftX;
-    if(pII->cROITopY + pII->cROIHeight > pII->cThumbnailHeight)
-        pII->cROIHeight = pII->cThumbnailHeight - pII->cROITopY;
-
-    return ICERR_OK;
+    return JxrDecoderRequestValidatorValidateAndNormalize(pII, pSCP);
 }
-
 /*************************************************************************
   ImageStrDecInit
 *************************************************************************/
