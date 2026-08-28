@@ -50,6 +50,7 @@
 #include "JxrEncoderInputPadding.h"
 #include "JxrEncoderChromaDownsampler.h"
 #include "JxrEncoderInputRowProcessor.h"
+#include "JxrEncoderSessionInitializer.h"
 #include "JxrEncoderResourceRelease.h"
 #include "JxrEncoderMemoryLayoutPlan.h"
 #include "JxrEncoderBufferRegionLayout.h"
@@ -431,28 +432,7 @@ Int ValidateArgs(CWMImageInfo* pII, CWMIStrCodecParam *pSCP)
 static Void InitializeStrEnc(CWMImageStrCodec *pSC,
     const CWMImageInfo* pII, const CWMIStrCodecParam *pSCP)
 {
-    pSC->cbStruct = sizeof(*pSC);
-    pSC->WMII = *pII;
-    pSC->WMISCP = *pSCP;
-
-    // set nExpBias
-    if (pSC->WMISCP.nExpBias == 0)
-        pSC->WMISCP.nExpBias = 4 + 128;//default
-    pSC->WMISCP.nExpBias += 128; // rollover arithmetic
-
-    pSC->cRow = 0;
-    pSC->cColumn = 0;
-    
-    pSC->cmbWidth = (pSC->WMII.cWidth + 15) / 16;
-    pSC->cmbHeight = (pSC->WMII.cHeight + 15) / 16;
-
-#if defined(WMP_OPT_SSE2) || defined(WMP_OPT_CC_ENC) || defined(WMP_OPT_TRFM_ENC)
-    pSC->Load = JxrEncoderInputRowProcessorProcess;
-#endif
-
-
-    pSC->m_pNextSC = NULL;
-    pSC->m_bSecondary = FALSE;
+    JxrEncoderSessionInitializerInitialize(pSC, pII, pSCP);
 }
 
 /*************************************************************************
