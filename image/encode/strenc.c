@@ -53,6 +53,7 @@
 #include "JxrEncoderSessionInitializer.h"
 #include "JxrEncoderSessionFactory.h"
 #include "JxrEncoderSessionReleaser.h"
+#include "JxrEncoderSessionEncoder.h"
 #include "JxrEncoderResourceRelease.h"
 #include "JxrEncoderMemoryLayoutPlan.h"
 #include "JxrEncoderBufferRegionLayout.h"
@@ -456,45 +457,8 @@ Int ImageStrEncEncode(
 {
     CWMImageStrCodec* pSC = (CWMImageStrCodec*)ctxSC;
     JXRTraceDumpCodecState("encoder", pSC);
-    CWMImageStrCodec* pNextSC = pSC->m_pNextSC;
-
-    JxrEncoderProcessingPipelinePlan processingPipeline;
-
-#if defined(WMP_OPT_SSE2) || defined(WMP_OPT_CC_ENC) || defined(WMP_OPT_TRFM_ENC)
-    JxrEncoderProcessingPipelinePlanInitialize(&processingPipeline, TRUE);
-#else
-    JxrEncoderProcessingPipelinePlanInitialize(&processingPipeline, FALSE);
-#endif
-
-    if (sizeof(*pSC) != pSC->cbStruct)
-    {
-        return ICERR_ERROR;
-    }
-
-    //================================
-    PERFTIMER_START(pSC->m_fMeasurePerf, pSC->m_ptEncDecPerf);
-
-    pSC->WMIBI = *pBI;
-    pSC->cColumn = 0;
-    initMRPtr(pSC);
-    if (pNextSC)
-        pNextSC->WMIBI = *pBI;
-
-
-    if (processingPipeline.usesLegacyLoadCallback) {
-        if (pSC->Load(pSC) != ICERR_OK)
-            return ICERR_ERROR;
-    }
-    else if (JxrEncoderProcessingPipelineLoadInput(pSC) != ICERR_OK)
-        return ICERR_ERROR;
-    JXRTraceDumpStage("encoder", "centered_samples", pSC, 0, (Int)pSC->cRow, JXRTraceSamples);
-    if (JxrEncoderMacroblockProcessingPipelineProcessLoadedRow(pSC) != ICERR_OK)
-        return ICERR_ERROR;
-
-    PERFTIMER_STOP(pSC->m_fMeasurePerf, pSC->m_ptEncDecPerf);
-    return ICERR_OK;
+    return JxrEncoderSessionEncoderEncodeRow(pSC, pBI);
 }
-
 /*************************************************************************
    Streaming API term
 *************************************************************************/

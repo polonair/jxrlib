@@ -208,6 +208,7 @@
     <ClCompile Include="..\encode\JxrEncoderSessionInitializer.c" />
     <ClCompile Include="..\encode\JxrEncoderSessionFactory.c" />
     <ClCompile Include="..\encode\JxrEncoderSessionReleaser.c" />
+    <ClCompile Include="..\encode\JxrEncoderSessionEncoder.c" />
     <ClCompile Include="..\encode\JxrEncoderResourceRelease.c" />
     <ClCompile Include="..\encode\JxrEncoderMemoryLayoutPlan.c" />
     <ClCompile Include="..\encode\JxrEncoderBufferRegionLayout.c" />
