@@ -54,6 +54,7 @@
 #include "JxrEncoderSessionFactory.h"
 #include "JxrEncoderSessionReleaser.h"
 #include "JxrEncoderSessionEncoder.h"
+#include "JxrEncoderRequestValidator.h"
 #include "JxrEncoderResourceRelease.h"
 #include "JxrEncoderMemoryLayoutPlan.h"
 #include "JxrEncoderBufferRegionLayout.h"
@@ -249,184 +250,19 @@ static Int StrEncTerm(CTXSTRCODEC ctxSC)
     JXRTraceDumpCodecState("encoder", codec);
     return JxrEncoderResourceReleaseRelease(codec);
 }
-U32 setUniformTiling(U32 * pTile, U32 cNumTile, U32 cNumMB)
+U32 setUniformTiling(U32* pTile, U32 cNumTile, U32 cNumMB)
 {
-    U32 i, j;
-
-    while((cNumMB + cNumTile - 1) / cNumTile > 65535) // too few tiles
-        cNumTile ++;
-
-    for(i = cNumTile, j = cNumMB; i > 1; i --){
-        pTile[cNumTile - i] = (j + i - 1) / i;
-        j -= pTile[cNumTile - i];
-    }
-
-    return cNumTile;
+    return JxrEncoderRequestValidatorSetUniformTiling(pTile, cNumTile, cNumMB);
 }
 
-U32 validateTiling(U32 * pTile, U32 cNumTile, U32 cNumMB)
+U32 validateTiling(U32* pTile, U32 cNumTile, U32 cNumMB)
 {
-    U32 i, cMBs;
-
-    if(cNumTile == 0)
-        cNumTile = 1;
-    if(cNumTile > cNumMB) // too many tiles
-        cNumTile = 1;
-    if(cNumTile > MAX_TILES)
-        cNumTile = MAX_TILES;
-
-    for(i = cMBs = 0; i + 1 < cNumTile; i ++){
-        if(pTile[i] == 0 || pTile[i] > 65535){ // invalid tile setting, resetting to uniform tiling
-            cNumTile = setUniformTiling(pTile, cNumTile, cNumMB);
-            break;
-        }
-        
-        cMBs += pTile[i];
-
-        if(cMBs >= cNumMB){
-            cNumTile = i + 1;
-            break;
-        }
-    }
-
-    // last tile
-    if(cNumMB - cMBs > 65536)
-        cNumTile = setUniformTiling(pTile, cNumTile, cNumMB);
-
-    for(i = 1; i < cNumTile; i ++)
-        pTile[i] += pTile[i - 1];
-    for(i = cNumTile - 1; i > 0; i --)
-        pTile[i] = pTile[i - 1];
-    pTile[0] = 0;
-
-    return cNumTile;
+    return JxrEncoderRequestValidatorNormalizeTiling(pTile, cNumTile, cNumMB);
 }
 
-/*************************************************************************
-  Validate and adjust input params here
-*************************************************************************/
-Int ValidateArgs(CWMImageInfo* pII, CWMIStrCodecParam *pSCP)
+Int ValidateArgs(CWMImageInfo* pII, CWMIStrCodecParam* pSCP)
 {
-    int i;
-    Bool bTooNarrowTile = FALSE;
-
-    if(pII->cWidth > (1 << 28) || pII->cHeight > (1 << 28) || pII->cWidth == 0 || pII->cHeight == 0){
-        printf("Unsurpported image size!\n");
-        return ICERR_ERROR; // unsurpported image size
-    }
-
-    if (((pSCP->cfColorFormat == YUV_420) || (pSCP->cfColorFormat == YUV_422)) && (pSCP->olOverlap == OL_TWO) && ((Int)(((U32)pII->cWidth + 15) >> 4) < 2)) {
-        printf("Image width must be at least 2 MB wide for subsampled chroma and two levels of overlap!\n");
-        return ICERR_ERROR;
-    }
-
-    if(pSCP->sbSubband == SB_ISOLATED || pSCP->sbSubband >= SB_MAX) // not allowed
-        pSCP->sbSubband = SB_ALL;
-
-    if(pII->bdBitDepth == BD_5 && (pII->cfColorFormat != CF_RGB || pII->cBitsPerUnit != 16 || pII->cLeadingPadding != 0)){
-        printf("Unsupported BD_5 image format!\n");
-        return ICERR_ERROR; // BD_5 must be compact RGB!
-    }   
-    if(pII->bdBitDepth == BD_565 && (pII->cfColorFormat != CF_RGB || pII->cBitsPerUnit != 16 || pII->cLeadingPadding != 0)){
-        printf("Unsupported BD_565 image format!\n");
-        return ICERR_ERROR; // BD_5 must be compact RGB!
-    }   
-    if(pII->bdBitDepth == BD_10 && (pII->cfColorFormat != CF_RGB || pII->cBitsPerUnit != 32 || pII->cLeadingPadding != 0)){
-        printf("Unsupported BD_10 image format!\n");
-        return ICERR_ERROR; // BD_10 must be compact RGB!
-    }
-
-    if((pII->bdBitDepth == BD_5 || pII->bdBitDepth == BD_565 || pII->bdBitDepth == BD_10) && 
-        (pSCP->cfColorFormat != YUV_420 && pSCP->cfColorFormat != YUV_422 && pSCP->cfColorFormat != Y_ONLY))
-            pSCP->cfColorFormat = YUV_444;
-
-    if(BD_1 == pII->bdBitDepth){ // binary image
-        if(pII->cfColorFormat != Y_ONLY){
-            printf("BD_1 image must be black-and white!\n");
-            return ICERR_ERROR;
-        }
-        pSCP->cfColorFormat = Y_ONLY; // can only be black white
-    }
-
-    if(pSCP->bdBitDepth != BD_LONG)
-        pSCP->bdBitDepth = BD_LONG; // currently only support 32 bit internally
-
-    if(pSCP->uAlphaMode > 1 && (pII->cfColorFormat == YUV_420 || pII->cfColorFormat == YUV_422 
-								|| pII->bdBitDepth == BD_5 || pII->bdBitDepth == BD_10 
-								|| pII->bdBitDepth == BD_1))
-    {
-        printf("Alpha is not supported for this pixel format!\n");
-        return ICERR_ERROR;
-    }
-
-    if((pSCP->cfColorFormat == YUV_420 || pSCP->cfColorFormat == YUV_422) && (pII->bdBitDepth == BD_16F || pII->bdBitDepth == BD_32F || pII->cfColorFormat == CF_RGBE))
-    {
-        printf("Float or RGBE images must be encoded with YUV 444!\n");
-        return ICERR_ERROR;
-    }
-
-    // adjust tiling
-    pSCP->cNumOfSliceMinus1V = validateTiling(pSCP->uiTileX, pSCP->cNumOfSliceMinus1V + 1, (((U32)pII->cWidth + 15) >> 4)) - 1;
-    pSCP->cNumOfSliceMinus1H = validateTiling(pSCP->uiTileY, pSCP->cNumOfSliceMinus1H + 1, (((U32)pII->cHeight + 15) >> 4)) - 1;
-
-    if (pSCP->bUseHardTileBoundaries && ((pSCP->cfColorFormat == YUV_420) || (pSCP->cfColorFormat == YUV_422)) && (pSCP->olOverlap == OL_TWO)) {
-        for (i = 1; i < (int) (pSCP->cNumOfSliceMinus1H + 1); i++) {
-            if ((Int)(pSCP->uiTileY[i] - pSCP->uiTileY[i - 1]) < 2) {
-                bTooNarrowTile = TRUE;
-                break;
-            }
-        }
-        if ((Int)((((U32)pII->cWidth + 15) >> 4) - pSCP->uiTileY[pSCP->cNumOfSliceMinus1H]) < 2) 
-            bTooNarrowTile = TRUE;
-    }
-    if (bTooNarrowTile) {
-        printf("Tile width must be at least 2 MB wide for hard tiles, subsampled chroma, and two levels of overlap!\n");
-        return ICERR_ERROR;
-    }
-
-    if(pSCP->cChannel > MAX_CHANNELS)
-        return ICERR_ERROR;
-
-    /** supported color transcoding **/
-    /** ARGB, RGB => YUV_444, YUV_422, YUV_420, Y_ONLY **/
-    /** YUV_444   =>          YUV_422, YUV_420, Y_ONLY **/
-    /** YUV_422   =>                   YUV_420, Y_ONLY **/
-    /** YUV_420   =>                            Y_ONLY **/
-
-    /** unsupported color transcoding       **/
-    /** Y_ONLY, YUV_420, YUV_422 => YUV_444 **/
-    /** Y_ONLY, YUV_420          => YUV_422 **/
-    /** Y_ONLY                   => YUV_420 **/
-    if((pII->cfColorFormat == Y_ONLY &&  pSCP->cfColorFormat != Y_ONLY) || 
-        (pSCP->cfColorFormat == YUV_422 && (pII->cfColorFormat == YUV_420 || pII->cfColorFormat == Y_ONLY)) || 
-        (pSCP->cfColorFormat == YUV_444 && (pII->cfColorFormat == YUV_422 || pII->cfColorFormat == YUV_420 || pII->cfColorFormat == Y_ONLY))){
-		pSCP->cfColorFormat = pII->cfColorFormat; // force not to do color transcoding!
-    }
-    else if (pII->cfColorFormat == NCOMPONENT) {
-		pSCP->cfColorFormat = NCOMPONENT; // force not to do color transcoding!
-    }
-    if (CMYK == pII->cfColorFormat && pSCP->cfColorFormat == NCOMPONENT) 
-    {
-        pSCP->cfColorFormat = CMYK;
-    }
-
-    if(pSCP->cfColorFormat != NCOMPONENT){
-        if(pSCP->cfColorFormat == Y_ONLY)
-            pSCP->cChannel = 1;
-        else if(pSCP->cfColorFormat == CMYK)
-            pSCP->cChannel = 4;
-        else
-            pSCP->cChannel = 3;
-    }
-
-    if(pSCP->sbSubband >= SB_MAX)
-        pSCP->sbSubband = SB_ALL;
-
-
-    pII->cChromaCenteringX = 0;
-    pII->cChromaCenteringY = 0;
-
-    return ICERR_OK;
+    return JxrEncoderRequestValidatorValidateAndNormalize(pII, pSCP);
 }
 
 /*************************************************************************

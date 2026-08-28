@@ -42,6 +42,7 @@
 #include "../image/encode/JxrEncoderMemoryLayoutPlan.h"
 #include "../image/encode/JxrEncoderBufferRegionLayout.h"
 #include "../image/encode/JxrEncoderProcessingPipeline.h"
+#include "../image/encode/JxrEncoderRequestValidator.h"
 #include "encode.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
@@ -4400,6 +4401,55 @@ static int test_encoder_memory_layout_plan_vectors(void)
     return !plan.allocationIsSafe;
 }
 
+static int test_encoder_request_validator_vectors(void)
+{
+    CWMImageInfo imageInfo;
+    CWMIStrCodecParam codecParameters;
+    U32 tileBoundaries[2] = { 0, 0 };
+
+    if (JxrEncoderRequestValidatorNormalizeTiling(tileBoundaries, 2, 2) != 2 ||
+        tileBoundaries[0] != 0 || tileBoundaries[1] != 1) return 0;
+
+    memset(&imageInfo, 0, sizeof(imageInfo));
+    memset(&codecParameters, 0, sizeof(codecParameters));
+    imageInfo.cWidth = 32;
+    imageInfo.cHeight = 16;
+    imageInfo.bdBitDepth = BD_8;
+    imageInfo.cfColorFormat = CF_RGB;
+    codecParameters.cfColorFormat = YUV_420;
+    codecParameters.sbSubband = SB_ISOLATED;
+    codecParameters.bdBitDepth = BD_SHORT;
+    if (JxrEncoderRequestValidatorValidateAndNormalize(&imageInfo,
+            &codecParameters) != ICERR_OK ||
+        codecParameters.sbSubband != SB_ALL ||
+        codecParameters.bdBitDepth != BD_LONG ||
+        codecParameters.cChannel != 3 ||
+        codecParameters.uiTileX[0] != 0 || codecParameters.uiTileY[0] != 0 ||
+        imageInfo.cChromaCenteringX != 0 || imageInfo.cChromaCenteringY != 0) return 0;
+
+    memset(&imageInfo, 0, sizeof(imageInfo));
+    memset(&codecParameters, 0, sizeof(codecParameters));
+    imageInfo.cWidth = 16;
+    imageInfo.cHeight = 16;
+    imageInfo.bdBitDepth = BD_8;
+    imageInfo.cfColorFormat = Y_ONLY;
+    codecParameters.cfColorFormat = YUV_444;
+    if (JxrEncoderRequestValidatorValidateAndNormalize(&imageInfo,
+            &codecParameters) != ICERR_OK ||
+        codecParameters.cfColorFormat != Y_ONLY || codecParameters.cChannel != 1) return 0;
+
+    memset(&imageInfo, 0, sizeof(imageInfo));
+    memset(&codecParameters, 0, sizeof(codecParameters));
+    imageInfo.cWidth = 16;
+    imageInfo.cHeight = 16;
+    imageInfo.bdBitDepth = BD_8;
+    imageInfo.cfColorFormat = CF_RGB;
+    codecParameters.cfColorFormat = YUV_420;
+    codecParameters.olOverlap = OL_TWO;
+    return JxrEncoderRequestValidatorValidateAndNormalize(&imageInfo,
+        &codecParameters) == ICERR_ERROR;
+}
+
 static int test_decoder_memory_layout_plan_vectors(void)
 {
     JxrDecoderMemoryLayoutPlan plan;
@@ -5337,6 +5387,7 @@ int main(int argc, char** argv)
         { "encoder_input_row_plan_vectors", test_encoder_input_row_plan_vectors },
         { "encoder_resource_release_plan_vectors", test_encoder_resource_release_plan_vectors },
         { "encoder_memory_layout_plan_vectors", test_encoder_memory_layout_plan_vectors },
+        { "encoder_request_validator_vectors", test_encoder_request_validator_vectors },
         { "decoder_memory_layout_plan_vectors", test_decoder_memory_layout_plan_vectors },
         { "decoder_buffer_region_layout_vectors", test_decoder_buffer_region_layout_vectors },
         { "decoder_primary_plane_factory_vectors", test_decoder_primary_plane_factory_vectors },
