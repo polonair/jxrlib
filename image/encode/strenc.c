@@ -52,6 +52,7 @@
 #include "JxrEncoderInputRowProcessor.h"
 #include "JxrEncoderSessionInitializer.h"
 #include "JxrEncoderSessionFactory.h"
+#include "JxrEncoderSessionReleaser.h"
 #include "JxrEncoderResourceRelease.h"
 #include "JxrEncoderMemoryLayoutPlan.h"
 #include "JxrEncoderBufferRegionLayout.h"
@@ -502,28 +503,7 @@ Int ImageStrEncTerm(
 {
     CWMImageStrCodec* pSC = (CWMImageStrCodec*)ctxSC;
     JXRTraceDumpCodecState("encoder", pSC);
-    // CWMImageStrCodec *pNextSC = pSC->m_pNextSC;
-
-    if (sizeof(*pSC) != pSC->cbStruct)
-    {
-        return ICERR_ERROR;
-    }
-
-    //================================
-    PERFTIMER_START(pSC->m_fMeasurePerf, pSC->m_ptEncDecPerf);
-    JxrEncoderMacroblockProcessingPipelineProcessFinalRow(pSC);
-
-    //================================
-    StrEncTerm(pSC);
-
-    PERFTIMER_STOP(pSC->m_fMeasurePerf, pSC->m_ptEncDecPerf);
-    PERFTIMER_STOP(pSC->m_fMeasurePerf, pSC->m_ptEndToEndPerf);
-    PERFTIMER_REPORT(pSC->m_fMeasurePerf, pSC);
-    PERFTIMER_DELETE(pSC->m_fMeasurePerf, pSC->m_ptEncDecPerf);
-    PERFTIMER_DELETE(pSC->m_fMeasurePerf, pSC->m_ptEndToEndPerf);
-
-    free(pSC);
-    return ICERR_OK;
+    return JxrEncoderSessionReleaserRelease(pSC);
 }
 
 // centralized UV downsampling
