@@ -233,6 +233,7 @@
     <ClCompile Include="..\decode\JxrDecoderNChannelOutputWriter.c" />
     <ClCompile Include="..\decode\JxrDecoderThumbnailNChannelOutputWriter.c" />
     <ClCompile Include="..\decode\JxrDecoderThumbnailColorOutputWriter.c" />
+    <ClCompile Include="..\decode\JxrDecoderStandardColorOutputWriter.c" />
     <ClCompile Include="..\decode\JxrDecoderAlphaOutputWriter.c" />
     <ClCompile Include="..\decode\JxrDecoderThumbnailAlphaOutputWriter.c" />
     <ClCompile Include="..\decode\JxrDecoderTransformPipeline.c" />
