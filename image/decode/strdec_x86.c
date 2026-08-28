@@ -28,6 +28,7 @@
 #include "strcodec.h"
 #include "decode.h"
 #include "JxrDecoderOptimizationPolicy.h"
+#include "JxrDecoderOptimizationEligibility.h"
 
 #if defined(WMP_OPT_SSE2)
 #include <emmintrin.h>
@@ -1592,9 +1593,6 @@ void StrDecOpt(CWMImageStrCodec* pSC)
 #if defined(WMP_OPT_SSE2)
     if (IsProcessorFeaturePresent(PF_XMMI64_INSTRUCTIONS_AVAILABLE))
     {
-        CWMImageInfo* pII = &pSC->WMII;
-        // CWMIStrCodecParam* pSCP = &pSC->WMISCP;
-
         g_const_d0 = _mm_setzero_si128();
         g_const_d3 = _mm_set1_epi32(3);
         g_const_d1 = _mm_set_epi32(1, 1, 1, 1);
@@ -1604,19 +1602,7 @@ void StrDecOpt(CWMImageStrCodec* pSC)
         g_const_w0x80 = _mm_set_epi16(0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80);
         g_const_b0x80 = _mm_set_epi8(0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80);
 
-        if (pSC->WMII.fPaddedUserBuffer &&
-            //pSC->m_Dparam->bDecodeFullFrame &&
-            //((pII->cWidth & 0xf) == 0) &&
-            //(((int) pSC->WMIBI.pv & 0xf) == 0) &&
-            BD_8 == pII->bdBitDepth &&
-            CF_RGB == pII->cfColorFormat &&
-            24 == pII->cBitsPerUnit &&
-            pII->bRGB &&
-            O_NONE == pII->oOrientation &&
-            YUV_444 == pSC->m_param.cfColorFormat &&
-            pSC->p1MBbuffer[1] - pSC->p1MBbuffer[0] == pSC->p1MBbuffer[2] - pSC->p1MBbuffer[1] &&
-            pSC->m_Dparam->bDecodeFullFrame &&
-            1)
+        if (JxrDecoderOptimizationEligibilityCanUseRgb24Output(pSC))
         {
 #if defined(WMP_OPT_CC_DEC)
             if (pSC->m_param.bScaledArith || pSC->WMISCP.olOverlap != OL_NONE)
@@ -1630,11 +1616,7 @@ void StrDecOpt(CWMImageStrCodec* pSC)
 #endif // WMP_OPT_CC_DEC
         }
 
-        if (YUV_444 == pSC->m_param.cfColorFormat &&
-            pSC->p1MBbuffer[1] - pSC->p1MBbuffer[0] == pSC->p1MBbuffer[2] - pSC->p1MBbuffer[1] &&
-            pSC->m_Dparam->bDecodeFullWidth &&
-            pSC->m_param.cSubVersion == CODEC_SUBVERSION_NEWSCALING_SOFT_TILES &&
-            1 == pSC->m_Dparam->cThumbnailScale)
+        if (JxrDecoderOptimizationEligibilityCanUseYuv444CenterTransform(pSC))
         {
 #if defined(WMP_OPT_TRFM_DEC)
             pSC->TransformCenter = invTransformMacroblock_YUV444_Center5;
