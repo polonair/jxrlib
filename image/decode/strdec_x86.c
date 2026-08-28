@@ -27,6 +27,7 @@
 //*@@@---@@@@******************************************************************
 #include "strcodec.h"
 #include "decode.h"
+#include "JxrDecoderOptimizationPolicy.h"
 
 #if defined(WMP_OPT_SSE2)
 #include <emmintrin.h>
@@ -1580,6 +1581,14 @@ Int invTransformMacroblock_YUV444_Center5(CWMImageStrCodec * pSC)
 //================================================================
 void StrDecOpt(CWMImageStrCodec* pSC)
 {
+    JxrDecoderOptimizationPolicy policy;
+
+    JxrDecoderOptimizationPolicyInitialize(&policy);
+    if (!policy.nativeOptimizationAvailable) {
+        UNREFERENCED_PARAMETER(pSC);
+        return;
+    }
+
 #if defined(WMP_OPT_SSE2)
     if (IsProcessorFeaturePresent(PF_XMMI64_INSTRUCTIONS_AVAILABLE))
     {
@@ -1633,8 +1642,6 @@ void StrDecOpt(CWMImageStrCodec* pSC)
         }
 
     }
-#else
-    UNREFERENCED_PARAMETER( pSC );
 #endif    
 }
 

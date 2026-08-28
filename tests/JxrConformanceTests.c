@@ -79,6 +79,7 @@
 #include "../image/decode/JxrDecoderThumbnailNChannelOutputWriter.h"
 #include "../image/decode/JxrDecoderThumbnailColorOutputWriter.h"
 #include "../image/decode/JxrDecoderStandardColorOutputWriter.h"
+#include "../image/decode/JxrDecoderOptimizationPolicy.h"
 #include "../image/decode/JxrDecoderRequestValidator.h"
 #include "../image/decode/JxrDecoderSessionPreparation.h"
 #include "../image/decode/JxrSecondaryPlaneBufferRegionLayout.h"
@@ -1033,6 +1034,18 @@ static int test_decoder_output_pipeline_plan_vectors(void)
 
     JxrDecoderOutputPipelinePlanInitialize(&plan, TRUE);
     return plan.usesLegacyLoadCallback;
+}
+
+static int test_decoder_optimization_policy_vectors(void)
+{
+    JxrDecoderOptimizationPolicy policy;
+
+    JxrDecoderOptimizationPolicyInitialize(&policy);
+#if defined(WMP_OPT_SSE2)
+    return policy.nativeOptimizationAvailable && !policy.usesPortableBaseline;
+#else
+    return !policy.nativeOptimizationAvailable && policy.usesPortableBaseline;
+#endif
 }
 
 static int test_decoder_output_row_plan_vectors(void)
@@ -5129,6 +5142,7 @@ int main(int argc, char** argv)
         { "header_decode_pipeline_vectors", test_header_decode_pipeline_vectors },
         { "decoder_initialization_pipeline_vectors", test_decoder_initialization_pipeline_vectors },
         { "decoder_output_pipeline_plan_vectors", test_decoder_output_pipeline_plan_vectors },
+        { "decoder_optimization_policy_vectors", test_decoder_optimization_policy_vectors },
         { "decoder_output_row_plan_vectors", test_decoder_output_row_plan_vectors },
         { "decoder_transform_pipeline_state_vectors", test_decoder_transform_pipeline_state_vectors },
         { "decoder_codec_state_initializer_vectors", test_decoder_codec_state_initializer_vectors },
