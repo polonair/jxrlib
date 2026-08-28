@@ -81,6 +81,7 @@
 #include "../image/decode/JxrDecoderStandardColorOutputWriter.h"
 #include "../image/decode/JxrDecoderOptimizationPolicy.h"
 #include "../image/decode/JxrDecoderOptimizationEligibility.h"
+#include "../image/decode/JxrDecoderNativeOverridePlan.h"
 #include "../image/decode/JxrDecoderRequestValidator.h"
 #include "../image/decode/JxrDecoderSessionPreparation.h"
 #include "../image/decode/JxrSecondaryPlaneBufferRegionLayout.h"
@@ -1090,6 +1091,46 @@ static int test_decoder_optimization_eligibility_vectors(void)
     codec.p1MBbuffer[2] = planes + 512;
     parameters.cThumbnailScale = 2;
     return !JxrDecoderOptimizationEligibilityCanUseYuv444CenterTransform(&codec);
+}
+
+static int test_decoder_native_override_plan_vectors(void)
+{
+    CWMImageStrCodec codec;
+    CWMDecoderParameters parameters;
+    JxrDecoderOptimizationPolicy policy;
+    JxrDecoderNativeOverridePlan plan;
+    PixelI planes[768];
+
+    memset(&codec, 0, sizeof(codec));
+    memset(&parameters, 0, sizeof(parameters));
+    memset(planes, 0, sizeof(planes));
+    codec.m_Dparam = &parameters;
+    codec.m_param.cfColorFormat = YUV_444;
+    codec.m_param.cSubVersion = CODEC_SUBVERSION_NEWSCALING_SOFT_TILES;
+    codec.WMII.fPaddedUserBuffer = TRUE;
+    codec.WMII.bdBitDepth = BD_8;
+    codec.WMII.cfColorFormat = CF_RGB;
+    codec.WMII.cBitsPerUnit = 24;
+    codec.WMII.bRGB = TRUE;
+    codec.WMII.oOrientation = O_NONE;
+    codec.p1MBbuffer[0] = planes;
+    codec.p1MBbuffer[1] = planes + 256;
+    codec.p1MBbuffer[2] = planes + 512;
+    parameters.bDecodeFullFrame = TRUE;
+    parameters.bDecodeFullWidth = TRUE;
+    parameters.cThumbnailScale = 1;
+    policy.nativeOptimizationAvailable = TRUE;
+    policy.usesPortableBaseline = FALSE;
+
+    JxrDecoderNativeOverridePlanInitialize(&plan, &codec, &policy);
+    if (!plan.useRgb24Output || plan.useLossyRgb24Output ||
+        !plan.useYuv444CenterTransform)
+        return 0;
+
+    codec.m_param.bScaledArith = TRUE;
+    JxrDecoderNativeOverridePlanInitialize(&plan, &codec, &policy);
+    return plan.useRgb24Output && plan.useLossyRgb24Output &&
+        plan.useYuv444CenterTransform;
 }
 
 static int test_decoder_output_row_plan_vectors(void)
@@ -5188,6 +5229,7 @@ int main(int argc, char** argv)
         { "decoder_output_pipeline_plan_vectors", test_decoder_output_pipeline_plan_vectors },
         { "decoder_optimization_policy_vectors", test_decoder_optimization_policy_vectors },
         { "decoder_optimization_eligibility_vectors", test_decoder_optimization_eligibility_vectors },
+        { "decoder_native_override_plan_vectors", test_decoder_native_override_plan_vectors },
         { "decoder_output_row_plan_vectors", test_decoder_output_row_plan_vectors },
         { "decoder_transform_pipeline_state_vectors", test_decoder_transform_pipeline_state_vectors },
         { "decoder_codec_state_initializer_vectors", test_decoder_codec_state_initializer_vectors },

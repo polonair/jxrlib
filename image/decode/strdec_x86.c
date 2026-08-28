@@ -29,6 +29,7 @@
 #include "decode.h"
 #include "JxrDecoderOptimizationPolicy.h"
 #include "JxrDecoderOptimizationEligibility.h"
+#include "JxrDecoderNativeOverridePlan.h"
 
 #if defined(WMP_OPT_SSE2)
 #include <emmintrin.h>
@@ -1583,8 +1584,10 @@ Int invTransformMacroblock_YUV444_Center5(CWMImageStrCodec * pSC)
 void StrDecOpt(CWMImageStrCodec* pSC)
 {
     JxrDecoderOptimizationPolicy policy;
+    JxrDecoderNativeOverridePlan overridePlan;
 
     JxrDecoderOptimizationPolicyInitialize(&policy);
+    JxrDecoderNativeOverridePlanInitialize(&overridePlan, pSC, &policy);
     if (!policy.nativeOptimizationAvailable) {
         UNREFERENCED_PARAMETER(pSC);
         return;
@@ -1602,10 +1605,10 @@ void StrDecOpt(CWMImageStrCodec* pSC)
         g_const_w0x80 = _mm_set_epi16(0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80);
         g_const_b0x80 = _mm_set_epi8(0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80);
 
-        if (JxrDecoderOptimizationEligibilityCanUseRgb24Output(pSC))
+        if (overridePlan.useRgb24Output)
         {
 #if defined(WMP_OPT_CC_DEC)
-            if (pSC->m_param.bScaledArith || pSC->WMISCP.olOverlap != OL_NONE)
+            if (overridePlan.useLossyRgb24Output)
             {
                 pSC->Load = outputMBRow_RGB24_Lossy_3;
             }
@@ -1616,7 +1619,7 @@ void StrDecOpt(CWMImageStrCodec* pSC)
 #endif // WMP_OPT_CC_DEC
         }
 
-        if (JxrDecoderOptimizationEligibilityCanUseYuv444CenterTransform(pSC))
+        if (overridePlan.useYuv444CenterTransform)
         {
 #if defined(WMP_OPT_TRFM_DEC)
             pSC->TransformCenter = invTransformMacroblock_YUV444_Center5;
