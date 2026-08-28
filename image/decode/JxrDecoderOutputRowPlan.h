@@ -23,5 +23,7 @@ Void JxrDecoderOutputRowPlanInitializeStandard(JxrDecoderOutputRowPlan* plan,
     const CWMImageStrCodec* codec);
 Void JxrDecoderOutputRowPlanInitializeThumbnail(JxrDecoderOutputRowPlan* plan,
     const CWMImageStrCodec* codec);
+Void JxrDecoderOutputRowPlanInitializeThumbnailNChannel(JxrDecoderOutputRowPlan* plan,
+    const CWMImageStrCodec* codec);
 
 #endif

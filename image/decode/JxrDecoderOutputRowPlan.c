@@ -63,3 +63,23 @@ Void JxrDecoderOutputRowPlanInitializeThumbnail(JxrDecoderOutputRowPlan* plan,
     plan->thumbnailScale = thumbnailScale;
     plan->thumbnailBits = JxrDecoderOutputRowPlanGetThumbnailBits(thumbnailScale);
 }
+
+Void JxrDecoderOutputRowPlanInitializeThumbnailNChannel(JxrDecoderOutputRowPlan* plan,
+    const CWMImageStrCodec* codec)
+{
+    const size_t thumbnailScale = codec->m_Dparam->cThumbnailScale;
+    const size_t firstSourceRow = JxrDecoderOutputRowPlanGetFirstSourceRow(codec);
+
+    plan->internalColorFormat = codec->m_param.cfColorFormat;
+    plan->outputColorFormat = JxrDecoderOutputRowPlanGetOutputColorFormat(codec);
+    plan->bitDepth = codec->WMII.bdBitDepth;
+    plan->outputHeight = JxrDecoderRoiRowRangeGetOutputHeight(
+        codec->m_Dparam->cROIBottomY + 1, codec->cRow);
+    plan->outputWidth = codec->m_Dparam->cROIRightX + 1;
+    plan->firstRow = (firstSourceRow + thumbnailScale - 1) /
+        thumbnailScale * thumbnailScale;
+    plan->firstColumn = (codec->m_Dparam->cROILeftX + thumbnailScale - 1) /
+        thumbnailScale * thumbnailScale;
+    plan->thumbnailScale = thumbnailScale;
+    plan->thumbnailBits = JxrDecoderOutputRowPlanGetThumbnailBits(thumbnailScale);
+}
