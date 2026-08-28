@@ -77,6 +77,7 @@
 #include "../image/decode/JxrDecoderAlphaOutputWriter.h"
 #include "../image/decode/JxrDecoderThumbnailAlphaOutputWriter.h"
 #include "../image/decode/JxrDecoderThumbnailNChannelOutputWriter.h"
+#include "../image/decode/JxrDecoderThumbnailColorOutputWriter.h"
 #include "../image/decode/JxrDecoderRequestValidator.h"
 #include "../image/decode/JxrDecoderSessionPreparation.h"
 #include "../image/decode/JxrSecondaryPlaneBufferRegionLayout.h"
@@ -2923,6 +2924,47 @@ static int test_decoder_thumbnail_nchannel_output_writer_vectors(void)
     return output[0] == 138;
 }
 
+static int test_decoder_thumbnail_color_output_writer_vectors(void)
+{
+    CWMImageStrCodec codec;
+    CWMDecoderParameters parameters;
+    JxrDecoderOutputRowPlan outputPlan;
+    JxrDecoderOutputRowPlan nChannelPlan;
+    PixelI y[256];
+    PixelI u[256];
+    PixelI v[256];
+    U8 output[64];
+    size_t offsetX[16];
+    size_t offsetY[16];
+
+    memset(&codec, 0, sizeof(codec));
+    memset(&parameters, 0, sizeof(parameters));
+    memset(y, 0, sizeof(y));
+    memset(u, 0, sizeof(u));
+    memset(v, 0, sizeof(v));
+    memset(output, 0, sizeof(output));
+    memset(offsetX, 0, sizeof(offsetX));
+    memset(offsetY, 0, sizeof(offsetY));
+    codec.m_Dparam = &parameters;
+    codec.cRow = 1;
+    codec.m_param.cfColorFormat = CF_RGB;
+    codec.WMII.cfColorFormat = CF_RGB;
+    codec.WMII.bdBitDepth = BD_8;
+    codec.WMIBI.pv = output;
+    parameters.cThumbnailScale = 1;
+    parameters.pOffsetX = offsetX;
+    parameters.pOffsetY = offsetY;
+    codec.a0MBbuffer[0] = y;
+    codec.a0MBbuffer[1] = u;
+    codec.a0MBbuffer[2] = v;
+
+    JxrDecoderOutputRowPlanInitializeThumbnail(&outputPlan, &codec);
+    JxrDecoderOutputRowPlanInitializeThumbnailNChannel(&nChannelPlan, &codec);
+    JxrDecoderThumbnailColorOutputWriterWrite(&codec, &outputPlan, &nChannelPlan,
+        256, 8, 8);
+    return output[0] == 128 && output[1] == 128 && output[2] == 128;
+}
+
 static int test_decoder_alpha_output_writer_vectors(void)
 {
     CWMImageStrCodec codec;
@@ -5106,6 +5148,7 @@ int main(int argc, char** argv)
         { "decoder_dequantizer_vectors", test_decoder_dequantizer_vectors },
         { "decoder_nchannel_output_writer_vectors", test_decoder_nchannel_output_writer_vectors },
         { "decoder_thumbnail_nchannel_output_writer_vectors", test_decoder_thumbnail_nchannel_output_writer_vectors },
+        { "decoder_thumbnail_color_output_writer_vectors", test_decoder_thumbnail_color_output_writer_vectors },
         { "decoder_alpha_output_writer_vectors", test_decoder_alpha_output_writer_vectors },
         { "decoder_thumbnail_alpha_output_writer_vectors", test_decoder_thumbnail_alpha_output_writer_vectors },
         { "prediction_math_vectors", test_prediction_math_vectors },
