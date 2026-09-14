@@ -34,6 +34,7 @@
 #include "JxrTranscodeTileHeaderWriter.h"
 #include "JxrTranscodeOrientationState.h"
 #include "JxrTranscodeCoefficientTransform.h"
+#include "JxrTranscodeMacroblockTransform.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
 #include "JxrTranscodeRoiTileLayout.h"
@@ -600,42 +601,17 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
             for(pSCEnc->cColumn = 1; pSCEnc->cColumn <= pSCEnc->cmbWidth; pSCEnc->cColumn ++){
                 Int cRow, cColumn;
                 size_t cOff = (pSCEnc->cRow - 1) * pSCEnc->cmbWidth + pSCEnc->cColumn - 1;
-                
-                for(i = 0; i < ((pSCEnc->m_param.cfColorFormat == YUV_420 || pSCEnc->m_param.cfColorFormat == YUV_422) ? 1 : pSCEnc->m_param.cNumChannels); i ++){
-                    JxrTranscodeCoefficientBuffer sourceDc, destinationDc, sourceAc, destinationAc;
-                    JxrTranscodeCoefficientBufferInit(&sourceDc, pMBInfo[cOff].iBlockDC[i], 0, 16);
-                    JxrTranscodeCoefficientBufferInit(&destinationDc, pSCEnc->MBInfo.iBlockDC[i], 0, 16);
-                    JxrTranscodeCoefficientBufferInit(&sourceAc, pFrameBuf + cOff * cUnit + i * 256, 0, 256);
-                    JxrTranscodeCoefficientBufferInit(&destinationAc, pMBBuf + 256 * i, 0, 256);
-                    if(JxrTranscodeCoefficientTransformDc444(&sourceDc, &destinationDc, &orientation) == FALSE ||
-                        JxrTranscodeCoefficientTransformAc444(&sourceAc, &destinationAc, &orientation) == FALSE)
-                        return ICERR_ERROR;
-                }
-                if(pSCEnc->WMISCP.cfColorFormat == YUV_420)
-                    for(i = 0; i < 2; i ++){
-                        JxrTranscodeCoefficientBuffer sourceDc, destinationDc, sourceAc, destinationAc;
-                        JxrTranscodeCoefficientBufferInit(&sourceDc, pMBInfo[cOff].iBlockDC[i + 1], 0, 4);
-                        JxrTranscodeCoefficientBufferInit(&destinationDc, pSCEnc->MBInfo.iBlockDC[i + 1], 0, 4);
-                        JxrTranscodeCoefficientBufferInit(&sourceAc, pFrameBuf + cOff * cUnit + 256 + i * 64, 0, 64);
-                        JxrTranscodeCoefficientBufferInit(&destinationAc, pMBBuf + 256 + i * 64, 0, 64);
-                        if(JxrTranscodeCoefficientTransformDc420(&sourceDc, &destinationDc, &orientation) == FALSE ||
-                            JxrTranscodeCoefficientTransformAc420(&sourceAc, &destinationAc, &orientation) == FALSE)
-                            return ICERR_ERROR;
-                    }
-                else if(pSCEnc->WMISCP.cfColorFormat == YUV_422)
-                    for(i = 0; i < 2; i ++){
-                        JxrTranscodeCoefficientBuffer sourceDc, destinationDc, sourceAc, destinationAc;
-                        JxrTranscodeCoefficientBufferInit(&sourceDc, pMBInfo[cOff].iBlockDC[i + 1], 0, 8);
-                        JxrTranscodeCoefficientBufferInit(&destinationDc, pSCEnc->MBInfo.iBlockDC[i + 1], 0, 8);
-                        JxrTranscodeCoefficientBufferInit(&sourceAc, pFrameBuf + cOff * cUnit + 256 + i * 128, 0, 128);
-                        JxrTranscodeCoefficientBufferInit(&destinationAc, pMBBuf + 256 + i * 128, 0, 128);
-                        if(JxrTranscodeCoefficientTransformDc422(&sourceDc, &destinationDc, &orientation) == FALSE ||
-                            JxrTranscodeCoefficientTransformAc422(&sourceAc, &destinationAc, &orientation) == FALSE)
-                            return ICERR_ERROR;
-                    }
+                JxrTranscodeMacroblockTransformState primaryTransform = {0};
 
-                    pSCEnc->MBInfo.iQIndexLP = pMBInfo[cOff].iQIndexLP;
-                    pSCEnc->MBInfo.iQIndexHP = pMBInfo[cOff].iQIndexHP;
+                primaryTransform.sourceMacroblocks = pMBInfo;
+                primaryTransform.sourceCoefficients = pFrameBuf;
+                primaryTransform.coefficientUnit = cUnit;
+                primaryTransform.macroblockOffset = cOff;
+                primaryTransform.destinationCodec = pSCEnc;
+                primaryTransform.destinationCoefficients = pMBBuf;
+                primaryTransform.orientation = &orientation;
+                if(JxrTranscodeMacroblockTransformPrimary(&primaryTransform) == FALSE)
+                    return ICERR_ERROR;
 
                 cRow = (Int)pSCEnc->cRow - 1;
                 cColumn = (Int)pSCEnc->cColumn - 1;
@@ -647,22 +623,22 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
                     return ICERR_ERROR;
                 
                 if(pParam->uAlphaMode > 0){
+                    JxrTranscodeMacroblockTransformState alphaTransform = {0};
+
                     pSCEnc->m_pNextSC->cColumn = pSCEnc->cColumn;
                     pSCEnc->m_pNextSC->cRow = pSCEnc->cRow;
                     getTilePos(pSCEnc->m_pNextSC, cColumn, cRow);
                     pSCEnc->m_pNextSC->MBInfo = pSCDec->m_pNextSC->MBInfo;
 
-                    JxrTranscodeCoefficientBuffer sourceDc, destinationDc, sourceAc, destinationAc;
-                    JxrTranscodeCoefficientBufferInit(&sourceDc, pMBInfoAlpha[cOff].iBlockDC[0], 0, 16);
-                    JxrTranscodeCoefficientBufferInit(&destinationDc, pSCEnc->m_pNextSC->MBInfo.iBlockDC[0], 0, 16);
-                    JxrTranscodeCoefficientBufferInit(&sourceAc, pFrameBufAlpha + cOff * 256, 0, 256);
-                    JxrTranscodeCoefficientBufferInit(&destinationAc, MBBufAlpha, 0, 256);
-                    if(JxrTranscodeCoefficientTransformDc444(&sourceDc, &destinationDc, &orientation) == FALSE ||
-                        JxrTranscodeCoefficientTransformAc444(&sourceAc, &destinationAc, &orientation) == FALSE)
+                    alphaTransform.sourceMacroblocks = pMBInfoAlpha;
+                    alphaTransform.sourceCoefficients = pFrameBufAlpha;
+                    alphaTransform.coefficientUnit = 256;
+                    alphaTransform.macroblockOffset = cOff;
+                    alphaTransform.destinationCodec = pSCEnc->m_pNextSC;
+                    alphaTransform.destinationCoefficients = MBBufAlpha;
+                    alphaTransform.orientation = &orientation;
+                    if(JxrTranscodeMacroblockTransformAlpha(&alphaTransform) == FALSE)
                         return ICERR_ERROR;
-
-                    pSCEnc->m_pNextSC->MBInfo.iQIndexLP = pMBInfoAlpha[cOff].iQIndexLP;
-                    pSCEnc->m_pNextSC->MBInfo.iQIndexHP = pMBInfoAlpha[cOff].iQIndexHP;
 
                     if(encodeMB(pSCEnc->m_pNextSC, cColumn, cRow) != ICERR_OK)
                         return ICERR_ERROR;

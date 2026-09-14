@@ -101,6 +101,7 @@
 #include "JxrTranscodeTileHeaderWriter.h"
 #include "JxrTranscodeOrientationState.h"
 #include "JxrTranscodeCoefficientTransform.h"
+#include "../image/decode/JxrTranscodeMacroblockTransform.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
 #include "../image/decode/JxrTranscodeRoiTileLayout.h"
@@ -637,6 +638,61 @@ static int test_transcode_coefficient_transform_420_vectors(void)
     JxrTranscodeCoefficientBufferInit(&source, sourceValues, 62, 64);
     return !JxrTranscodeCoefficientTransformDc420(&source, &destination, &orientation) &&
         !JxrTranscodeCoefficientTransformAc420(&source, &destination, &orientation);
+}
+
+static int test_transcode_macroblock_transform_vectors(void)
+{
+    CWMIMBInfo sourceMacroblock;
+    CWMImageStrCodec destinationCodec;
+    PixelI sourceCoefficients[384];
+    PixelI destinationCoefficients[384];
+    JxrTranscodeOrientationState orientation;
+    JxrTranscodeMacroblockTransformState state;
+    size_t index;
+
+    memset(&sourceMacroblock, 0, sizeof(sourceMacroblock));
+    memset(&destinationCodec, 0, sizeof(destinationCodec));
+    for (index = 0; index < 384; ++index) sourceCoefficients[index] = (PixelI)(100 + index);
+    for (index = 0; index < 16; ++index) sourceMacroblock.iBlockDC[0][index] = (PixelI)(10 + index);
+    for (index = 0; index < 4; ++index) {
+        sourceMacroblock.iBlockDC[1][index] = (PixelI)(30 + index);
+        sourceMacroblock.iBlockDC[2][index] = (PixelI)(40 + index);
+    }
+    destinationCodec.m_param.cfColorFormat = YUV_420;
+    destinationCodec.m_param.cNumChannels = 3;
+    destinationCodec.WMISCP.cfColorFormat = YUV_420;
+    JxrTranscodeOrientationStateInit(&orientation, O_NONE);
+    memset(&state, 0, sizeof(state));
+    state.sourceMacroblocks = &sourceMacroblock;
+    state.sourceCoefficients = sourceCoefficients;
+    state.coefficientUnit = 384;
+    state.destinationCodec = &destinationCodec;
+    state.destinationCoefficients = destinationCoefficients;
+    state.orientation = &orientation;
+
+    if (!JxrTranscodeMacroblockTransformPrimary(&state) ||
+        destinationCodec.MBInfo.iBlockDC[0][0] != 10 ||
+        destinationCodec.MBInfo.iBlockDC[0][15] != 25 ||
+        destinationCodec.MBInfo.iBlockDC[1][0] != 30 ||
+        destinationCodec.MBInfo.iBlockDC[2][3] != 43 ||
+        destinationCoefficients[0] != 100 || destinationCoefficients[255] != 355 ||
+        destinationCoefficients[256] != 356 || destinationCoefficients[383] != 483) return 0;
+
+    memset(&destinationCodec, 0, sizeof(destinationCodec));
+    memset(destinationCoefficients, 0, sizeof(destinationCoefficients));
+    sourceMacroblock.iQIndexLP = 7;
+    sourceMacroblock.iQIndexHP = 11;
+    state.destinationCodec = &destinationCodec;
+    if (!JxrTranscodeMacroblockTransformAlpha(&state) ||
+        destinationCodec.MBInfo.iBlockDC[0][0] != 10 ||
+        destinationCodec.MBInfo.iBlockDC[0][15] != 25 ||
+        destinationCoefficients[0] != 100 || destinationCoefficients[255] != 355 ||
+        destinationCodec.MBInfo.iQIndexLP != 7 ||
+        destinationCodec.MBInfo.iQIndexHP != 11) return 0;
+
+    state.destinationCodec = NULL;
+    return !JxrTranscodeMacroblockTransformPrimary(&state) &&
+        !JxrTranscodeMacroblockTransformAlpha(&state);
 }
 
 static int test_transcode_tile_extraction_decision_vectors(void)
@@ -5492,6 +5548,7 @@ int main(int argc, char** argv)
         { "transcode_coefficient_transform_vectors", test_transcode_coefficient_transform_vectors },
         { "transcode_coefficient_transform_422_vectors", test_transcode_coefficient_transform_422_vectors },
         { "transcode_coefficient_transform_420_vectors", test_transcode_coefficient_transform_420_vectors },
+        { "transcode_macroblock_transform_vectors", test_transcode_macroblock_transform_vectors },
         { "transcode_tile_extraction_decision_vectors", test_transcode_tile_extraction_decision_vectors },
         { "transcode_roi_geometry_vectors", test_transcode_roi_geometry_vectors },
         { "transcode_roi_tile_layout_vectors", test_transcode_roi_tile_layout_vectors },
