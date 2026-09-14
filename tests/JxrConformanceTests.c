@@ -103,6 +103,7 @@
 #include "JxrTranscodeCoefficientTransform.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
+#include "../image/decode/JxrTranscodeRoiTileLayout.h"
 #include "JxrDecoderTileQuantizerSyntaxReader.h"
 #include "JxrDecoderDcQuantizerHeaderApplier.h"
 #include "JxrDecoderLpQuantizerHeaderApplier.h"
@@ -710,6 +711,43 @@ static int test_transcode_roi_geometry_vectors(void)
     request.requestedLeft = 99;
     request.requestedWidth = 2;
     return !JxrTranscodeRoiGeometryCalculate(&request, &result);
+}
+
+static int test_transcode_roi_tile_layout_vectors(void)
+{
+    const U32 columns[] = { 0, 2, 5, 8, 12 };
+    const U32 rows[] = { 0, 2, 6, 9 };
+    JxrTranscodeRoiTileLayout layout;
+    JxrTranscodeOrientationState orientation;
+    size_t left = 1, top = 2, right = 3, bottom = 4;
+
+    JxrTranscodeOrientationStateInit(&orientation, O_NONE);
+    if (!JxrTranscodeRoiTileLayoutInitialize(&layout, columns, 5, rows, 4) ||
+        !JxrTranscodeRoiTileLayoutApply(&layout, 2, 12, 2, 9, &orientation) ||
+        layout.columnCount != 3 || layout.rowCount != 2 ||
+        layout.columnBoundaries[0] != 0 || layout.columnBoundaries[1] != 3 ||
+        layout.columnBoundaries[2] != 6 ||
+        layout.rowBoundaries[0] != 0 || layout.rowBoundaries[1] != 4) return 0;
+
+    JxrTranscodeOrientationStateInit(&orientation, O_FLIPH);
+    if (!JxrTranscodeRoiTileLayoutInitialize(&layout, columns, 5, rows, 4) ||
+        !JxrTranscodeRoiTileLayoutApply(&layout, 0, 12, 0, 9, &orientation) ||
+        layout.columnCount != 4 || layout.columnBoundaries[0] != 0 ||
+        layout.columnBoundaries[1] != 4 || layout.columnBoundaries[2] != 7 ||
+        layout.columnBoundaries[3] != 10) return 0;
+
+    JxrTranscodeOrientationStateInit(&orientation, O_RCW);
+    if (!JxrTranscodeRoiTileLayoutInitialize(&layout, columns, 3, rows, 4) ||
+        !JxrTranscodeRoiTileLayoutApply(&layout, 0, 5, 0, 9, &orientation) ||
+        layout.columnCount != 3 || layout.rowCount != 2 ||
+        layout.columnBoundaries[0] != 0 || layout.columnBoundaries[1] != 3 ||
+        layout.columnBoundaries[2] != 7 ||
+        layout.rowBoundaries[0] != 0 || layout.rowBoundaries[1] != 2) return 0;
+
+    JxrTranscodeRoiTileLayoutOrientExtraPixels(&left, &top, &right, &bottom,
+        &orientation);
+    return left == 4 && top == 1 && right == 2 && bottom == 3 &&
+        !JxrTranscodeRoiTileLayoutApply(&layout, 4, 4, 0, 9, &orientation);
 }
 
 static Bool read_decoder_test_bits(Void* context, U32 count, U32* value)
@@ -5456,6 +5494,7 @@ int main(int argc, char** argv)
         { "transcode_coefficient_transform_420_vectors", test_transcode_coefficient_transform_420_vectors },
         { "transcode_tile_extraction_decision_vectors", test_transcode_tile_extraction_decision_vectors },
         { "transcode_roi_geometry_vectors", test_transcode_roi_geometry_vectors },
+        { "transcode_roi_tile_layout_vectors", test_transcode_roi_tile_layout_vectors },
         { "decoder_tile_quantizer_syntax_vectors", test_decoder_tile_quantizer_syntax_vectors },
         { "main_header_reader_vectors", test_main_header_reader_vectors },
         { "header_state_applier_vectors", test_header_state_applier_vectors },

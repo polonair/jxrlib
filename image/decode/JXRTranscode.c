@@ -36,6 +36,7 @@
 #include "JxrTranscodeCoefficientTransform.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
+#include "JxrTranscodeRoiTileLayout.h"
 #include "JxrDecoderCoefficientPredictor.h"
 #include "JxrDecoderPacketPipeline.h"
 
@@ -109,19 +110,16 @@ Void transcodeTileHeader(CWMImageStrCodec * pSC, JxrTranscodeTileQuantizerState 
         }
     }
 }
-Int getROI(CWMImageInfo * pII, CCoreParameters * pCore, CWMIStrCodecParam * pSCP, CWMTranscodingParam * pParam)
+Int getROI(CWMImageInfo* pII, CCoreParameters* pCore,
+    CWMIStrCodecParam* pSCP, CWMTranscodingParam* pParam)
 {
-    const ORIENTATION oO = pParam->oOrientation;
     JxrTranscodeOrientationState orientation;
     JxrTranscodeRoiGeometryRequest request;
     JxrTranscodeRoiGeometryResult result;
-    size_t i, j;
-    size_t mbLeft, mbRight, mbTop, mbBottom;
-    size_t * iTile = (size_t *)malloc(MAX_TILES * sizeof(size_t));
+    JxrTranscodeRoiTileLayout tileLayout;
+    size_t boundaryIndex;
 
-    if(iTile == NULL)
-        return ICERR_ERROR;
-    JxrTranscodeOrientationStateInit(&orientation, oO);
+    JxrTranscodeOrientationStateInit(&orientation, pParam->oOrientation);
     memset(&request, 0, sizeof(request));
     request.imageWidth = pII->cWidth;
     request.imageHeight = pII->cHeight;
@@ -135,84 +133,37 @@ Int getROI(CWMImageInfo * pII, CCoreParameters * pCore, CWMIStrCodecParam * pSCP
     request.requestedHeight = pParam->cHeight;
     request.overlap = pSCP->olOverlap;
     request.ignoreOverlap = pParam->bIgnoreOverlap;
-    if(JxrTranscodeRoiGeometryCalculate(&request, &result) == FALSE)
+    if (JxrTranscodeRoiGeometryCalculate(&request, &result) == FALSE ||
+        JxrTranscodeRoiTileLayoutInitialize(&tileLayout, pSCP->uiTileX,
+            (size_t)pSCP->cNumOfSliceMinus1V + 1, pSCP->uiTileY,
+            (size_t)pSCP->cNumOfSliceMinus1H + 1) == FALSE ||
+        JxrTranscodeRoiTileLayoutApply(&tileLayout, result.macroblockLeft,
+            result.macroblockRight, result.macroblockTop, result.macroblockBottom,
+            &orientation) == FALSE)
         return ICERR_ERROR;
+
     pCore->cExtraPixelsLeft = result.extraLeft;
     pCore->cExtraPixelsTop = result.extraTop;
     pCore->cExtraPixelsRight = result.extraRight;
     pCore->cExtraPixelsBottom = result.extraBottom;
+    JxrTranscodeRoiTileLayoutOrientExtraPixels(&pCore->cExtraPixelsLeft,
+        &pCore->cExtraPixelsTop, &pCore->cExtraPixelsRight,
+        &pCore->cExtraPixelsBottom, &orientation);
     pII->cWidth = result.imageWidth;
     pII->cHeight = result.imageHeight;
     pParam->cLeftX = result.expandedLeft;
     pParam->cTopY = result.expandedTop;
     pParam->cWidth = result.expandedWidth;
     pParam->cHeight = result.expandedHeight;
-    mbLeft = result.macroblockLeft;
-    mbRight = result.macroblockRight;
-    mbTop = result.macroblockTop;
-    mbBottom = result.macroblockBottom;
-    // extra pixels in transformed space
-    if(orientation.flipHorizontal)
-        JxrTranscodeSwapSize(&pCore->cExtraPixelsLeft, &pCore->cExtraPixelsRight);
-    if(orientation.flipVertical)
-        JxrTranscodeSwapSize(&pCore->cExtraPixelsTop, &pCore->cExtraPixelsBottom);
-    if(orientation.transpose){
-        JxrTranscodeSwapSize(&pCore->cExtraPixelsLeft, &pCore->cExtraPixelsTop);
-        JxrTranscodeSwapSize(&pCore->cExtraPixelsRight, &pCore->cExtraPixelsBottom);
-    }
 
-    // adjust tiling
-    for(i = 0, j = 0, iTile[0] = 0; i <= (size_t)pSCP->cNumOfSliceMinus1V; i ++)
-        if((size_t)pSCP->uiTileX[i] >= mbLeft && (size_t)pSCP->uiTileX[i] < mbRight){
-            if(j >= MAX_TILES)
-                j = MAX_TILES - 1;
-            iTile[j] = (size_t)pSCP->uiTileX[i] - mbLeft, j ++;
-        }
-    if(iTile[0] == 0)
-        for(i = 0, pSCP->cNumOfSliceMinus1V = (j == 0 ? 0 : (U32)(j - 1)); i < j; i ++)
-            pSCP->uiTileX[i] = (U32)iTile[i];
-    else
-        for(i = 1, pSCP->uiTileX[0] = 0, pSCP->cNumOfSliceMinus1V = (U32)j; i <= j; i ++)
-            pSCP->uiTileX[i] = (U32)iTile[i - 1];
-    if(orientation.flipHorizontal){ // reverse order
-        for(i = 0; i <= (size_t)pSCP->cNumOfSliceMinus1V; i ++)
-            iTile[i] = mbRight - mbLeft - (size_t)pSCP->uiTileX[i];
-        for(i = 1, pSCP->uiTileX[0] = 0; i <= (size_t)pSCP->cNumOfSliceMinus1V; i ++)
-            pSCP->uiTileX[i] = (U32)(iTile[(size_t)pSCP->cNumOfSliceMinus1V - i + 1]);
-    }
-    for(i = 0, j = 0, iTile[0] = 0; i <= (size_t)pSCP->cNumOfSliceMinus1H; i ++)
-        if(pSCP->uiTileY[i] >= mbTop && pSCP->uiTileY[i] < mbBottom){
-            if(j >= MAX_TILES)
-                j = MAX_TILES - 1;
-            iTile[j] = (size_t)pSCP->uiTileY[i] - mbTop, j ++;
-        }
-    if(iTile[0] == 0)
-        for(i = 0, pSCP->cNumOfSliceMinus1H = (j == 0 ? 0 : (U32)(j - 1)); i < j; i ++)
-            pSCP->uiTileY[i] = (U32)iTile[i];
-    else
-        for(i = 1, pSCP->uiTileY[0] = 0, pSCP->cNumOfSliceMinus1H = (U32)j; i <= j; i ++)
-            pSCP->uiTileY[i] = (U32)iTile[i - 1];
-    if(orientation.flipVertical){ // reverse order
-        for(i = 0; i <= (size_t)pSCP->cNumOfSliceMinus1H; i ++)
-            iTile[i] = mbBottom - mbTop - (size_t)pSCP->uiTileY[i];
-        for(i = 1, pSCP->uiTileY[0] = 0; i <= (size_t)pSCP->cNumOfSliceMinus1H; i ++)
-            pSCP->uiTileY[i] = (U32)(iTile[(size_t)pSCP->cNumOfSliceMinus1H - i + 1]);
-    }
-    if(orientation.transpose){ // switch X & Y
-        for(i = 0; i <= (size_t)pSCP->cNumOfSliceMinus1V; i ++)
-            iTile[i] = (size_t)pSCP->uiTileX[i];
-        for(i = 0; i <= (size_t)pSCP->cNumOfSliceMinus1H; i ++)
-            pSCP->uiTileX[i] = pSCP->uiTileY[i];
-        for(i = 0; i <= (size_t)pSCP->cNumOfSliceMinus1V; i ++)
-            pSCP->uiTileY[i] = (U32)iTile[i];
-        i = (size_t)pSCP->cNumOfSliceMinus1H, pSCP->cNumOfSliceMinus1H = pSCP->cNumOfSliceMinus1V, pSCP->cNumOfSliceMinus1V = (U32)i;
-    }
-
-    free(iTile);
-
+    pSCP->cNumOfSliceMinus1V = (U32)(tileLayout.columnCount - 1);
+    pSCP->cNumOfSliceMinus1H = (U32)(tileLayout.rowCount - 1);
+    for (boundaryIndex = 0; boundaryIndex < tileLayout.columnCount; boundaryIndex++)
+        pSCP->uiTileX[boundaryIndex] = tileLayout.columnBoundaries[boundaryIndex];
+    for (boundaryIndex = 0; boundaryIndex < tileLayout.rowCount; boundaryIndex++)
+        pSCP->uiTileY[boundaryIndex] = tileLayout.rowBoundaries[boundaryIndex];
     return ICERR_OK;
 }
-
 Bool isTileExtraction(CWMImageStrCodec * pSC, CWMTranscodingParam * pParam)
 {
     JxrTranscodeTileExtractionDecision decision = {0};
