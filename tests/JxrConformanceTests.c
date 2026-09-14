@@ -4472,6 +4472,83 @@ static int test_encoder_cbp_predictor_vectors(void)
         model.m_iState[1] == 2;
 }
 
+static int test_encoder_cbp_explicit_vectors(void)
+{
+    /* Parent block of each predicted bit, in JPEG XR block order. */
+    static const Int parents16[16] = {-1,0,0,1,1,4,4,5,2,3,8,9,6,7,12,13};
+    static const Int parents8[8] = {-1,0,0,1,2,3,4,5};
+    static const Int sizes[3] = {4,8,16};
+    PixelI samples[270];
+    Int offsets[16];
+    Int sizeIndex, count, mask, state, boundary, cbp, bit, flc;
+    CCBPModel model;
+    for (bit = 0; bit < 16; ++bit) offsets[bit] = (15 - bit) * 16;
+    for (sizeIndex = 0; sizeIndex < 3; ++sizeIndex) {
+        const Int* parents;
+        count = sizes[sizeIndex];
+        mask = (1 << count) - 1;
+        parents = count == 16 ? parents16 : parents8;
+        for (flc = 0; flc <= 15; ++flc) {
+            Int limit = 1 << flc;
+            memset(samples, 0, sizeof(samples));
+            for (bit = 0; bit < count; ++bit) {
+                samples[7 + offsets[bit]] = 123456; /* DC must be ignored. */
+                samples[7 + offsets[bit] + 1] = limit - 1;
+                samples[7 + offsets[bit] + 2] = 1 - limit;
+            }
+            if (JxrEncoderCbpPredictorCalculate(samples, 7, offsets, count, flc) != 0)
+                return 0;
+            for (bit = 0; bit < count; ++bit) {
+                samples[7 + offsets[bit] + 15] = bit & 1 ? -limit : limit;
+                if (JxrEncoderCbpPredictorCalculate(samples, 7, offsets, count, flc)
+                    != (1 << (bit + 1)) - 1) return 0;
+            }
+            samples[7 + offsets[0] + 15] = (-2147483647 - 1);
+            samples[7 + offsets[1] + 15] = 2147483647;
+            if (JxrEncoderCbpPredictorCalculate(samples, 7, offsets, count, flc) != mask)
+                return 0;
+        }
+        for (state = 0; state < 3; ++state) {
+            for (boundary = 0; boundary < 5; ++boundary) {
+                Bool leftBoundary = boundary < 3;
+                Bool topBoundary = boundary == 0;
+                Int neighbour = boundary == 0 || boundary == 2 || boundary == 4;
+                for (cbp = 0; cbp <= mask; ++cbp) {
+                    Int differential, restored, population = 0;
+                    Int expected0, expected1, expectedState;
+                    memset(&model, 0, sizeof(model));
+                    model.m_iState[1] = state;
+                    model.m_iCount0[0] = 7;
+                    model.m_iCount1[0] = -9;
+                    differential = JxrEncoderCbpPredictorPredict(cbp, count,
+                        leftBoundary, topBoundary, boundary == 4 ? mask : 0,
+                        boundary == 2 ? mask : 0, &model, 1);
+                    restored = state == 2 ? differential ^ mask : differential;
+                    if (state == 0) {
+                        restored = 0;
+                        for (bit = 0; bit < count; ++bit) {
+                            Int predicted = bit == 0 ? neighbour :
+                                ((restored >> parents[bit]) & 1);
+                            restored |= (((differential >> bit) & 1) ^ predicted) << bit;
+                        }
+                    }
+                    if (restored != cbp || (differential & ~mask)) return 0;
+                    for (bit = 0; bit < count; ++bit) population += (cbp >> bit) & 1;
+                    population *= 16 / count;
+                    expected0 = population - 3;
+                    expected1 = 13 - population;
+                    expectedState = expected0 < 0 ? 1 : (expected1 < 0 ? 2 : 0);
+                    if (model.m_iCount0[1] != expected0 ||
+                        model.m_iCount1[1] != expected1 || model.m_iState[1] != expectedState ||
+                        model.m_iCount0[0] != 7 || model.m_iCount1[0] != -9 ||
+                        model.m_iState[0] != 0) return 0;
+                }
+            }
+        }
+    }
+    return 1;
+}
+
 static int test_decoder_memory_layout_plan_vectors(void)
 {
     JxrDecoderMemoryLayoutPlan plan;
@@ -5411,6 +5488,7 @@ int main(int argc, char** argv)
         { "encoder_memory_layout_plan_vectors", test_encoder_memory_layout_plan_vectors },
         { "encoder_request_validator_vectors", test_encoder_request_validator_vectors },
         { "encoder_cbp_predictor_vectors", test_encoder_cbp_predictor_vectors },
+        { "encoder_cbp_explicit_vectors", test_encoder_cbp_explicit_vectors },
         { "decoder_memory_layout_plan_vectors", test_decoder_memory_layout_plan_vectors },
         { "decoder_buffer_region_layout_vectors", test_decoder_buffer_region_layout_vectors },
         { "decoder_primary_plane_factory_vectors", test_decoder_primary_plane_factory_vectors },
