@@ -35,6 +35,7 @@
 #include "JxrTranscodeOrientationState.h"
 #include "JxrTranscodeCoefficientTransform.h"
 #include "JxrTranscodeMacroblockTransform.h"
+#include "JxrTranscodeMacroblockDecoder.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
 #include "JxrTranscodeRoiTileLayout.h"
@@ -199,10 +200,9 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
     PixelI * pMBBuf, MBBufAlpha[256]; // shared buffer, decoder <=> encoder bridge
     PixelI * pFrameBuf = NULL, * pFrameBufAlpha = NULL;
     CWMIMBInfo * pMBInfo = NULL, * pMBInfoAlpha = NULL;
-    CWMImageStrCodec * pSCDec, * pSCEnc, * pSC;
+    CWMImageStrCodec * pSCDec, * pSCEnc;
     CWMDecoderParameters aDecoderParam = {0};
     U8 * pIOHeaderDec, * pIOHeaderEnc;
-    CCodingContext * pContext;
     JxrTranscodeTileQuantizerState * pTileQPInfo = NULL;
     ORIENTATION oO = pParam->oOrientation;
     JxrTranscodeOrientationState orientation;
@@ -479,40 +479,8 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
                 pSCDec->m_pNextSC->cColumn = pSCDec->cColumn;
             }
 
-            // decode
-            pSC = pSCDec;
-            for(i = (pSCDec->m_param.bAlphaChannel ? 2 : 1); i > 0; i --){
-                getTilePos(pSCDec, cColumn, cRow);
-                if(i == 2){
-                    pSCDec->m_pNextSC->cTileColumn = pSCDec->cTileColumn;
-                    pSCDec->m_pNextSC->cTileRow = pSCDec->cTileRow;
-                }
-                
-                if (JxrDecoderPacketPipelineReadCurrentMacroblock(pSCDec) != ICERR_OK)
-                    return ICERR_ERROR;
-
-                pContext = &pSCDec->m_pCodingContext[pSCDec->cTileColumn];
-                
-                if(DecodeMacroblockDC(pSCDec, pContext, cColumn, cRow) != ICERR_OK)
-                    return ICERR_ERROR;
-                
-                if(pSCDec->cSB > 1)
-                    if(DecodeMacroblockLowpass(pSCDec, pContext, cColumn, cRow) != ICERR_OK)
-                        return ICERR_ERROR;
-
-                JxrDecoderCoefficientPredictorApplyDcAc(pSCDec);
-
-                if(pSCDec->cSB > 2)
-                    if(DecodeMacroblockHighpass(pSCDec, pContext, cColumn, cRow) != ICERR_OK)
-                        return ICERR_ERROR;
-
-                JxrDecoderCoefficientPredictorApplyAc(pSCDec);
-                
-                updatePredInfo(pSCDec, &pSCDec->MBInfo, cColumn, pSCDec->WMISCP.cfColorFormat);
-
-                pSCDec = pSCDec->m_pNextSC;
-            }
-            pSCDec = pSC;
+            if(JxrTranscodeMacroblockDecoderDecode(pSCDec, cColumn, cRow) != ICERR_OK)
+                return ICERR_ERROR;
 
             if(pSCDec->cRow >= mbTop && pSCDec->cColumn >= mbLeft && pSCDec->cColumn < mbRight){
                 cRow = (Int)(pSCDec->cRow - mbTop);

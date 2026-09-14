@@ -102,6 +102,7 @@
 #include "JxrTranscodeOrientationState.h"
 #include "JxrTranscodeCoefficientTransform.h"
 #include "../image/decode/JxrTranscodeMacroblockTransform.h"
+#include "../image/decode/JxrTranscodeMacroblockDecoder.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
 #include "../image/decode/JxrTranscodeRoiTileLayout.h"
@@ -693,6 +694,16 @@ static int test_transcode_macroblock_transform_vectors(void)
     state.destinationCodec = NULL;
     return !JxrTranscodeMacroblockTransformPrimary(&state) &&
         !JxrTranscodeMacroblockTransformAlpha(&state);
+}
+
+static int test_transcode_macroblock_decoder_contract_vectors(void)
+{
+    CWMImageStrCodec codec;
+
+    memset(&codec, 0, sizeof(codec));
+    if (JxrTranscodeMacroblockDecoderDecode(NULL, 0, 0) != ICERR_ERROR) return 0;
+    codec.m_param.bAlphaChannel = TRUE;
+    return JxrTranscodeMacroblockDecoderDecode(&codec, 0, 0) == ICERR_ERROR;
 }
 
 static int test_transcode_tile_extraction_decision_vectors(void)
@@ -5549,6 +5560,7 @@ int main(int argc, char** argv)
         { "transcode_coefficient_transform_422_vectors", test_transcode_coefficient_transform_422_vectors },
         { "transcode_coefficient_transform_420_vectors", test_transcode_coefficient_transform_420_vectors },
         { "transcode_macroblock_transform_vectors", test_transcode_macroblock_transform_vectors },
+        { "transcode_macroblock_decoder_contract_vectors", test_transcode_macroblock_decoder_contract_vectors },
         { "transcode_tile_extraction_decision_vectors", test_transcode_tile_extraction_decision_vectors },
         { "transcode_roi_geometry_vectors", test_transcode_roi_geometry_vectors },
         { "transcode_roi_tile_layout_vectors", test_transcode_roi_tile_layout_vectors },
