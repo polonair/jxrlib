@@ -30,19 +30,16 @@
 #include "strcodec.h"
 #include "decode.h"
 #include "JxrTranscodeTileQuantizerState.h"
-#include "JxrTranscodeQuantizerWriter.h"
-#include "JxrTranscodeTileHeaderWriter.h"
 #include "JxrTranscodeOrientationState.h"
-#include "JxrTranscodeCoefficientTransform.h"
 #include "JxrTranscodeMacroblockTransform.h"
 #include "JxrTranscodeMacroblockDecoder.h"
 #include "JxrTranscodeTileContextResolver.h"
 #include "JxrTranscodeTileQuantizerCapture.h"
+#include "JxrTranscodeTileHeaderEmitter.h"
+#include "JxrTranscodeDirectMacroblockEncoder.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
 #include "JxrTranscodeRoiTileLayout.h"
-#include "JxrDecoderCoefficientPredictor.h"
-#include "JxrDecoderPacketPipeline.h"
 
 EXTERN_C Void freePredInfo(CWMImageStrCodec *);
 
@@ -50,9 +47,6 @@ EXTERN_C Int ReadWMIHeader(CWMImageInfo *, CWMIStrCodecParam *, CCoreParameters 
 #include "JxrDecoderResourceInitializer.h"
 #include "JxrDecoderInputInitializer.h"
 
-EXTERN_C Int DecodeMacroblockDC(CWMImageStrCodec *, CCodingContext *, Int, Int);
-EXTERN_C Int DecodeMacroblockLowpass(CWMImageStrCodec *, CCodingContext *, Int, Int);
-EXTERN_C Int DecodeMacroblockHighpass(CWMImageStrCodec *, CCodingContext *, Int, Int);
 EXTERN_C Void FreeCodingContextDec(CWMImageStrCodec *);
 
 EXTERN_C Int StrEncInit(CWMImageStrCodec *);
@@ -72,47 +66,6 @@ static Void JxrTranscodeSwapSize(size_t * left, size_t * right)
     size_t temporary = *left;
     *left = *right;
     *right = temporary;
-}
-Void transcodeTileHeader(CWMImageStrCodec * pSC, JxrTranscodeTileQuantizerState * pTileQPInfo)
-{
-    if(pSC->m_bCtxLeft && pSC->m_bCtxTop && pSC->m_bSecondary == FALSE){
-        CCodingContext * pContext = &pSC->m_pCodingContext[pSC->cTileColumn];
-        CWMITile * pTile = pSC->pTile + pSC->cTileColumn;
-        CWMImageStrCodec * pSCAlpha = (pSC->m_param.bAlphaChannel ? pSC->m_pNextSC : NULL);
-        JxrTranscodeBitSink dcOutput, lowpassOutput, highpassOutput, flexbitsOutput;
-        JxrTranscodeTileHeaderState state = {0};
-        JxrTranscodeTileHeaderResult result;
-
-        JxrTranscodeBitSinkInitLegacy(&dcOutput, pContext->m_pIODC);
-        JxrTranscodeBitSinkInitLegacy(&lowpassOutput, pContext->m_pIOLP);
-        JxrTranscodeBitSinkInitLegacy(&highpassOutput, pContext->m_pIOAC);
-        JxrTranscodeBitSinkInitLegacy(&flexbitsOutput, pContext->m_pIOFL);
-        state.isSpatial = pSC->WMISCP.bfBitstreamFormat == SPATIAL;
-        state.subband = pSC->WMISCP.sbSubband;
-        state.quantizerMode = pSC->m_param.uQPMode;
-        state.hasAlpha = pSCAlpha != NULL;
-        state.trimFlexbits = pSC->m_param.bTrimFlexbitsFlag;
-        state.trimFlexbitsValue = (U8)pContext->m_iTrimFlexBits;
-        state.tileId = (U8)((pSC->cTileRow * (pSC->WMISCP.cNumOfSliceMinus1V + 1) +
-            pSC->cTileColumn) & 0x1F);
-        state.channelCount = pSC->WMISCP.cChannel;
-        state.alphaChannelIndex = pSC->m_param.cNumChannels;
-        state.quantizers = pTileQPInfo;
-        state.dcOutput = &dcOutput;
-        state.lowpassOutput = &lowpassOutput;
-        state.highpassOutput = &highpassOutput;
-        state.flexbitsOutput = &flexbitsOutput;
-        if(JxrTranscodeTileHeaderWriterWrite(&state, &result) == FALSE)
-            return;
-
-        pTile->cBitsLP = result.lowpassQuantizerBits;
-        pTile->cBitsHP = result.highpassQuantizerBits;
-        if(pSCAlpha != NULL){
-            pTile = pSCAlpha->pTile + pSC->cTileColumn;
-            pTile->cBitsLP = result.lowpassAlphaQuantizerBits;
-            pTile->cBitsHP = result.highpassAlphaQuantizerBits;
-        }
-    }
 }
 Int getROI(CWMImageInfo* pII, CCoreParameters* pCore,
     CWMIStrCodecParam* pSCP, CWMTranscodingParam* pParam)
@@ -538,26 +491,10 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
                 }
 
                 if(oO == O_NONE){
-                    // encode
-                    pSCEnc->cColumn = pSCDec->cColumn - mbLeft + 1;
-                    pSCEnc->cRow = pSCDec->cRow + 1 - mbTop;
-                    pSCEnc->MBInfo = pSCDec->MBInfo;
-
-                    getTilePos(pSCEnc, cColumn, cRow);
-                    
-                    if(pSCEnc->m_bCtxLeft && pSCEnc->m_bCtxTop)
-                        transcodeTileHeader(pSCEnc, pTileQPInfo);
-
-                    if(encodeMB(pSCEnc, cColumn, cRow) != ICERR_OK)
+                    if(JxrTranscodeDirectMacroblockEncoderEncode(pSCDec, pSCEnc,
+                        mbLeft, mbTop, cColumn, cRow, pTileQPInfo,
+                        pParam->uAlphaMode > 0) != ICERR_OK)
                         return ICERR_ERROR;
-                    if(pParam->uAlphaMode > 0){
-                        pSCEnc->m_pNextSC->cColumn = pSCDec->cColumn - mbLeft + 1;
-                        pSCEnc->m_pNextSC->cRow = pSCDec->cRow + 1 - mbTop;
-                        getTilePos(pSCEnc->m_pNextSC, cColumn, cRow);
-                        pSCEnc->m_pNextSC->MBInfo = pSCDec->m_pNextSC->MBInfo;
-                        if(encodeMB(pSCEnc->m_pNextSC, cColumn, cRow) != ICERR_OK)
-                            return ICERR_ERROR;
-                    }
                 }
                 else{
                     size_t cOff = JxrTranscodeOrientationStateFrameOffset(&orientation, cRow, cColumn, mbWidth, mbHeight);
@@ -604,7 +541,9 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
                 getTilePos(pSCEnc, cColumn, cRow);
 
                 if(pSCEnc->m_bCtxLeft && pSCEnc->m_bCtxTop)
-                    transcodeTileHeader(pSCEnc, pTileQPInfo + pSCEnc->cTileRow * (pSCEnc->WMISCP.cNumOfSliceMinus1V + 1) + pSCEnc->cTileColumn);
+                    JxrTranscodeTileHeaderEmitterEmit(pSCEnc, pTileQPInfo +
+                        pSCEnc->cTileRow * (pSCEnc->WMISCP.cNumOfSliceMinus1V + 1) +
+                        pSCEnc->cTileColumn);
                 if(encodeMB(pSCEnc, cColumn, cRow) != ICERR_OK)
                     return ICERR_ERROR;
                 

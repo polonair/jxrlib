@@ -105,6 +105,7 @@
 #include "../image/decode/JxrTranscodeMacroblockDecoder.h"
 #include "../image/decode/JxrTranscodeTileContextResolver.h"
 #include "../image/decode/JxrTranscodeTileQuantizerCapture.h"
+#include "../image/decode/JxrTranscodeDirectMacroblockEncoder.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
 #include "../image/decode/JxrTranscodeRoiTileLayout.h"
@@ -751,6 +752,21 @@ static int test_transcode_tile_quantizer_capture_vectors(void)
         index != 11) return 0;
     return !JxrTranscodeTileQuantizerCaptureSelectIndex(12, 3, 0, 4, TRUE, &index) &&
         !JxrTranscodeTileQuantizerCaptureSelectIndex(1, 0, 0, 1, FALSE, NULL);
+}
+
+static int test_transcode_direct_macroblock_encoder_contract_vectors(void)
+{
+    CWMImageStrCodec sourceCodec;
+    CWMImageStrCodec destinationCodec;
+    JxrTranscodeTileQuantizerState quantizers;
+
+    memset(&sourceCodec, 0, sizeof(sourceCodec));
+    memset(&destinationCodec, 0, sizeof(destinationCodec));
+    memset(&quantizers, 0, sizeof(quantizers));
+    if (JxrTranscodeDirectMacroblockEncoderEncode(NULL, &destinationCodec, 0, 0,
+        0, 0, &quantizers, FALSE) != ICERR_ERROR) return 0;
+    return JxrTranscodeDirectMacroblockEncoderEncode(&sourceCodec, &destinationCodec,
+        0, 0, 0, 0, &quantizers, TRUE) == ICERR_ERROR;
 }
 
 static int test_transcode_tile_extraction_decision_vectors(void)
@@ -5610,6 +5626,7 @@ int main(int argc, char** argv)
         { "transcode_macroblock_decoder_contract_vectors", test_transcode_macroblock_decoder_contract_vectors },
         { "transcode_tile_context_resolver_vectors", test_transcode_tile_context_resolver_vectors },
         { "transcode_tile_quantizer_capture_vectors", test_transcode_tile_quantizer_capture_vectors },
+        { "transcode_direct_macroblock_encoder_contract_vectors", test_transcode_direct_macroblock_encoder_contract_vectors },
         { "transcode_tile_extraction_decision_vectors", test_transcode_tile_extraction_decision_vectors },
         { "transcode_roi_geometry_vectors", test_transcode_roi_geometry_vectors },
         { "transcode_roi_tile_layout_vectors", test_transcode_roi_tile_layout_vectors },
