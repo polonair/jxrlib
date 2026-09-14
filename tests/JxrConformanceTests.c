@@ -43,6 +43,8 @@
 #include "../image/encode/JxrEncoderBufferRegionLayout.h"
 #include "../image/encode/JxrEncoderProcessingPipeline.h"
 #include "../image/encode/JxrEncoderRequestValidator.h"
+#include "../image/encode/JxrEncoderCoefficientPredictor.h"
+#include "../image/encode/JxrEncoderCbpPredictor.h"
 #include "encode.h"
 #include "decode.h"
 #include "JxrEntropyState.h"
@@ -4450,6 +4452,26 @@ static int test_encoder_request_validator_vectors(void)
         &codecParameters) == ICERR_ERROR;
 }
 
+static int test_encoder_cbp_predictor_vectors(void)
+{
+    CCBPModel model;
+
+    if (JxrEncoderCbpPredictorClampModelCount(-17) != -16 ||
+        JxrEncoderCbpPredictorClampModelCount(16) != 15 ||
+        JxrEncoderCbpPredictorClampModelCount(0) != 0) return 0;
+
+    memset(&model, 0, sizeof(model));
+    JxrEncoderCbpPredictorUpdateModel(&model, 0, 0);
+    if (model.m_iCount0[0] != -3 || model.m_iCount1[0] != 13 ||
+        model.m_iState[0] != 1) return 0;
+
+    model.m_iCount0[1] = 14;
+    model.m_iCount1[1] = -14;
+    JxrEncoderCbpPredictorUpdateModel(&model, 1, 16);
+    return model.m_iCount0[1] == 15 && model.m_iCount1[1] == -16 &&
+        model.m_iState[1] == 2;
+}
+
 static int test_decoder_memory_layout_plan_vectors(void)
 {
     JxrDecoderMemoryLayoutPlan plan;
@@ -5388,6 +5410,7 @@ int main(int argc, char** argv)
         { "encoder_resource_release_plan_vectors", test_encoder_resource_release_plan_vectors },
         { "encoder_memory_layout_plan_vectors", test_encoder_memory_layout_plan_vectors },
         { "encoder_request_validator_vectors", test_encoder_request_validator_vectors },
+        { "encoder_cbp_predictor_vectors", test_encoder_cbp_predictor_vectors },
         { "decoder_memory_layout_plan_vectors", test_decoder_memory_layout_plan_vectors },
         { "decoder_buffer_region_layout_vectors", test_decoder_buffer_region_layout_vectors },
         { "decoder_primary_plane_factory_vectors", test_decoder_primary_plane_factory_vectors },
