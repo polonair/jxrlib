@@ -4549,6 +4549,96 @@ static int test_encoder_cbp_explicit_vectors(void)
     return 1;
 }
 
+static int test_encoder_coefficient_predictor_vectors(void)
+{
+    PixelI dc[16];
+    PixelI coefficients[256];
+    PixelI leftAd[6] = { 2, 3, 4, 5, 6, 7 };
+    PixelI topAd[6] = { 3, 4, 5, 6, 7, 8 };
+    JxrEncoderCoefficientPredictionReferences references;
+    Int offset;
+
+    memset(&references, 0, sizeof(references));
+    references.leftDc = 6;
+    references.topDc = 9;
+    references.leftAd = leftAd;
+    references.topAd = topAd;
+
+    memset(dc, 0, sizeof(dc));
+    memset(coefficients, 0, sizeof(coefficients));
+    dc[0] = 40;
+    dc[4] = 20;
+    dc[8] = 21;
+    dc[12] = 22;
+    coefficients[10] = 2;
+    coefficients[26] = 10;
+    JxrEncoderCoefficientPredictorApplyFullResolution(dc, coefficients, 2, 4, 1,
+        &references);
+    if (dc[0] != 33 || dc[4] != 14 || dc[8] != 14 || dc[12] != 14 ||
+        coefficients[26] != 8) return 0;
+
+    memset(dc, 0, sizeof(dc));
+    memset(coefficients, 0, sizeof(coefficients));
+    dc[0] = 20;
+    dc[1] = 10;
+    dc[2] = 11;
+    dc[3] = 12;
+    coefficients[5] = 2;
+    coefficients[69] = 10;
+    JxrEncoderCoefficientPredictorApplyFullResolution(dc, coefficients, 0, 0, 0,
+        &references);
+    if (dc[0] != 14 || dc[1] != 8 || dc[2] != 8 || dc[3] != 8 ||
+        coefficients[69] != 8) return 0;
+
+    memset(dc, 0, sizeof(dc));
+    memset(coefficients, 0, sizeof(coefficients));
+    dc[0] = 20;
+    dc[2] = 10;
+    coefficients[10] = 2;
+    coefficients[26] = 10;
+    JxrEncoderCoefficientPredictorApplyChroma420(dc, coefficients, 2, 4, 1,
+        &references);
+    if (dc[0] != 12 || dc[2] != 6 || coefficients[26] != 8) return 0;
+
+    memset(dc, 0, sizeof(dc));
+    memset(coefficients, 0, sizeof(coefficients));
+    dc[0] = 20;
+    dc[1] = 10;
+    coefficients[5] = 2;
+    coefficients[37] = 10;
+    JxrEncoderCoefficientPredictorApplyChroma420(dc, coefficients, 0, 0, 0,
+        &references);
+    if (dc[0] != 14 || dc[1] != 8 || coefficients[37] != 8) return 0;
+
+    memset(dc, 0, sizeof(dc));
+    memset(coefficients, 0, sizeof(coefficients));
+    dc[0] = 20;
+    dc[2] = 10;
+    dc[4] = 30;
+    dc[6] = 40;
+    offset = blkOffsetUV_422[2];
+    coefficients[offset - 6] = 2;
+    coefficients[offset + 10] = 10;
+    JxrEncoderCoefficientPredictorApplyChroma422(dc, coefficients, 1, 4, 1,
+        &references);
+    if (dc[0] != 11 || dc[2] != 4 || dc[4] != 23 || dc[6] != 30 ||
+        coefficients[offset + 10] != 8) return 0;
+
+    memset(dc, 0, sizeof(dc));
+    memset(coefficients, 0, sizeof(coefficients));
+    dc[0] = 20;
+    dc[1] = 10;
+    dc[4] = 30;
+    dc[5] = 40;
+    offset = blkOffsetUV_422[1];
+    coefficients[offset - 59] = 2;
+    coefficients[offset + 5] = 10;
+    JxrEncoderCoefficientPredictorApplyChroma422(dc, coefficients, 0, 0, 0,
+        &references);
+    return dc[0] == 14 && dc[1] == 8 && dc[4] == 24 && dc[5] == 36 &&
+        coefficients[offset + 5] == 8;
+}
+
 static int test_decoder_memory_layout_plan_vectors(void)
 {
     JxrDecoderMemoryLayoutPlan plan;
@@ -5489,6 +5579,7 @@ int main(int argc, char** argv)
         { "encoder_request_validator_vectors", test_encoder_request_validator_vectors },
         { "encoder_cbp_predictor_vectors", test_encoder_cbp_predictor_vectors },
         { "encoder_cbp_explicit_vectors", test_encoder_cbp_explicit_vectors },
+        { "encoder_coefficient_predictor_vectors", test_encoder_coefficient_predictor_vectors },
         { "decoder_memory_layout_plan_vectors", test_decoder_memory_layout_plan_vectors },
         { "decoder_buffer_region_layout_vectors", test_decoder_buffer_region_layout_vectors },
         { "decoder_primary_plane_factory_vectors", test_decoder_primary_plane_factory_vectors },

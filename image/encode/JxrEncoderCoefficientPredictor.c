@@ -1,166 +1,215 @@
 #include "JxrEncoderCoefficientPredictor.h"
 #include "encode.h"
 
-/* frequency domain prediction */
-Void JxrEncoderCoefficientPredictorApply(CWMImageStrCodec * pSC)
+static Void JxrEncoderCoefficientPredictorApplyFullResolutionAc(
+    PixelI* coefficients, Int acMode)
 {
-    const COLORFORMAT cf = pSC->m_param.cfColorFormat;
-    const Int iChannels = (cf == YUV_420 || cf == YUV_422) ? 1 : (Int) pSC->m_param.cNumChannels;
-    size_t mbX = pSC->cColumn - 1;// mbY = pSC->cRow - 1;
-    CWMIMBInfo *pMBInfo = &(pSC->MBInfo);
-    Int iDCACPredMode = getDCACPredMode(pSC, mbX);
-    Int iDCPredMode = (iDCACPredMode & 0x3);
-    Int iADPredMode = (iDCACPredMode & 0xC);
-    Int iACPredMode = getACPredMode(pMBInfo, cf);
-    PixelI * pOrg, * pRef;
-    Int i, j, k;
+    Int macroblockRow;
+    Int blockRow;
 
-    pMBInfo->iOrientation = 2 - iACPredMode;
-
-    /* keep necessary info for future prediction */
-    updatePredInfo(pSC, pMBInfo, mbX, cf);
-
-    for(i = 0; i < iChannels; i ++){
-        pOrg = pMBInfo->iBlockDC[i]; // current DC block
-
-        /* DC prediction */
-        if(iDCPredMode == 1){ // predict DC from top
-            pOrg[0] -= (pSC->PredInfoPrevRow[i] + mbX)->iDC;
-        }
-        else if(iDCPredMode == 0){ // predict DC from left
-            pOrg[0] -= (pSC->PredInfo[i] + mbX - 1)->iDC;
-        }
-        else if(iDCPredMode == 2){// predict DC from top&left
-            pOrg[0] -= ((pSC->PredInfo[i] + mbX - 1)->iDC + (pSC->PredInfoPrevRow[i] + mbX)->iDC) >> 1;
-        }
-
-        /* AD prediction */
-        if(iADPredMode == 4){// predict AD from top
-            pRef = (pSC->PredInfoPrevRow[i] + mbX)->piAD;
-            pOrg[4] -= pRef[3], pOrg[8] -= pRef[4], pOrg[12] -= pRef[5];
-        }
-        else if(iADPredMode == 0){// predict AD from left
-            pRef = (pSC->PredInfo[i] + mbX - 1)->piAD;
-            pOrg[1] -= pRef[0], pOrg[2] -= pRef[1], pOrg[3] -= pRef[2];
-        }
-
-        pOrg = pSC->pPlane[i];
-        /* AC prediction */
-        if(iACPredMode == 1){ // predict from top
-            for(k = 0; k <= 192; k += 64){
-                /* inside macroblock, in reverse order */
-                for(j = 48; j > 0; j -= 16){
-                    pOrg[k + j + 10] -= pOrg[k + j + 10 - 16];
-                    pOrg[k + j +  2] -= pOrg[k + j +  2 - 16];
-                    pOrg[k + j +  9] -= pOrg[k + j +  9 - 16];
-                }
-            }
-        }
-        else if(iACPredMode == 0){ // predict from left
-            for(k = 0; k < 64; k += 16){
-                /* inside macroblock, in reverse order */
-                for(j = 192; j > 0; j -= 64){
-                    pOrg[k + j + 5] -= pOrg[k + j + 5 - 64];
-                    pOrg[k + j + 1] -= pOrg[k + j + 1 - 64];
-                    pOrg[k + j + 6] -= pOrg[k + j + 6 - 64];
-                }
+    if (acMode == 1) {
+        for (macroblockRow = 0; macroblockRow <= 192; macroblockRow += 64) {
+            for (blockRow = 48; blockRow > 0; blockRow -= 16) {
+                coefficients[macroblockRow + blockRow + 10] -=
+                    coefficients[macroblockRow + blockRow - 6];
+                coefficients[macroblockRow + blockRow + 2] -=
+                    coefficients[macroblockRow + blockRow - 14];
+                coefficients[macroblockRow + blockRow + 9] -=
+                    coefficients[macroblockRow + blockRow - 7];
             }
         }
     }
-
-    if(cf == YUV_420){
-        for(i = 1; i < 3; i ++){
-            pOrg = pMBInfo->iBlockDC[i]; // current DC block
-
-            /* DC prediciton */
-            if(iDCPredMode == 1){ // predict DC from top
-                pOrg[0] -= (pSC->PredInfoPrevRow[i] + mbX)->iDC;
-            }
-            else if(iDCPredMode == 0){ // predict DC from left
-                pOrg[0] -= (pSC->PredInfo[i] + mbX - 1)->iDC;
-            }
-            else if(iDCPredMode == 2){ // predict DC from top&left
-                pOrg[0] -= (((pSC->PredInfo[i] + mbX - 1)->iDC + (pSC->PredInfoPrevRow[i] + mbX)->iDC + 1) >> 1);
-            }
-
-            /* AD prediction */
-            if(iADPredMode == 4){// predict AD from top
-                pOrg[2] -= (pSC->PredInfoPrevRow[i] + mbX)->piAD[1];
-            }
-            else if(iADPredMode == 0){// predict AD from left
-                pOrg[1] -= (pSC->PredInfo[i] + mbX - 1)->piAD[0];
-            }
-
-            pOrg = pSC->pPlane[i];
-            /* AC prediction */
-            if(iACPredMode == 1){ // predict from top
-                for(j = 16; j <= 48; j += 32){
-                    /* inside macroblock */
-                    pOrg[j + 10] -= pOrg[j + 10 - 16];
-                    pOrg[j +  2] -= pOrg[j +  2 - 16];
-                    pOrg[j +  9] -= pOrg[j +  9 - 16];
-                }
-            }
-            else if(iACPredMode == 0){ // predict from left
-                for(j = 32; j <= 48; j += 16){
-                    /* inside macroblock */
-                    pOrg[j + 5] -= pOrg[j + 5 - 32];
-                    pOrg[j + 1] -= pOrg[j + 1 - 32];
-                    pOrg[j + 6] -= pOrg[j + 6 - 32];
-                }
+    else if (acMode == 0) {
+        for (macroblockRow = 0; macroblockRow < 64; macroblockRow += 16) {
+            for (blockRow = 192; blockRow > 0; blockRow -= 64) {
+                coefficients[macroblockRow + blockRow + 5] -=
+                    coefficients[macroblockRow + blockRow - 59];
+                coefficients[macroblockRow + blockRow + 1] -=
+                    coefficients[macroblockRow + blockRow - 63];
+                coefficients[macroblockRow + blockRow + 6] -=
+                    coefficients[macroblockRow + blockRow - 58];
             }
         }
     }
-    else if(cf == YUV_422){
-        for(i = 1; i < 3; i ++){
-            pOrg = pMBInfo->iBlockDC[i]; // current DC block
+}
 
-            /* DC prediciton */
-            if(iDCPredMode == 1){ // predict DC from top
-                pOrg[0] -= (pSC->PredInfoPrevRow[i] + mbX)->iDC;
-            }
-            else if(iDCPredMode == 0){ // predict DC from left
-                pOrg[0] -= (pSC->PredInfo[i] + mbX - 1)->iDC;
-            }
-            else if(iDCPredMode == 2){ // predict DC from top&left
-                pOrg[0] -= (((pSC->PredInfo[i] + mbX - 1)->iDC + (pSC->PredInfoPrevRow[i] + mbX)->iDC + 1) >> 1);
-            }
+Void JxrEncoderCoefficientPredictorApplyFullResolution(PixelI* dcCoefficients,
+    PixelI* macroblockCoefficients, Int dcMode, Int adMode, Int acMode,
+    const JxrEncoderCoefficientPredictionReferences* references)
+{
+    if (dcMode == 1)
+        dcCoefficients[0] -= references->topDc;
+    else if (dcMode == 0)
+        dcCoefficients[0] -= references->leftDc;
+    else if (dcMode == 2)
+        dcCoefficients[0] -= (references->leftDc + references->topDc) >> 1;
 
-            /* AD prediction */
-            if(iADPredMode == 4){// predict AD from top
-                pOrg[4] -= (pSC->PredInfoPrevRow[i] + mbX)->piAD[4]; // AC of HT !!!
-                pOrg[6] -= pOrg[2];
-                pOrg[2] -= (pSC->PredInfoPrevRow[i] + mbX)->piAD[3];
-            }
-            else if(iADPredMode == 0){// predict AD from left
-                pOrg[4] -= (pSC->PredInfo[i] + mbX - 1)->piAD[4];  // AC of HT !!!
-                pOrg[1] -= (pSC->PredInfo[i] + mbX - 1)->piAD[0];
-                pOrg[5] -= (pSC->PredInfo[i] + mbX - 1)->piAD[2];
-            }
-            else if(iDCPredMode == 1){
-                pOrg[6] -= pOrg[2];
-            }
+    if (adMode == 4) {
+        dcCoefficients[4] -= references->topAd[3];
+        dcCoefficients[8] -= references->topAd[4];
+        dcCoefficients[12] -= references->topAd[5];
+    }
+    else if (adMode == 0) {
+        dcCoefficients[1] -= references->leftAd[0];
+        dcCoefficients[2] -= references->leftAd[1];
+        dcCoefficients[3] -= references->leftAd[2];
+    }
 
-            pOrg = pSC->pPlane[i]; // current MB
-            /* AC prediction */
-            if(iACPredMode == 1){ // predict from top
-                for(j = 48; j > 0; j -= 16){
-                    for(k = 0; k <= 64; k += 64){
-                        /* inside macroblock */
-                        pOrg[j + k + 10] -= pOrg[j + k + 10 - 16];
-                        pOrg[j + k +  2] -= pOrg[j + k +  2 - 16];
-                        pOrg[j + k +  9] -= pOrg[j + k +  9 - 16];
-                    }
-                }
-            }
-            else if(iACPredMode == 0){ // predict from left
-                for(j = 64; j <= 112; j += 16){
-                    /* inside macroblock */
-                    pOrg[j + 5] -= pOrg[j + 5 - 64];
-                    pOrg[j + 1] -= pOrg[j + 1 - 64];
-                    pOrg[j + 6] -= pOrg[j + 6 - 64];
-                }
-            }
+    JxrEncoderCoefficientPredictorApplyFullResolutionAc(macroblockCoefficients,
+        acMode);
+}
+
+Void JxrEncoderCoefficientPredictorApplyChroma420(PixelI* dcCoefficients,
+    PixelI* macroblockCoefficients, Int dcMode, Int adMode, Int acMode,
+    const JxrEncoderCoefficientPredictionReferences* references)
+{
+    Int blockOffset;
+
+    if (dcMode == 1)
+        dcCoefficients[0] -= references->topDc;
+    else if (dcMode == 0)
+        dcCoefficients[0] -= references->leftDc;
+    else if (dcMode == 2)
+        dcCoefficients[0] -= (references->leftDc + references->topDc + 1) >> 1;
+
+    if (adMode == 4)
+        dcCoefficients[2] -= references->topAd[1];
+    else if (adMode == 0)
+        dcCoefficients[1] -= references->leftAd[0];
+
+    if (acMode == 1) {
+        for (blockOffset = 16; blockOffset <= 48; blockOffset += 32) {
+            macroblockCoefficients[blockOffset + 10] -=
+                macroblockCoefficients[blockOffset - 6];
+            macroblockCoefficients[blockOffset + 2] -=
+                macroblockCoefficients[blockOffset - 14];
+            macroblockCoefficients[blockOffset + 9] -=
+                macroblockCoefficients[blockOffset - 7];
+        }
+    }
+    else if (acMode == 0) {
+        for (blockOffset = 32; blockOffset <= 48; blockOffset += 16) {
+            macroblockCoefficients[blockOffset + 5] -=
+                macroblockCoefficients[blockOffset - 27];
+            macroblockCoefficients[blockOffset + 1] -=
+                macroblockCoefficients[blockOffset - 31];
+            macroblockCoefficients[blockOffset + 6] -=
+                macroblockCoefficients[blockOffset - 26];
+        }
+    }
+}
+
+Void JxrEncoderCoefficientPredictorApplyChroma422(PixelI* dcCoefficients,
+    PixelI* macroblockCoefficients, Int dcMode, Int adMode, Int acMode,
+    const JxrEncoderCoefficientPredictionReferences* references)
+{
+    Int blockIndex;
+    Int blockOffset;
+
+    if (dcMode == 1)
+        dcCoefficients[0] -= references->topDc;
+    else if (dcMode == 0)
+        dcCoefficients[0] -= references->leftDc;
+    else if (dcMode == 2)
+        dcCoefficients[0] -= (references->leftDc + references->topDc + 1) >> 1;
+
+    if (adMode == 4) {
+        dcCoefficients[4] -= references->topAd[4];
+        dcCoefficients[6] -= dcCoefficients[2];
+        dcCoefficients[2] -= references->topAd[3];
+    }
+    else if (adMode == 0) {
+        dcCoefficients[4] -= references->leftAd[4];
+        dcCoefficients[1] -= references->leftAd[0];
+        dcCoefficients[5] -= references->leftAd[2];
+    }
+    else if (dcMode == 1)
+        dcCoefficients[6] -= dcCoefficients[2];
+
+    if (acMode == 1) {
+        for (blockIndex = 2; blockIndex < 8; blockIndex++) {
+            blockOffset = blkOffsetUV_422[blockIndex];
+            macroblockCoefficients[blockOffset + 10] -=
+                macroblockCoefficients[blockOffset - 6];
+            macroblockCoefficients[blockOffset + 2] -=
+                macroblockCoefficients[blockOffset - 14];
+            macroblockCoefficients[blockOffset + 9] -=
+                macroblockCoefficients[blockOffset - 7];
+        }
+    }
+    else if (acMode == 0) {
+        for (blockIndex = 1; blockIndex < 8; blockIndex += 2) {
+            blockOffset = blkOffsetUV_422[blockIndex];
+            macroblockCoefficients[blockOffset + 5] -=
+                macroblockCoefficients[blockOffset - 59];
+            macroblockCoefficients[blockOffset + 1] -=
+                macroblockCoefficients[blockOffset - 63];
+            macroblockCoefficients[blockOffset + 6] -=
+                macroblockCoefficients[blockOffset - 58];
+        }
+    }
+}
+
+static Void JxrEncoderCoefficientPredictorResolveReferences(
+    CWMImageStrCodec* codec, Int channel, size_t column, Int dcMode,
+    Int adMode, JxrEncoderCoefficientPredictionReferences* references)
+{
+    references->leftDc = 0;
+    references->topDc = 0;
+    references->leftAd = NULL;
+    references->topAd = NULL;
+
+    if (dcMode == 0 || dcMode == 2 || adMode == 0) {
+        references->leftDc = codec->PredInfo[channel][column - 1].iDC;
+        references->leftAd = codec->PredInfo[channel][column - 1].piAD;
+    }
+    if (dcMode == 1 || dcMode == 2 || adMode == 4) {
+        references->topDc = codec->PredInfoPrevRow[channel][column].iDC;
+        references->topAd = codec->PredInfoPrevRow[channel][column].piAD;
+    }
+}
+
+Void JxrEncoderCoefficientPredictorApply(CWMImageStrCodec* codec)
+{
+    COLORFORMAT colorFormat = codec->m_param.cfColorFormat;
+    Int primaryChannelCount = (colorFormat == YUV_420 || colorFormat == YUV_422) ?
+        1 : (Int)codec->m_param.cNumChannels;
+    size_t macroblockColumn = codec->cColumn - 1;
+    CWMIMBInfo* macroblockInfo = &codec->MBInfo;
+    Int predictionMode = getDCACPredMode(codec, macroblockColumn);
+    Int dcMode = predictionMode & 0x3;
+    Int adMode = predictionMode & 0xC;
+    Int acMode = getACPredMode(macroblockInfo, colorFormat);
+    JxrEncoderCoefficientPredictionReferences references;
+    Int channel;
+
+    macroblockInfo->iOrientation = 2 - acMode;
+    updatePredInfo(codec, macroblockInfo, macroblockColumn, colorFormat);
+
+    for (channel = 0; channel < primaryChannelCount; channel++) {
+        JxrEncoderCoefficientPredictorResolveReferences(codec, channel,
+            macroblockColumn, dcMode, adMode, &references);
+        JxrEncoderCoefficientPredictorApplyFullResolution(
+            macroblockInfo->iBlockDC[channel], codec->pPlane[channel], dcMode,
+            adMode, acMode, &references);
+    }
+
+    if (colorFormat == YUV_420) {
+        for (channel = 1; channel < 3; channel++) {
+            JxrEncoderCoefficientPredictorResolveReferences(codec, channel,
+                macroblockColumn, dcMode, adMode, &references);
+            JxrEncoderCoefficientPredictorApplyChroma420(
+                macroblockInfo->iBlockDC[channel], codec->pPlane[channel], dcMode,
+                adMode, acMode, &references);
+        }
+    }
+    else if (colorFormat == YUV_422) {
+        for (channel = 1; channel < 3; channel++) {
+            JxrEncoderCoefficientPredictorResolveReferences(codec, channel,
+                macroblockColumn, dcMode, adMode, &references);
+            JxrEncoderCoefficientPredictorApplyChroma422(
+                macroblockInfo->iBlockDC[channel], codec->pPlane[channel], dcMode,
+                adMode, acMode, &references);
         }
     }
 }
