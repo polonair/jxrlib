@@ -103,6 +103,7 @@
 #include "JxrTranscodeCoefficientTransform.h"
 #include "../image/decode/JxrTranscodeMacroblockTransform.h"
 #include "../image/decode/JxrTranscodeMacroblockDecoder.h"
+#include "../image/decode/JxrTranscodeTileContextResolver.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
 #include "../image/decode/JxrTranscodeRoiTileLayout.h"
@@ -704,6 +705,39 @@ static int test_transcode_macroblock_decoder_contract_vectors(void)
     if (JxrTranscodeMacroblockDecoderDecode(NULL, 0, 0) != ICERR_ERROR) return 0;
     codec.m_param.bAlphaChannel = TRUE;
     return JxrTranscodeMacroblockDecoderDecode(&codec, 0, 0) == ICERR_ERROR;
+}
+
+static int test_transcode_tile_context_resolver_vectors(void)
+{
+    U32 columns[3] = { 0, 4, 8 };
+    U32 rows[3] = { 0, 2, 5 };
+    JxrTranscodeOrientationState orientation;
+    JxrTranscodeTileContextRequest request;
+    JxrTranscodeTileContextResult result;
+
+    memset(&request, 0, sizeof(request));
+    request.sourceRow = 4;
+    request.sourceColumn = 2;
+    request.macroblockLeft = 2;
+    request.macroblockRight = 8;
+    request.macroblockTop = 4;
+    request.macroblockBottom = 9;
+    request.macroblockWidth = 6;
+    request.macroblockHeight = 5;
+    request.tileColumns = columns;
+    request.tileColumnCount = 3;
+    request.tileRows = rows;
+    request.tileRowCount = 3;
+    JxrTranscodeOrientationStateInit(&orientation, O_RCW);
+    request.orientation = &orientation;
+    if (!JxrTranscodeTileContextResolverResolve(&request, &result) ||
+        !result.isInsideRoi || result.destinationRow != 4 || result.destinationColumn != 0 ||
+        !result.isTileRowStart || !result.isTileColumnStart ||
+        result.tileRow != 0 || result.tileColumn != 1) return 0;
+
+    request.sourceColumn = 1;
+    if (!JxrTranscodeTileContextResolverResolve(&request, &result) || result.isInsideRoi) return 0;
+    return !JxrTranscodeTileContextResolverResolve(NULL, &result);
 }
 
 static int test_transcode_tile_extraction_decision_vectors(void)
@@ -5561,6 +5595,7 @@ int main(int argc, char** argv)
         { "transcode_coefficient_transform_420_vectors", test_transcode_coefficient_transform_420_vectors },
         { "transcode_macroblock_transform_vectors", test_transcode_macroblock_transform_vectors },
         { "transcode_macroblock_decoder_contract_vectors", test_transcode_macroblock_decoder_contract_vectors },
+        { "transcode_tile_context_resolver_vectors", test_transcode_tile_context_resolver_vectors },
         { "transcode_tile_extraction_decision_vectors", test_transcode_tile_extraction_decision_vectors },
         { "transcode_roi_geometry_vectors", test_transcode_roi_geometry_vectors },
         { "transcode_roi_tile_layout_vectors", test_transcode_roi_tile_layout_vectors },

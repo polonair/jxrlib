@@ -36,6 +36,7 @@
 #include "JxrTranscodeCoefficientTransform.h"
 #include "JxrTranscodeMacroblockTransform.h"
 #include "JxrTranscodeMacroblockDecoder.h"
+#include "JxrTranscodeTileContextResolver.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
 #include "JxrTranscodeRoiTileLayout.h"
@@ -482,25 +483,34 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
             if(JxrTranscodeMacroblockDecoderDecode(pSCDec, cColumn, cRow) != ICERR_OK)
                 return ICERR_ERROR;
 
-            if(pSCDec->cRow >= mbTop && pSCDec->cColumn >= mbLeft && pSCDec->cColumn < mbRight){
-                cRow = (Int)(pSCDec->cRow - mbTop);
-                cRow = JxrTranscodeOrientationStateMapRow(&orientation, cRow, mbHeight);
-                cColumn = (Int)(pSCDec->cColumn - mbLeft);
-                cColumn = JxrTranscodeOrientationStateMapColumn(&orientation, cColumn, mbWidth);
+            {
+                JxrTranscodeTileContextRequest tileContextRequest = {0};
+                JxrTranscodeTileContextResult tileContext;
 
-                pSCEnc->m_bCtxLeft = pSCEnc->m_bCtxTop = FALSE;
-                for(i = 0; i <= pSCEnc->WMISCP.cNumOfSliceMinus1H; i ++)
-                    if(pSCEnc->WMISCP.uiTileY[i] == (U32)JxrTranscodeOrientationStateTileRowCoordinate(&orientation, cRow, cColumn)){
-                        pSCEnc->cTileRow = i;
-                        pSCEnc->m_bCtxTop = TRUE;
-                        break;
-                    }
-                for(i = 0; i <= pSCEnc->WMISCP.cNumOfSliceMinus1V; i ++)
-                    if(pSCEnc->WMISCP.uiTileX[i] == (U32)JxrTranscodeOrientationStateTileColumnCoordinate(&orientation, cRow, cColumn)){
-                        pSCEnc->cTileColumn = i;
-                        pSCEnc->m_bCtxLeft = TRUE;
-                        break;
-                    }
+                tileContextRequest.sourceRow = pSCDec->cRow;
+                tileContextRequest.sourceColumn = pSCDec->cColumn;
+                tileContextRequest.macroblockLeft = mbLeft;
+                tileContextRequest.macroblockRight = mbRight;
+                tileContextRequest.macroblockTop = mbTop;
+                tileContextRequest.macroblockBottom = mbBottom;
+                tileContextRequest.macroblockWidth = mbWidth;
+                tileContextRequest.macroblockHeight = mbHeight;
+                tileContextRequest.tileColumns = pSCEnc->WMISCP.uiTileX;
+                tileContextRequest.tileColumnCount = pSCEnc->WMISCP.cNumOfSliceMinus1V + 1;
+                tileContextRequest.tileRows = pSCEnc->WMISCP.uiTileY;
+                tileContextRequest.tileRowCount = pSCEnc->WMISCP.cNumOfSliceMinus1H + 1;
+                tileContextRequest.orientation = &orientation;
+                if(JxrTranscodeTileContextResolverResolve(&tileContextRequest, &tileContext) == FALSE)
+                    return ICERR_ERROR;
+                if(tileContext.isInsideRoi){
+                    cRow = tileContext.destinationRow;
+                    cColumn = tileContext.destinationColumn;
+                    pSCEnc->m_bCtxLeft = tileContext.isTileColumnStart;
+                    pSCEnc->m_bCtxTop = tileContext.isTileRowStart;
+                    if(pSCEnc->m_bCtxLeft)
+                        pSCEnc->cTileColumn = tileContext.tileColumn;
+                    if(pSCEnc->m_bCtxTop)
+                        pSCEnc->cTileRow = tileContext.tileRow;
 
                 if(pSCEnc->m_bCtxLeft && pSCEnc->m_bCtxTop){ // a new tile, buffer tile DQuant info
                     JxrTranscodeTileQuantizerState * pTmp = pTileQPInfo;
@@ -555,6 +565,7 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
                         memcpy(&pFrameBufAlpha[cOff * 256], MBBufAlpha, 256 * sizeof(PixelI));
                     }
                 }
+            }
             }
         }
 
