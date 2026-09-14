@@ -197,6 +197,7 @@
     <ClCompile Include="..\decode\JxrTranscodeMacroblockTransform.c" />
     <ClCompile Include="..\decode\JxrTranscodeMacroblockDecoder.c" />
     <ClCompile Include="..\decode\JxrTranscodeTileContextResolver.c" />
+    <ClCompile Include="..\decode\JxrTranscodeTileQuantizerCapture.c" />
     <ClCompile Include="..\decode\JxrTranscodeTileExtractionDecision.c" />
     <ClCompile Include="..\decode\JxrTranscodeRoiGeometry.c" />
     <ClCompile Include="..\decode\JxrTranscodeRoiTileLayout.c" />

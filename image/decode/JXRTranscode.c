@@ -37,6 +37,7 @@
 #include "JxrTranscodeMacroblockTransform.h"
 #include "JxrTranscodeMacroblockDecoder.h"
 #include "JxrTranscodeTileContextResolver.h"
+#include "JxrTranscodeTileQuantizerCapture.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
 #include "JxrTranscodeRoiTileLayout.h"
@@ -471,7 +472,6 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
     for(pSCDec->cRow = 0; pSCDec->cRow < mbBottom && pParam->bIgnoreOverlap == FALSE; pSCDec->cRow ++){
         for(pSCDec->cColumn = 0; pSCDec->cColumn < pSCDec->cmbWidth; pSCDec->cColumn ++){
             Int cRow = (Int)pSCDec->cRow, cColumn = (Int)pSCDec->cColumn;
-            CWMITile * pTile;
             
             memset(pMBBuf, 0, sizeof(PixelI) * cUnit);
             if(pSCDec->m_param.bAlphaChannel){ // alpha channel
@@ -513,21 +513,28 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
                         pSCEnc->cTileRow = tileContext.tileRow;
 
                 if(pSCEnc->m_bCtxLeft && pSCEnc->m_bCtxTop){ // a new tile, buffer tile DQuant info
-                    JxrTranscodeTileQuantizerState * pTmp = pTileQPInfo;
-                    
-                    pTile = pSCDec->pTile + pSCDec->cTileColumn;
-                    
-                    if(oO != O_NONE)
-                        pTmp += pSCEnc->cTileRow * (pSCEnc->WMISCP.cNumOfSliceMinus1V + 1) + pSCEnc->cTileColumn;
-                    
-                    JxrTranscodeTileQuantizerStateInit(pTmp);
-                    JxrTranscodeTileQuantizerStateCapturePrimary(pTmp, pTile,
-                        pSCEnc->WMISCP.cChannel, pSCEnc->WMISCP.sbSubband);
-                    if(pParam->uAlphaMode > 0){
-                        pTile = pSCDec->m_pNextSC->pTile + pSCDec->cTileColumn;
-                        JxrTranscodeTileQuantizerStateCaptureAlpha(pTmp, pTile, iAlphaPos,
-                            pSCEnc->WMISCP.sbSubband);
+                    JxrTranscodeTileQuantizerCaptureRequest quantizerCapture = {0};
+
+                    quantizerCapture.states = pTileQPInfo;
+                    quantizerCapture.stateCount = oO == O_NONE ? 1 :
+                        (pSCEnc->WMISCP.cNumOfSliceMinus1H + 1) *
+                        (pSCEnc->WMISCP.cNumOfSliceMinus1V + 1);
+                    quantizerCapture.destinationTileRow = pSCEnc->cTileRow;
+                    quantizerCapture.destinationTileColumn = pSCEnc->cTileColumn;
+                    quantizerCapture.destinationTileColumnCount =
+                        pSCEnc->WMISCP.cNumOfSliceMinus1V + 1;
+                    quantizerCapture.storeByDestinationTile = oO != O_NONE;
+                    quantizerCapture.primaryTile = pSCDec->pTile + pSCDec->cTileColumn;
+                    quantizerCapture.primaryChannelCount = pSCEnc->WMISCP.cChannel;
+                    quantizerCapture.subband = pSCEnc->WMISCP.sbSubband;
+                    quantizerCapture.hasAlpha = pParam->uAlphaMode > 0;
+                    if(quantizerCapture.hasAlpha){
+                        quantizerCapture.alphaTile = pSCDec->m_pNextSC->pTile +
+                            pSCDec->cTileColumn;
+                        quantizerCapture.alphaChannelIndex = iAlphaPos;
                     }
+                    if(JxrTranscodeTileQuantizerCaptureCapture(&quantizerCapture) == FALSE)
+                        return ICERR_ERROR;
                 }
 
                 if(oO == O_NONE){

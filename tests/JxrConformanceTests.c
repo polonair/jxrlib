@@ -104,6 +104,7 @@
 #include "../image/decode/JxrTranscodeMacroblockTransform.h"
 #include "../image/decode/JxrTranscodeMacroblockDecoder.h"
 #include "../image/decode/JxrTranscodeTileContextResolver.h"
+#include "../image/decode/JxrTranscodeTileQuantizerCapture.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
 #include "../image/decode/JxrTranscodeRoiTileLayout.h"
@@ -738,6 +739,18 @@ static int test_transcode_tile_context_resolver_vectors(void)
     request.sourceColumn = 1;
     if (!JxrTranscodeTileContextResolverResolve(&request, &result) || result.isInsideRoi) return 0;
     return !JxrTranscodeTileContextResolverResolve(NULL, &result);
+}
+
+static int test_transcode_tile_quantizer_capture_vectors(void)
+{
+    size_t index = 99;
+
+    if (!JxrTranscodeTileQuantizerCaptureSelectIndex(1, 3, 7, 0, FALSE, &index) ||
+        index != 0 ||
+        !JxrTranscodeTileQuantizerCaptureSelectIndex(12, 2, 3, 4, TRUE, &index) ||
+        index != 11) return 0;
+    return !JxrTranscodeTileQuantizerCaptureSelectIndex(12, 3, 0, 4, TRUE, &index) &&
+        !JxrTranscodeTileQuantizerCaptureSelectIndex(1, 0, 0, 1, FALSE, NULL);
 }
 
 static int test_transcode_tile_extraction_decision_vectors(void)
@@ -5596,6 +5609,7 @@ int main(int argc, char** argv)
         { "transcode_macroblock_transform_vectors", test_transcode_macroblock_transform_vectors },
         { "transcode_macroblock_decoder_contract_vectors", test_transcode_macroblock_decoder_contract_vectors },
         { "transcode_tile_context_resolver_vectors", test_transcode_tile_context_resolver_vectors },
+        { "transcode_tile_quantizer_capture_vectors", test_transcode_tile_quantizer_capture_vectors },
         { "transcode_tile_extraction_decision_vectors", test_transcode_tile_extraction_decision_vectors },
         { "transcode_roi_geometry_vectors", test_transcode_roi_geometry_vectors },
         { "transcode_roi_tile_layout_vectors", test_transcode_roi_tile_layout_vectors },
