@@ -108,6 +108,7 @@
 #include "../image/decode/JxrTranscodeDirectMacroblockEncoder.h"
 #include "../image/decode/JxrTranscodeOrientedMacroblockBuffer.h"
 #include "../image/decode/JxrTranscodeOrientedMacroblockEncoder.h"
+#include "../image/decode/JxrTranscodeTileExtractionExecutor.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
 #include "../image/decode/JxrTranscodeRoiTileLayout.h"
@@ -829,6 +830,18 @@ static int test_transcode_oriented_macroblock_encoder_contract_vectors(void)
     memset(&request, 0, sizeof(request));
     return JxrTranscodeOrientedMacroblockEncoderEncode(NULL) == ICERR_ERROR &&
         JxrTranscodeOrientedMacroblockEncoderEncode(&request) == ICERR_ERROR;
+}
+
+static int test_transcode_tile_extraction_executor_vectors(void)
+{
+    if (JxrTranscodeTileExtractionExecutorPacketCount(SPATIAL, SB_ALL) != 1 ||
+        JxrTranscodeTileExtractionExecutorPacketCount(FREQUENCY, SB_DC_ONLY) != 1 ||
+        JxrTranscodeTileExtractionExecutorPacketCount(FREQUENCY, SB_NO_HIGHPASS) != 2 ||
+        JxrTranscodeTileExtractionExecutorPacketCount(FREQUENCY, SB_NO_FLEXBITS) != 3 ||
+        JxrTranscodeTileExtractionExecutorPacketCount(FREQUENCY, SB_ALL) != 4) return 0;
+    return JxrTranscodeTileExtractionExecutorContainsTile(2, 3, 2, 5, 3, 7) &&
+        !JxrTranscodeTileExtractionExecutorContainsTile(5, 3, 2, 5, 3, 7) &&
+        !JxrTranscodeTileExtractionExecutorContainsTile(2, 7, 2, 5, 3, 7);
 }
 
 static int test_transcode_tile_extraction_decision_vectors(void)
@@ -5691,6 +5704,7 @@ int main(int argc, char** argv)
         { "transcode_direct_macroblock_encoder_contract_vectors", test_transcode_direct_macroblock_encoder_contract_vectors },
         { "transcode_oriented_macroblock_buffer_vectors", test_transcode_oriented_macroblock_buffer_vectors },
         { "transcode_oriented_macroblock_encoder_contract_vectors", test_transcode_oriented_macroblock_encoder_contract_vectors },
+        { "transcode_tile_extraction_executor_vectors", test_transcode_tile_extraction_executor_vectors },
         { "transcode_tile_extraction_decision_vectors", test_transcode_tile_extraction_decision_vectors },
         { "transcode_roi_geometry_vectors", test_transcode_roi_geometry_vectors },
         { "transcode_roi_tile_layout_vectors", test_transcode_roi_tile_layout_vectors },

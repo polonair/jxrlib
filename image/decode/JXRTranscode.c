@@ -39,6 +39,7 @@
 #include "JxrTranscodeDirectMacroblockEncoder.h"
 #include "JxrTranscodeOrientedMacroblockBuffer.h"
 #include "JxrTranscodeOrientedMacroblockEncoder.h"
+#include "JxrTranscodeTileExtractionExecutor.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
 #include "JxrTranscodeRoiTileLayout.h"
@@ -165,7 +166,7 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
     JxrTranscodeOrientationState orientation;
     size_t iAlphaPos = 0;
     size_t cUnit;
-    size_t i, j, mbLeft, mbRight, mbTop, mbBottom, mbWidth, mbHeight;
+    size_t i, mbLeft, mbRight, mbTop, mbBottom, mbWidth, mbHeight;
 
     if(pStreamIn == NULL || pStreamOut == NULL || pParam == NULL)
         return ICERR_ERROR;
@@ -377,49 +378,9 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
     }
 
     if(pParam->bIgnoreOverlap == TRUE){
-        SUBBAND sbEnc = pSCEnc->WMISCP.sbSubband, sbDec = pSCDec->WMISCP.sbSubband;
-        size_t cfEnc = ((pSCEnc->WMISCP.bfBitstreamFormat == SPATIAL || sbEnc == SB_DC_ONLY) ? 1 : (sbEnc == SB_NO_HIGHPASS ? 2 : (sbEnc == SB_NO_FLEXBITS ? 3 : 4)));
-        size_t cfDec = ((pSCDec->WMISCP.bfBitstreamFormat == SPATIAL || sbDec == SB_DC_ONLY) ? 1 : (sbDec == SB_NO_HIGHPASS ? 2 : (sbDec == SB_NO_FLEXBITS ? 3 : 4)));
-        size_t k, l = 0;
-
-        pSCEnc->pIndexTable = (size_t *)malloc(sizeof(size_t) * (pSCEnc->WMISCP.cNumOfSliceMinus1H + 1) * (pSCEnc->WMISCP.cNumOfSliceMinus1V + 1) * cfEnc);
-
-        if(pSCEnc->pIndexTable == NULL || cfEnc > cfDec)
+        if(JxrTranscodeTileExtractionExecutorExecute(pSCDec, pSCEnc, mbLeft,
+            mbRight, mbTop, mbBottom) != ICERR_OK)
             return ICERR_ERROR;
-
-        pSCEnc->cNumBitIO = cfEnc * (pSCEnc->WMISCP.cNumOfSliceMinus1V + 1);
-        
-        for(j = 0; j <= pSCDec->WMISCP.cNumOfSliceMinus1H; j ++){
-            for(i = 0; i <= pSCDec->WMISCP.cNumOfSliceMinus1V; i ++)
-                if(pSCDec->WMISCP.uiTileX[i] >= mbLeft && pSCDec->WMISCP.uiTileX[i] < mbRight && 
-                    pSCDec->WMISCP.uiTileY[j] >= mbTop && pSCDec->WMISCP.uiTileY[j] < mbBottom){
-                        for(k = 0; k < cfEnc; k ++, l ++)
-                            pSCEnc->pIndexTable[l] = pSCDec->pIndexTable[(j * (pSCDec->WMISCP.cNumOfSliceMinus1V + 1) + i) * cfDec + k + 1] - pSCDec->pIndexTable[(j * (pSCDec->WMISCP.cNumOfSliceMinus1V + 1) + i) * cfDec + k];
-                }
-        }
-
-        if(pSCEnc->WMISCP.cNumOfSliceMinus1H + pSCEnc->WMISCP.cNumOfSliceMinus1V == 0 && pSCEnc->WMISCP.bfBitstreamFormat == SPATIAL){
-            pSCEnc->m_param.bIndexTable = FALSE;
-            pSCEnc->cNumBitIO = 0;
-            writeIndexTableNull(pSCEnc);
-        }
-        else
-            writeIndexTable(pSCEnc);
-                
-        detachISWrite(pSCEnc, pSCEnc->pIOHeader);
-
-        for(j = l = 0; j <= pSCDec->WMISCP.cNumOfSliceMinus1H; j ++){
-            for(i = 0; i <= pSCDec->WMISCP.cNumOfSliceMinus1V; i ++)
-                if(pSCDec->WMISCP.uiTileX[i] >= mbLeft && pSCDec->WMISCP.uiTileX[i] < mbRight && 
-                    pSCDec->WMISCP.uiTileY[j] >= mbTop && pSCDec->WMISCP.uiTileY[j] < mbBottom){
-                        for(k = 0; k < cfEnc; k ++){
-                            pSCDec->WMISCP.pWStream->SetPos(pSCDec->WMISCP.pWStream, pSCDec->pIndexTable[(j * (pSCDec->WMISCP.cNumOfSliceMinus1V + 1) + i) * cfDec + k] + pSCDec->cHeaderSize);
-                            copyTo(pSCDec->WMISCP.pWStream, pSCEnc->WMISCP.pWStream, pSCEnc->pIndexTable[l++]);
-                        }
-                }
-        }
-
-        free(pSCEnc->pIndexTable);
     }
     else
         writeIndexTableNull(pSCEnc);
