@@ -106,6 +106,7 @@
 #include "../image/decode/JxrTranscodeTileContextResolver.h"
 #include "../image/decode/JxrTranscodeTileQuantizerCapture.h"
 #include "../image/decode/JxrTranscodeDirectMacroblockEncoder.h"
+#include "../image/decode/JxrTranscodeOrientedMacroblockBuffer.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
 #include "../image/decode/JxrTranscodeRoiTileLayout.h"
@@ -767,6 +768,57 @@ static int test_transcode_direct_macroblock_encoder_contract_vectors(void)
         0, 0, &quantizers, FALSE) != ICERR_ERROR) return 0;
     return JxrTranscodeDirectMacroblockEncoderEncode(&sourceCodec, &destinationCodec,
         0, 0, 0, 0, &quantizers, TRUE) == ICERR_ERROR;
+}
+
+static int test_transcode_oriented_macroblock_buffer_vectors(void)
+{
+    CWMIMBInfo primaryMacroblock;
+    CWMIMBInfo alphaMacroblock;
+    CWMIMBInfo primaryFrame[6];
+    CWMIMBInfo alphaFrame[6];
+    PixelI primaryCoefficients[4] = { 10, 11, 12, 13 };
+    PixelI alphaCoefficients[2] = { 20, 21 };
+    PixelI primaryFrameCoefficients[24];
+    PixelI alphaFrameCoefficients[12];
+    JxrTranscodeOrientationState orientation;
+    JxrTranscodeOrientedMacroblockBufferRequest request;
+
+    memset(&primaryMacroblock, 0, sizeof(primaryMacroblock));
+    memset(&alphaMacroblock, 0, sizeof(alphaMacroblock));
+    memset(primaryFrame, 0, sizeof(primaryFrame));
+    memset(alphaFrame, 0, sizeof(alphaFrame));
+    memset(primaryFrameCoefficients, 0, sizeof(primaryFrameCoefficients));
+    memset(alphaFrameCoefficients, 0, sizeof(alphaFrameCoefficients));
+    primaryMacroblock.iQIndexLP = 3;
+    alphaMacroblock.iQIndexHP = 9;
+    JxrTranscodeOrientationStateInit(&orientation, O_NONE);
+    memset(&request, 0, sizeof(request));
+    request.primaryMacroblock = &primaryMacroblock;
+    request.primaryCoefficients = primaryCoefficients;
+    request.primaryCoefficientCount = 4;
+    request.primaryFrameMacroblocks = primaryFrame;
+    request.primaryFrameMacroblockCount = 6;
+    request.primaryFrameCoefficients = primaryFrameCoefficients;
+    request.primaryFrameCoefficientCount = 24;
+    request.destinationRow = 1;
+    request.destinationColumn = 2;
+    request.sourceMacroblockWidth = 3;
+    request.sourceMacroblockHeight = 2;
+    request.orientation = &orientation;
+    request.hasAlpha = TRUE;
+    request.alphaMacroblock = &alphaMacroblock;
+    request.alphaCoefficients = alphaCoefficients;
+    request.alphaCoefficientCount = 2;
+    request.alphaFrameMacroblocks = alphaFrame;
+    request.alphaFrameMacroblockCount = 6;
+    request.alphaFrameCoefficients = alphaFrameCoefficients;
+    request.alphaFrameCoefficientCount = 12;
+    if (!JxrTranscodeOrientedMacroblockBufferStore(&request) ||
+        primaryFrame[5].iQIndexLP != 3 || alphaFrame[5].iQIndexHP != 9 ||
+        primaryFrameCoefficients[20] != 10 || primaryFrameCoefficients[23] != 13 ||
+        alphaFrameCoefficients[10] != 20 || alphaFrameCoefficients[11] != 21) return 0;
+    request.destinationColumn = 3;
+    return !JxrTranscodeOrientedMacroblockBufferStore(&request);
 }
 
 static int test_transcode_tile_extraction_decision_vectors(void)
@@ -5627,6 +5679,7 @@ int main(int argc, char** argv)
         { "transcode_tile_context_resolver_vectors", test_transcode_tile_context_resolver_vectors },
         { "transcode_tile_quantizer_capture_vectors", test_transcode_tile_quantizer_capture_vectors },
         { "transcode_direct_macroblock_encoder_contract_vectors", test_transcode_direct_macroblock_encoder_contract_vectors },
+        { "transcode_oriented_macroblock_buffer_vectors", test_transcode_oriented_macroblock_buffer_vectors },
         { "transcode_tile_extraction_decision_vectors", test_transcode_tile_extraction_decision_vectors },
         { "transcode_roi_geometry_vectors", test_transcode_roi_geometry_vectors },
         { "transcode_roi_tile_layout_vectors", test_transcode_roi_tile_layout_vectors },

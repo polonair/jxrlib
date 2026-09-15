@@ -37,6 +37,7 @@
 #include "JxrTranscodeTileQuantizerCapture.h"
 #include "JxrTranscodeTileHeaderEmitter.h"
 #include "JxrTranscodeDirectMacroblockEncoder.h"
+#include "JxrTranscodeOrientedMacroblockBuffer.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
 #include "JxrTranscodeRoiTileLayout.h"
@@ -497,17 +498,36 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
                         return ICERR_ERROR;
                 }
                 else{
-                    size_t cOff = JxrTranscodeOrientationStateFrameOffset(&orientation, cRow, cColumn, mbWidth, mbHeight);
+                    JxrTranscodeOrientedMacroblockBufferRequest bufferRequest = {0};
 
-                    pMBInfo[cOff] = pSCDec->MBInfo;
-
-                    memcpy(&pFrameBuf[cOff * cUnit], pMBBuf, cUnit * sizeof(PixelI));
-
-                    if(pParam->uAlphaMode > 0){
-                        pMBInfoAlpha[cOff] = pSCDec->m_pNextSC->MBInfo;
-                        
-                        memcpy(&pFrameBufAlpha[cOff * 256], MBBufAlpha, 256 * sizeof(PixelI));
+                    bufferRequest.primaryMacroblock = &pSCDec->MBInfo;
+                    bufferRequest.primaryCoefficients = pMBBuf;
+                    bufferRequest.primaryCoefficientCount = cUnit;
+                    bufferRequest.primaryFrameMacroblocks = pMBInfo;
+                    bufferRequest.primaryFrameMacroblockCount =
+                        pSCEnc->cmbWidth * pSCEnc->cmbHeight;
+                    bufferRequest.primaryFrameCoefficients = pFrameBuf;
+                    bufferRequest.primaryFrameCoefficientCount =
+                        pSCEnc->cmbWidth * pSCEnc->cmbHeight * cUnit;
+                    bufferRequest.destinationRow = cRow;
+                    bufferRequest.destinationColumn = cColumn;
+                    bufferRequest.sourceMacroblockWidth = mbWidth;
+                    bufferRequest.sourceMacroblockHeight = mbHeight;
+                    bufferRequest.orientation = &orientation;
+                    bufferRequest.hasAlpha = pParam->uAlphaMode > 0;
+                    if(bufferRequest.hasAlpha){
+                        bufferRequest.alphaMacroblock = &pSCDec->m_pNextSC->MBInfo;
+                        bufferRequest.alphaCoefficients = MBBufAlpha;
+                        bufferRequest.alphaCoefficientCount = 256;
+                        bufferRequest.alphaFrameMacroblocks = pMBInfoAlpha;
+                        bufferRequest.alphaFrameMacroblockCount =
+                            pSCEnc->cmbWidth * pSCEnc->cmbHeight;
+                        bufferRequest.alphaFrameCoefficients = pFrameBufAlpha;
+                        bufferRequest.alphaFrameCoefficientCount =
+                            pSCEnc->cmbWidth * pSCEnc->cmbHeight * 256;
                     }
+                    if(JxrTranscodeOrientedMacroblockBufferStore(&bufferRequest) == FALSE)
+                        return ICERR_ERROR;
                 }
             }
             }
