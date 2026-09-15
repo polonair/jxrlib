@@ -41,6 +41,7 @@
 #include "JxrTranscodeOrientedMacroblockEncoder.h"
 #include "JxrTranscodeTileExtractionExecutor.h"
 #include "JxrTranscodeSession.h"
+#include "JxrTranscodeSessionFactory.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
 #include "JxrTranscodeRoiTileLayout.h"
@@ -173,11 +174,8 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
         return ICERR_ERROR;
 
     // initialize decoder
-    if((pSCDec = (CWMImageStrCodec *)malloc(sizeof(CWMImageStrCodec))) == NULL)
+    if(JxrTranscodeSessionFactoryCreateCodec(pStreamIn, &pSCDec) != ICERR_OK)
         return ICERR_ERROR;
-    memset(pSCDec, 0, sizeof(CWMImageStrCodec));
-
-    pSCDec->WMISCP.pWStream = pStreamIn;
     if(ReadWMIHeader(&pSCDec->WMII, &pSCDec->WMISCP, &pSCDec->m_param) != ICERR_OK)
         return ICERR_ERROR;
 
@@ -249,14 +247,12 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
     }
 
     // initialize encoder
-    if((pSCEnc = (CWMImageStrCodec *)malloc(sizeof(CWMImageStrCodec))) == NULL)
+    if(JxrTranscodeSessionFactoryCreateCodec(pStreamOut, &pSCEnc) != ICERR_OK)
         return ICERR_ERROR;
-    memset(pSCEnc, 0, sizeof(CWMImageStrCodec));
 
     pSCEnc->WMII = pSCDec->WMII;
     pSCEnc->WMISCP = pSCDec->WMISCP;
     pSCEnc->m_param = pSCDec->m_param;
-    pSCEnc->WMISCP.pWStream = pStreamOut;
     pSCEnc->WMISCP.bfBitstreamFormat = pParam->bfBitstreamFormat;
 //    pSCEnc->m_param.cfColorFormat = pSCEnc->WMISCP.cfColorFormat = pParam->cfColorFormat;
     pSCEnc->m_param.cfColorFormat = pSCEnc->WMISCP.cfColorFormat;

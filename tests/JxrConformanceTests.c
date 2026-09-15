@@ -110,6 +110,7 @@
 #include "../image/decode/JxrTranscodeOrientedMacroblockEncoder.h"
 #include "../image/decode/JxrTranscodeTileExtractionExecutor.h"
 #include "../image/decode/JxrTranscodeSession.h"
+#include "../image/decode/JxrTranscodeSessionFactory.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
 #include "../image/decode/JxrTranscodeRoiTileLayout.h"
@@ -854,6 +855,14 @@ static int test_transcode_session_release_contract_vectors(void)
     JxrTranscodeSessionRelease(&session);
     return session.macroblockBuffer == NULL && session.decoderCodec == NULL &&
         session.encoderCodec == NULL && session.tileQuantizers == NULL;
+}
+
+static int test_transcode_session_factory_contract_vectors(void)
+{
+    CWMImageStrCodec* codec = NULL;
+
+    return JxrTranscodeSessionFactoryCreateCodec(NULL, &codec) == ICERR_ERROR &&
+        codec == NULL && JxrTranscodeSessionFactoryCreateCodec(NULL, NULL) == ICERR_ERROR;
 }
 
 static int test_transcode_tile_extraction_decision_vectors(void)
@@ -5718,6 +5727,7 @@ int main(int argc, char** argv)
         { "transcode_oriented_macroblock_encoder_contract_vectors", test_transcode_oriented_macroblock_encoder_contract_vectors },
         { "transcode_tile_extraction_executor_vectors", test_transcode_tile_extraction_executor_vectors },
         { "transcode_session_release_contract_vectors", test_transcode_session_release_contract_vectors },
+        { "transcode_session_factory_contract_vectors", test_transcode_session_factory_contract_vectors },
         { "transcode_tile_extraction_decision_vectors", test_transcode_tile_extraction_decision_vectors },
         { "transcode_roi_geometry_vectors", test_transcode_roi_geometry_vectors },
         { "transcode_roi_tile_layout_vectors", test_transcode_roi_tile_layout_vectors },
