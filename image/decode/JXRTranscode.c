@@ -42,6 +42,7 @@
 #include "JxrTranscodeTileExtractionExecutor.h"
 #include "JxrTranscodeSession.h"
 #include "JxrTranscodeSessionFactory.h"
+#include "JxrTranscodeDecoderInitializer.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
 #include "JxrTranscodeRoiTileLayout.h"
@@ -162,6 +163,7 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
     CWMIMBInfo * pMBInfo = NULL, * pMBInfoAlpha = NULL;
     CWMImageStrCodec * pSCDec, * pSCEnc;
     CWMDecoderParameters aDecoderParam = {0};
+    JxrTranscodeDecoderInitializationResult decoderInitialization;
     U8 * pIOHeaderDec, * pIOHeaderEnc;
     JxrTranscodeTileQuantizerState * pTileQPInfo = NULL;
     ORIENTATION oO = pParam->oOrientation;
@@ -176,27 +178,15 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
     // initialize decoder
     if(JxrTranscodeSessionFactoryCreateCodec(pStreamIn, &pSCDec) != ICERR_OK)
         return ICERR_ERROR;
-    if(ReadWMIHeader(&pSCDec->WMII, &pSCDec->WMISCP, &pSCDec->m_param) != ICERR_OK)
+    if(JxrTranscodeDecoderInitializerInitialize(pSCDec, pParam, &aDecoderParam,
+        &decoderInitialization) != ICERR_OK)
         return ICERR_ERROR;
-
-    JxrTranscodeOrientationStateInit(&orientation, oO);
-    if(pSCDec->WMISCP.cfColorFormat == YUV_422 && orientation.transpose){
-        pParam->oOrientation = oO = O_NONE; // Can not rotate 422 in compressed domain!
-        JxrTranscodeOrientationStateInit(&orientation, oO);
-    }
-
-    pSCDec->cmbWidth = (pSCDec->WMII.cWidth + pSCDec->m_param.cExtraPixelsLeft + pSCDec->m_param.cExtraPixelsRight + 15) / 16;
-    pSCDec->cmbHeight = (pSCDec->WMII.cHeight + pSCDec->m_param.cExtraPixelsTop + pSCDec->m_param.cExtraPixelsBottom + 15) / 16;
-    pSCDec->m_param.cNumChannels = pSCDec->WMISCP.cChannel;
-    pSCDec->m_Dparam = &aDecoderParam;
-    pSCDec->m_Dparam->bSkipFlexbits = (pSCDec->WMISCP.sbSubband == SB_NO_FLEXBITS);
-    pSCDec->m_param.bTranscode = TRUE;
+    oO = decoderInitialization.orientationValue;
+    orientation = decoderInitialization.orientation;
 
     pParam->bIgnoreOverlap = isTileExtraction(pSCDec, pParam);
 
-    cUnit = (pSCDec->m_param.cfColorFormat == YUV_420 ? 384 : (pSCDec->m_param.cfColorFormat == YUV_422 ? 512 : 256 * pSCDec->m_param.cNumChannels));
-    if(cUnit > 256 * MAX_CHANNELS)
-        return ICERR_ERROR;
+    cUnit = decoderInitialization.coefficientUnit;
     pSCDec->p1MBbuffer[0] = pMBBuf = (PixelI *)malloc(cUnit * sizeof(PixelI));
     if(pMBBuf == NULL)
         return ICERR_ERROR;

@@ -111,6 +111,7 @@
 #include "../image/decode/JxrTranscodeTileExtractionExecutor.h"
 #include "../image/decode/JxrTranscodeSession.h"
 #include "../image/decode/JxrTranscodeSessionFactory.h"
+#include "../image/decode/JxrTranscodeDecoderInitializer.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
 #include "../image/decode/JxrTranscodeRoiTileLayout.h"
@@ -863,6 +864,19 @@ static int test_transcode_session_factory_contract_vectors(void)
 
     return JxrTranscodeSessionFactoryCreateCodec(NULL, &codec) == ICERR_ERROR &&
         codec == NULL && JxrTranscodeSessionFactoryCreateCodec(NULL, NULL) == ICERR_ERROR;
+}
+
+static int test_transcode_decoder_initializer_contract_vectors(void)
+{
+    CWMTranscodingParam parameters;
+    CWMDecoderParameters decoderParameters;
+    JxrTranscodeDecoderInitializationResult result;
+
+    memset(&parameters, 0, sizeof(parameters));
+    memset(&decoderParameters, 0, sizeof(decoderParameters));
+    memset(&result, 0, sizeof(result));
+    return JxrTranscodeDecoderInitializerInitialize(NULL, &parameters,
+        &decoderParameters, &result) == ICERR_ERROR;
 }
 
 static int test_transcode_tile_extraction_decision_vectors(void)
@@ -5728,6 +5742,7 @@ int main(int argc, char** argv)
         { "transcode_tile_extraction_executor_vectors", test_transcode_tile_extraction_executor_vectors },
         { "transcode_session_release_contract_vectors", test_transcode_session_release_contract_vectors },
         { "transcode_session_factory_contract_vectors", test_transcode_session_factory_contract_vectors },
+        { "transcode_decoder_initializer_contract_vectors", test_transcode_decoder_initializer_contract_vectors },
         { "transcode_tile_extraction_decision_vectors", test_transcode_tile_extraction_decision_vectors },
         { "transcode_roi_geometry_vectors", test_transcode_roi_geometry_vectors },
         { "transcode_roi_tile_layout_vectors", test_transcode_roi_tile_layout_vectors },
