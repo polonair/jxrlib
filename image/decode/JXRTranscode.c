@@ -44,9 +44,8 @@
 #include "JxrTranscodeSessionFactory.h"
 #include "JxrTranscodeDecoderInitializer.h"
 #include "JxrTranscodeEncoderInitializer.h"
+#include "JxrTranscodeRoiInitializer.h"
 #include "JxrTranscodeTileExtractionDecision.h"
-#include "JxrTranscodeRoiGeometry.h"
-#include "JxrTranscodeRoiTileLayout.h"
 
 EXTERN_C Void freePredInfo(CWMImageStrCodec *);
 
@@ -68,66 +67,6 @@ EXTERN_C Int WriteImagePlaneHeader(CWMImageStrCodec *);
 EXTERN_C Int writeIndexTable(CWMImageStrCodec *);
 EXTERN_C Int copyTo(struct WMPStream *, struct WMPStream *, size_t);
 
-static Void JxrTranscodeSwapSize(size_t * left, size_t * right)
-{
-    size_t temporary = *left;
-    *left = *right;
-    *right = temporary;
-}
-Int getROI(CWMImageInfo* pII, CCoreParameters* pCore,
-    CWMIStrCodecParam* pSCP, CWMTranscodingParam* pParam)
-{
-    JxrTranscodeOrientationState orientation;
-    JxrTranscodeRoiGeometryRequest request;
-    JxrTranscodeRoiGeometryResult result;
-    JxrTranscodeRoiTileLayout tileLayout;
-    size_t boundaryIndex;
-
-    JxrTranscodeOrientationStateInit(&orientation, pParam->oOrientation);
-    memset(&request, 0, sizeof(request));
-    request.imageWidth = pII->cWidth;
-    request.imageHeight = pII->cHeight;
-    request.extraLeft = pCore->cExtraPixelsLeft;
-    request.extraTop = pCore->cExtraPixelsTop;
-    request.extraRight = pCore->cExtraPixelsRight;
-    request.extraBottom = pCore->cExtraPixelsBottom;
-    request.requestedLeft = pParam->cLeftX;
-    request.requestedTop = pParam->cTopY;
-    request.requestedWidth = pParam->cWidth;
-    request.requestedHeight = pParam->cHeight;
-    request.overlap = pSCP->olOverlap;
-    request.ignoreOverlap = pParam->bIgnoreOverlap;
-    if (JxrTranscodeRoiGeometryCalculate(&request, &result) == FALSE ||
-        JxrTranscodeRoiTileLayoutInitialize(&tileLayout, pSCP->uiTileX,
-            (size_t)pSCP->cNumOfSliceMinus1V + 1, pSCP->uiTileY,
-            (size_t)pSCP->cNumOfSliceMinus1H + 1) == FALSE ||
-        JxrTranscodeRoiTileLayoutApply(&tileLayout, result.macroblockLeft,
-            result.macroblockRight, result.macroblockTop, result.macroblockBottom,
-            &orientation) == FALSE)
-        return ICERR_ERROR;
-
-    pCore->cExtraPixelsLeft = result.extraLeft;
-    pCore->cExtraPixelsTop = result.extraTop;
-    pCore->cExtraPixelsRight = result.extraRight;
-    pCore->cExtraPixelsBottom = result.extraBottom;
-    JxrTranscodeRoiTileLayoutOrientExtraPixels(&pCore->cExtraPixelsLeft,
-        &pCore->cExtraPixelsTop, &pCore->cExtraPixelsRight,
-        &pCore->cExtraPixelsBottom, &orientation);
-    pII->cWidth = result.imageWidth;
-    pII->cHeight = result.imageHeight;
-    pParam->cLeftX = result.expandedLeft;
-    pParam->cTopY = result.expandedTop;
-    pParam->cWidth = result.expandedWidth;
-    pParam->cHeight = result.expandedHeight;
-
-    pSCP->cNumOfSliceMinus1V = (U32)(tileLayout.columnCount - 1);
-    pSCP->cNumOfSliceMinus1H = (U32)(tileLayout.rowCount - 1);
-    for (boundaryIndex = 0; boundaryIndex < tileLayout.columnCount; boundaryIndex++)
-        pSCP->uiTileX[boundaryIndex] = tileLayout.columnBoundaries[boundaryIndex];
-    for (boundaryIndex = 0; boundaryIndex < tileLayout.rowCount; boundaryIndex++)
-        pSCP->uiTileY[boundaryIndex] = tileLayout.rowBoundaries[boundaryIndex];
-    return ICERR_OK;
-}
 Bool isTileExtraction(CWMImageStrCodec * pSC, CWMTranscodingParam * pParam)
 {
     JxrTranscodeTileExtractionDecision decision = {0};
@@ -166,6 +105,7 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
     CWMDecoderParameters aDecoderParam = {0};
     JxrTranscodeDecoderInitializationResult decoderInitialization;
     JxrTranscodeEncoderInitializationResult encoderInitialization;
+    JxrTranscodeRoiInitializationResult roiInitialization;
     U8 * pIOHeaderDec, * pIOHeaderEnc;
     JxrTranscodeTileQuantizerState * pTileQPInfo = NULL;
     ORIENTATION oO = pParam->oOrientation;
@@ -245,26 +185,15 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
     pSCEnc = encoderInitialization.encoderCodec;
     pIOHeaderEnc = encoderInitialization.ioHeaderAllocation;
 
-    if(getROI(&pSCEnc->WMII, &pSCEnc->m_param, &pSCEnc->WMISCP, pParam) != ICERR_OK)
+    if(JxrTranscodeRoiInitializerInitialize(pSCDec, pSCEnc, pParam,
+        &orientation, &roiInitialization) != ICERR_OK)
         return ICERR_ERROR;
-
-    mbLeft = (pParam->cLeftX >> 4);
-    mbRight = ((pParam->cLeftX + pParam->cWidth + 15) >> 4);
-    mbTop = (pParam->cTopY >> 4);
-    mbBottom = ((pParam->cTopY + pParam->cHeight + 15) >> 4);
-
-    if(pSCDec->WMISCP.uiTileX[pSCDec->WMISCP.cNumOfSliceMinus1V] >= mbLeft && pSCDec->WMISCP.uiTileX[pSCDec->WMISCP.cNumOfSliceMinus1V] <= mbRight &&
-        pSCDec->WMISCP.uiTileY[pSCDec->WMISCP.cNumOfSliceMinus1H] >= mbTop && pSCDec->WMISCP.uiTileY[pSCDec->WMISCP.cNumOfSliceMinus1H] <= mbBottom)
-        pParam->bIgnoreOverlap = FALSE;
-
-    pSCEnc->bTileExtraction = pParam->bIgnoreOverlap;
-
-    mbWidth = pSCEnc->cmbWidth = mbRight - mbLeft;
-    mbHeight = pSCEnc->cmbHeight = mbBottom - mbTop;
-    if(orientation.transpose){
-        JxrTranscodeSwapSize(&pSCEnc->WMII.cWidth, &pSCEnc->WMII.cHeight);
-        JxrTranscodeSwapSize(&pSCEnc->cmbWidth, &pSCEnc->cmbHeight);
-    }
+    mbLeft = roiInitialization.macroblockLeft;
+    mbRight = roiInitialization.macroblockRight;
+    mbTop = roiInitialization.macroblockTop;
+    mbBottom = roiInitialization.macroblockBottom;
+    mbWidth = roiInitialization.macroblockWidth;
+    mbHeight = roiInitialization.macroblockHeight;
 
     if(oO != O_NONE){
         pFrameBuf = (PixelI *)malloc(pSCEnc->cmbWidth * pSCEnc->cmbHeight * cUnit * sizeof(PixelI));

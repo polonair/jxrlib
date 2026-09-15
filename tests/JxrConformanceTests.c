@@ -113,6 +113,7 @@
 #include "../image/decode/JxrTranscodeSessionFactory.h"
 #include "../image/decode/JxrTranscodeDecoderInitializer.h"
 #include "../image/decode/JxrTranscodeEncoderInitializer.h"
+#include "../image/decode/JxrTranscodeRoiInitializer.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
 #include "../image/decode/JxrTranscodeRoiTileLayout.h"
@@ -895,6 +896,27 @@ static int test_transcode_encoder_initializer_contract_vectors(void)
             &parameters, &result) == ICERR_ERROR &&
         JxrTranscodeEncoderInitializerInitialize(&decoderCodec, NULL,
             NULL, &result) == ICERR_ERROR;
+}
+
+static int test_transcode_roi_initializer_contract_vectors(void)
+{
+    CWMImageStrCodec decoderCodec;
+    CWMImageStrCodec encoderCodec;
+    CWMTranscodingParam parameters;
+    JxrTranscodeOrientationState orientation;
+    JxrTranscodeRoiInitializationResult result;
+
+    memset(&decoderCodec, 0, sizeof(decoderCodec));
+    memset(&encoderCodec, 0, sizeof(encoderCodec));
+    memset(&parameters, 0, sizeof(parameters));
+    memset(&result, 0, sizeof(result));
+    JxrTranscodeOrientationStateInit(&orientation, O_NONE);
+    return JxrTranscodeRoiInitializerInitialize(NULL, &encoderCodec,
+        &parameters, &orientation, &result) == ICERR_ERROR &&
+        JxrTranscodeRoiInitializerInitialize(&decoderCodec, NULL,
+            &parameters, &orientation, &result) == ICERR_ERROR &&
+        JxrTranscodeRoiInitializerInitialize(&decoderCodec, &encoderCodec,
+            NULL, &orientation, &result) == ICERR_ERROR;
 }
 
 static int test_transcode_tile_extraction_decision_vectors(void)
@@ -5762,6 +5784,7 @@ int main(int argc, char** argv)
         { "transcode_session_factory_contract_vectors", test_transcode_session_factory_contract_vectors },
         { "transcode_decoder_initializer_contract_vectors", test_transcode_decoder_initializer_contract_vectors },
         { "transcode_encoder_initializer_contract_vectors", test_transcode_encoder_initializer_contract_vectors },
+        { "transcode_roi_initializer_contract_vectors", test_transcode_roi_initializer_contract_vectors },
         { "transcode_tile_extraction_decision_vectors", test_transcode_tile_extraction_decision_vectors },
         { "transcode_roi_geometry_vectors", test_transcode_roi_geometry_vectors },
         { "transcode_roi_tile_layout_vectors", test_transcode_roi_tile_layout_vectors },

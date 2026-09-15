@@ -207,6 +207,7 @@
     <ClCompile Include="..\decode\JxrTranscodeSessionFactory.c" />
     <ClCompile Include="..\decode\JxrTranscodeDecoderInitializer.c" />
     <ClCompile Include="..\decode\JxrTranscodeEncoderInitializer.c" />
+    <ClCompile Include="..\decode\JxrTranscodeRoiInitializer.c" />
     <ClCompile Include="..\decode\JxrTranscodeTileExtractionDecision.c" />
     <ClCompile Include="..\decode\JxrTranscodeRoiGeometry.c" />
     <ClCompile Include="..\decode\JxrTranscodeRoiTileLayout.c" />
