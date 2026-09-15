@@ -43,6 +43,7 @@
 #include "JxrTranscodeSession.h"
 #include "JxrTranscodeSessionFactory.h"
 #include "JxrTranscodeDecoderInitializer.h"
+#include "JxrTranscodeEncoderInitializer.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
 #include "JxrTranscodeRoiTileLayout.h"
@@ -164,6 +165,7 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
     CWMImageStrCodec * pSCDec, * pSCEnc;
     CWMDecoderParameters aDecoderParam = {0};
     JxrTranscodeDecoderInitializationResult decoderInitialization;
+    JxrTranscodeEncoderInitializationResult encoderInitialization;
     U8 * pIOHeaderDec, * pIOHeaderEnc;
     JxrTranscodeTileQuantizerState * pTileQPInfo = NULL;
     ORIENTATION oO = pParam->oOrientation;
@@ -237,39 +239,11 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
     }
 
     // initialize encoder
-    if(JxrTranscodeSessionFactoryCreateCodec(pStreamOut, &pSCEnc) != ICERR_OK)
+    if(JxrTranscodeEncoderInitializerInitialize(pSCDec, pStreamOut, pParam,
+        &encoderInitialization) != ICERR_OK)
         return ICERR_ERROR;
-
-    pSCEnc->WMII = pSCDec->WMII;
-    pSCEnc->WMISCP = pSCDec->WMISCP;
-    pSCEnc->m_param = pSCDec->m_param;
-    pSCEnc->WMISCP.bfBitstreamFormat = pParam->bfBitstreamFormat;
-//    pSCEnc->m_param.cfColorFormat = pSCEnc->WMISCP.cfColorFormat = pParam->cfColorFormat;
-    pSCEnc->m_param.cfColorFormat = pSCEnc->WMISCP.cfColorFormat;
-    pSCEnc->m_param.cNumChannels = (pSCEnc->WMISCP.cfColorFormat == Y_ONLY ? 1 : (pSCEnc->WMISCP.cfColorFormat == YUV_444 ? 3 : pSCEnc->WMISCP.cChannel));
-    pSCEnc->m_param.bAlphaChannel = (pParam->uAlphaMode > 0);
-    pSCEnc->m_param.bTranscode = TRUE;
-    if(pParam->sbSubband >= SB_MAX)
-        pParam->sbSubband = SB_ALL;
-    if(pParam->sbSubband > pSCEnc->WMISCP.sbSubband)
-        pSCEnc->WMISCP.sbSubband = pParam->sbSubband;
-    pSCEnc->m_bSecondary = FALSE;
-
-    pIOHeaderEnc = (U8 *)malloc((PACKETLENGTH * 4 - 1) + PACKETLENGTH * 4 + sizeof(BitIOInfo));
-    if(pIOHeaderEnc == NULL)
-        return ICERR_ERROR;
-    memset(pIOHeaderEnc, 0, (PACKETLENGTH * 4 - 1) + PACKETLENGTH * 4 + sizeof(BitIOInfo));
-    pSCEnc->pIOHeader = (BitIOInfo *)((U8 *)ALIGNUP(pIOHeaderEnc, PACKETLENGTH * 4) + PACKETLENGTH * 2);
-    
-    for(i = 0; i < pSCEnc->m_param.cNumChannels; i ++)
-        pSCEnc->pPlane[i] = pSCDec->p1MBbuffer[i];
-    
-    for(i = 1; i < pSCDec->cNumBitIO * (pSCDec->WMISCP.cNumOfSliceMinus1H + 1); i ++){
-        if(pSCDec->pIndexTable[i] == 0 && i + 1 != pSCDec->cNumBitIO * (pSCDec->WMISCP.cNumOfSliceMinus1H + 1)) // empty packet
-            pSCDec->pIndexTable[i] = pSCDec->pIndexTable[i + 1];
-        if(pSCDec->pIndexTable[i] != 0 && pSCDec->pIndexTable[i] < pSCDec->pIndexTable[i - 1]) // out of order bitstream, can not do fast tile extraction!
-            pParam->bIgnoreOverlap = FALSE;
-    }
+    pSCEnc = encoderInitialization.encoderCodec;
+    pIOHeaderEnc = encoderInitialization.ioHeaderAllocation;
 
     if(getROI(&pSCEnc->WMII, &pSCEnc->m_param, &pSCEnc->WMISCP, pParam) != ICERR_OK)
         return ICERR_ERROR;
