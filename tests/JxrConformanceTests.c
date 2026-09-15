@@ -114,6 +114,7 @@
 #include "../image/decode/JxrTranscodeDecoderInitializer.h"
 #include "../image/decode/JxrTranscodeEncoderInitializer.h"
 #include "../image/decode/JxrTranscodeRoiInitializer.h"
+#include "../image/decode/JxrTranscodeFrameBufferAllocator.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
 #include "../image/decode/JxrTranscodeRoiTileLayout.h"
@@ -917,6 +918,27 @@ static int test_transcode_roi_initializer_contract_vectors(void)
             &parameters, &orientation, &result) == ICERR_ERROR &&
         JxrTranscodeRoiInitializerInitialize(&decoderCodec, &encoderCodec,
             NULL, &orientation, &result) == ICERR_ERROR;
+}
+
+static int test_transcode_frame_buffer_allocator_contract_vectors(void)
+{
+    CWMImageStrCodec encoderCodec;
+    CWMTranscodingParam parameters;
+    JxrTranscodeFrameBufferAllocation allocation;
+
+    memset(&encoderCodec, 0, sizeof(encoderCodec));
+    memset(&parameters, 0, sizeof(parameters));
+    memset(&allocation, 0, sizeof(allocation));
+    if (JxrTranscodeFrameBufferAllocatorAllocate(NULL, &parameters, O_NONE,
+        1, &allocation) != ICERR_ERROR)
+        return 0;
+    if (JxrTranscodeFrameBufferAllocatorAllocate(&encoderCodec, &parameters,
+        O_NONE, 1, &allocation) != ICERR_OK)
+        return 0;
+    JxrTranscodeFrameBufferAllocatorRelease(&allocation);
+    return allocation.primaryCoefficients == NULL &&
+        allocation.primaryMacroblocks == NULL && allocation.alphaCoefficients == NULL &&
+        allocation.alphaMacroblocks == NULL;
 }
 
 static int test_transcode_tile_extraction_decision_vectors(void)
@@ -5785,6 +5807,7 @@ int main(int argc, char** argv)
         { "transcode_decoder_initializer_contract_vectors", test_transcode_decoder_initializer_contract_vectors },
         { "transcode_encoder_initializer_contract_vectors", test_transcode_encoder_initializer_contract_vectors },
         { "transcode_roi_initializer_contract_vectors", test_transcode_roi_initializer_contract_vectors },
+        { "transcode_frame_buffer_allocator_contract_vectors", test_transcode_frame_buffer_allocator_contract_vectors },
         { "transcode_tile_extraction_decision_vectors", test_transcode_tile_extraction_decision_vectors },
         { "transcode_roi_geometry_vectors", test_transcode_roi_geometry_vectors },
         { "transcode_roi_tile_layout_vectors", test_transcode_roi_tile_layout_vectors },

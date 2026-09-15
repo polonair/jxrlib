@@ -45,6 +45,7 @@
 #include "JxrTranscodeDecoderInitializer.h"
 #include "JxrTranscodeEncoderInitializer.h"
 #include "JxrTranscodeRoiInitializer.h"
+#include "JxrTranscodeFrameBufferAllocator.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 
 EXTERN_C Void freePredInfo(CWMImageStrCodec *);
@@ -106,6 +107,7 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
     JxrTranscodeDecoderInitializationResult decoderInitialization;
     JxrTranscodeEncoderInitializationResult encoderInitialization;
     JxrTranscodeRoiInitializationResult roiInitialization;
+    JxrTranscodeFrameBufferAllocation frameBuffers;
     U8 * pIOHeaderDec, * pIOHeaderEnc;
     JxrTranscodeTileQuantizerState * pTileQPInfo = NULL;
     ORIENTATION oO = pParam->oOrientation;
@@ -195,22 +197,13 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
     mbWidth = roiInitialization.macroblockWidth;
     mbHeight = roiInitialization.macroblockHeight;
 
-    if(oO != O_NONE){
-        pFrameBuf = (PixelI *)malloc(pSCEnc->cmbWidth * pSCEnc->cmbHeight * cUnit * sizeof(PixelI));
-        if(pFrameBuf == NULL || (pSCEnc->cmbWidth * pSCEnc->cmbHeight * cUnit * sizeof(PixelI) < pSCEnc->cmbWidth * pSCEnc->cmbHeight * cUnit))
-            return ICERR_ERROR;
-        pMBInfo = (CWMIMBInfo *)malloc(pSCEnc->cmbWidth * pSCEnc->cmbHeight * sizeof(CWMIMBInfo));
-        if(pMBInfo == NULL || (pSCEnc->cmbWidth * pSCEnc->cmbHeight * sizeof(CWMIMBInfo) < pSCEnc->cmbWidth * pSCEnc->cmbHeight))
-            return ICERR_ERROR;
-        if(pParam->uAlphaMode > 0){ // alpha channel
-            pFrameBufAlpha = (PixelI *)malloc(pSCEnc->cmbWidth * pSCEnc->cmbHeight * 256 * sizeof(PixelI));
-            if(pFrameBufAlpha == NULL || (pSCEnc->cmbWidth * pSCEnc->cmbHeight * 256 * sizeof(PixelI) < pSCEnc->cmbWidth * pSCEnc->cmbHeight * 256))
-                return ICERR_ERROR;
-            pMBInfoAlpha = (CWMIMBInfo *)malloc(pSCEnc->cmbWidth * pSCEnc->cmbHeight * sizeof(CWMIMBInfo));
-            if(pMBInfoAlpha == NULL || (pSCEnc->cmbWidth * pSCEnc->cmbHeight * sizeof(CWMIMBInfo) < pSCEnc->cmbWidth * pSCEnc->cmbHeight))
-                return ICERR_ERROR;
-        }
-    }
+    if(JxrTranscodeFrameBufferAllocatorAllocate(pSCEnc, pParam, oO, cUnit,
+        &frameBuffers) != ICERR_OK)
+        return ICERR_ERROR;
+    pFrameBuf = frameBuffers.primaryCoefficients;
+    pFrameBufAlpha = frameBuffers.alphaCoefficients;
+    pMBInfo = frameBuffers.primaryMacroblocks;
+    pMBInfoAlpha = frameBuffers.alphaMacroblocks;
 
     {
         JxrTranscodeOrientationState sourceOrientation;
