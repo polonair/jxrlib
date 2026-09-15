@@ -40,6 +40,7 @@
 #include "JxrTranscodeOrientedMacroblockBuffer.h"
 #include "JxrTranscodeOrientedMacroblockEncoder.h"
 #include "JxrTranscodeTileExtractionExecutor.h"
+#include "JxrTranscodeSession.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
 #include "JxrTranscodeRoiTileLayout.h"
@@ -527,34 +528,25 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
             return ICERR_ERROR;
     }
 
-    free(pMBBuf);
-    if(oO != O_NONE){
-        free(pFrameBuf);
-        free(pMBInfo);
-        if(pParam->uAlphaMode > 0){ // alpha channel
-            free(pFrameBufAlpha);
-            free(pMBInfoAlpha);
-        }
-    }
+    {
+        JxrTranscodeSession session = {0};
 
-    freePredInfo(pSCDec);
-    freeTileInfo(pSCDec);
-    JxrDecoderResourceInitializerReleaseIo(pSCDec);
-    FreeCodingContextDec(pSCDec);
-    if(pSCDec->m_param.bAlphaChannel)
-        free(pSCDec->m_pNextSC);
-    free(pSCDec);
-    free(pIOHeaderDec);
-
-    if(pParam->bIgnoreOverlap == FALSE){
-        freePredInfo(pSCEnc);
-        freeTileInfo(pSCEnc);
-        StrIOEncTerm(pSCEnc);
-        free(pTileQPInfo);
-        FreeCodingContextEnc(pSCEnc);
+        session.macroblockBuffer = pMBBuf;
+        session.primaryFrameBuffer = pFrameBuf;
+        session.alphaFrameBuffer = pFrameBufAlpha;
+        session.primaryFrameMacroblocks = pMBInfo;
+        session.alphaFrameMacroblocks = pMBInfoAlpha;
+        session.decoderCodec = pSCDec;
+        session.encoderCodec = pSCEnc;
+        session.decoderIoHeader = pIOHeaderDec;
+        session.encoderIoHeader = pIOHeaderEnc;
+        session.tileQuantizers = pTileQPInfo;
+        session.hasOrientation = oO != O_NONE;
+        session.hasAlphaFrame = pParam->uAlphaMode > 0;
+        session.decoderHasAlpha = pSCDec->m_param.bAlphaChannel;
+        session.usedFastTileExtraction = pParam->bIgnoreOverlap;
+        JxrTranscodeSessionRelease(&session);
     }
-    free(pSCEnc);
-    free(pIOHeaderEnc);
 
     return ICERR_OK;
 }
