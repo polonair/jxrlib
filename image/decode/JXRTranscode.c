@@ -38,6 +38,7 @@
 #include "JxrTranscodeTileHeaderEmitter.h"
 #include "JxrTranscodeDirectMacroblockEncoder.h"
 #include "JxrTranscodeOrientedMacroblockBuffer.h"
+#include "JxrTranscodeOrientedMacroblockEncoder.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
 #include "JxrTranscodeRoiTileLayout.h"
@@ -540,58 +541,29 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
     }
 
     if(oO != O_NONE){
-        for(pSCEnc->cRow = 1; pSCEnc->cRow <= pSCEnc->cmbHeight; pSCEnc->cRow ++){
-            for(pSCEnc->cColumn = 1; pSCEnc->cColumn <= pSCEnc->cmbWidth; pSCEnc->cColumn ++){
-                Int cRow, cColumn;
-                size_t cOff = (pSCEnc->cRow - 1) * pSCEnc->cmbWidth + pSCEnc->cColumn - 1;
-                JxrTranscodeMacroblockTransformState primaryTransform = {0};
+        JxrTranscodeOrientedMacroblockEncoderRequest orientedEncoder = {0};
 
-                primaryTransform.sourceMacroblocks = pMBInfo;
-                primaryTransform.sourceCoefficients = pFrameBuf;
-                primaryTransform.coefficientUnit = cUnit;
-                primaryTransform.macroblockOffset = cOff;
-                primaryTransform.destinationCodec = pSCEnc;
-                primaryTransform.destinationCoefficients = pMBBuf;
-                primaryTransform.orientation = &orientation;
-                if(JxrTranscodeMacroblockTransformPrimary(&primaryTransform) == FALSE)
-                    return ICERR_ERROR;
-
-                cRow = (Int)pSCEnc->cRow - 1;
-                cColumn = (Int)pSCEnc->cColumn - 1;
-                getTilePos(pSCEnc, cColumn, cRow);
-
-                if(pSCEnc->m_bCtxLeft && pSCEnc->m_bCtxTop)
-                    JxrTranscodeTileHeaderEmitterEmit(pSCEnc, pTileQPInfo +
-                        pSCEnc->cTileRow * (pSCEnc->WMISCP.cNumOfSliceMinus1V + 1) +
-                        pSCEnc->cTileColumn);
-                if(encodeMB(pSCEnc, cColumn, cRow) != ICERR_OK)
-                    return ICERR_ERROR;
-                
-                if(pParam->uAlphaMode > 0){
-                    JxrTranscodeMacroblockTransformState alphaTransform = {0};
-
-                    pSCEnc->m_pNextSC->cColumn = pSCEnc->cColumn;
-                    pSCEnc->m_pNextSC->cRow = pSCEnc->cRow;
-                    getTilePos(pSCEnc->m_pNextSC, cColumn, cRow);
-                    pSCEnc->m_pNextSC->MBInfo = pSCDec->m_pNextSC->MBInfo;
-
-                    alphaTransform.sourceMacroblocks = pMBInfoAlpha;
-                    alphaTransform.sourceCoefficients = pFrameBufAlpha;
-                    alphaTransform.coefficientUnit = 256;
-                    alphaTransform.macroblockOffset = cOff;
-                    alphaTransform.destinationCodec = pSCEnc->m_pNextSC;
-                    alphaTransform.destinationCoefficients = MBBufAlpha;
-                    alphaTransform.orientation = &orientation;
-                    if(JxrTranscodeMacroblockTransformAlpha(&alphaTransform) == FALSE)
-                        return ICERR_ERROR;
-
-                    if(encodeMB(pSCEnc->m_pNextSC, cColumn, cRow) != ICERR_OK)
-                        return ICERR_ERROR;
-                }
-            }
-
-            advanceOneMBRow(pSCEnc);
+        orientedEncoder.destinationCodec = pSCEnc;
+        orientedEncoder.sourceAlphaCodec = pSCDec;
+        orientedEncoder.primaryMacroblocks = pMBInfo;
+        orientedEncoder.primaryCoefficients = pFrameBuf;
+        orientedEncoder.coefficientUnit = cUnit;
+        orientedEncoder.macroblockCount = pSCEnc->cmbWidth * pSCEnc->cmbHeight;
+        orientedEncoder.destinationCoefficients = pMBBuf;
+        orientedEncoder.orientation = &orientation;
+        orientedEncoder.tileQuantizers = pTileQPInfo;
+        orientedEncoder.tileQuantizerCount =
+            (pSCEnc->WMISCP.cNumOfSliceMinus1H + 1) *
+            (pSCEnc->WMISCP.cNumOfSliceMinus1V + 1);
+        orientedEncoder.tileColumnCount = pSCEnc->WMISCP.cNumOfSliceMinus1V + 1;
+        orientedEncoder.hasAlpha = pParam->uAlphaMode > 0;
+        if(orientedEncoder.hasAlpha){
+            orientedEncoder.alphaMacroblocks = pMBInfoAlpha;
+            orientedEncoder.alphaCoefficients = pFrameBufAlpha;
+            orientedEncoder.alphaDestinationCoefficients = MBBufAlpha;
         }
+        if(JxrTranscodeOrientedMacroblockEncoderEncode(&orientedEncoder) != ICERR_OK)
+            return ICERR_ERROR;
     }
 
     free(pMBBuf);

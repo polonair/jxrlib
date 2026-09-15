@@ -107,6 +107,7 @@
 #include "../image/decode/JxrTranscodeTileQuantizerCapture.h"
 #include "../image/decode/JxrTranscodeDirectMacroblockEncoder.h"
 #include "../image/decode/JxrTranscodeOrientedMacroblockBuffer.h"
+#include "../image/decode/JxrTranscodeOrientedMacroblockEncoder.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
 #include "../image/decode/JxrTranscodeRoiTileLayout.h"
@@ -819,6 +820,15 @@ static int test_transcode_oriented_macroblock_buffer_vectors(void)
         alphaFrameCoefficients[10] != 20 || alphaFrameCoefficients[11] != 21) return 0;
     request.destinationColumn = 3;
     return !JxrTranscodeOrientedMacroblockBufferStore(&request);
+}
+
+static int test_transcode_oriented_macroblock_encoder_contract_vectors(void)
+{
+    JxrTranscodeOrientedMacroblockEncoderRequest request;
+
+    memset(&request, 0, sizeof(request));
+    return JxrTranscodeOrientedMacroblockEncoderEncode(NULL) == ICERR_ERROR &&
+        JxrTranscodeOrientedMacroblockEncoderEncode(&request) == ICERR_ERROR;
 }
 
 static int test_transcode_tile_extraction_decision_vectors(void)
@@ -5680,6 +5690,7 @@ int main(int argc, char** argv)
         { "transcode_tile_quantizer_capture_vectors", test_transcode_tile_quantizer_capture_vectors },
         { "transcode_direct_macroblock_encoder_contract_vectors", test_transcode_direct_macroblock_encoder_contract_vectors },
         { "transcode_oriented_macroblock_buffer_vectors", test_transcode_oriented_macroblock_buffer_vectors },
+        { "transcode_oriented_macroblock_encoder_contract_vectors", test_transcode_oriented_macroblock_encoder_contract_vectors },
         { "transcode_tile_extraction_decision_vectors", test_transcode_tile_extraction_decision_vectors },
         { "transcode_roi_geometry_vectors", test_transcode_roi_geometry_vectors },
         { "transcode_roi_tile_layout_vectors", test_transcode_roi_tile_layout_vectors },
