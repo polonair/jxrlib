@@ -48,13 +48,12 @@
 #include "JxrTranscodeFrameBufferAllocator.h"
 #include "JxrTranscodeAlphaPlaneInitializer.h"
 #include "JxrTranscodeDecoderRuntimeInitializer.h"
+#include "JxrTranscodeEncoderOutputInitializer.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 
-EXTERN_C Int StrEncInit(CWMImageStrCodec *);
 EXTERN_C Int  encodeMB(CWMImageStrCodec *, Int, Int);
 EXTERN_C Int  writeIndexTableNull(CWMImageStrCodec *);
 
-EXTERN_C Int WriteWMIHeader(CWMImageStrCodec *);
 EXTERN_C Int writeIndexTable(CWMImageStrCodec *);
 EXTERN_C Int copyTo(struct WMPStream *, struct WMPStream *, size_t);
 
@@ -100,6 +99,7 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
     JxrTranscodeFrameBufferAllocation frameBuffers;
     JxrTranscodeAlphaPlaneInitializationResult alphaInitialization;
     JxrTranscodeDecoderRuntimeState decoderRuntime;
+    JxrTranscodeEncoderOutputInitializationResult encoderOutputInitialization;
     U8 * pIOHeaderDec, * pIOHeaderEnc;
     JxrTranscodeTileQuantizerState * pTileQPInfo = NULL;
     ORIENTATION oO = pParam->oOrientation;
@@ -166,39 +166,10 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
     pMBInfo = frameBuffers.primaryMacroblocks;
     pMBInfoAlpha = frameBuffers.alphaMacroblocks;
 
-    {
-        JxrTranscodeOrientationState sourceOrientation;
-        JxrTranscodeOrientationStateInit(&sourceOrientation, pSCEnc->WMII.oOrientation);
-    if(orientation.transpose == FALSE && sourceOrientation.transpose == FALSE)
-
-        pSCEnc->WMII.oOrientation ^= oO;
-    else if(orientation.transpose && sourceOrientation.transpose){
-        pSCEnc->WMII.oOrientation ^= oO;
-        pSCEnc->WMII.oOrientation = (pSCEnc->WMII.oOrientation & 1) * 2 + (pSCEnc->WMII.oOrientation >> 1);
-    }
-    else if(orientation.transpose && sourceOrientation.transpose == FALSE)
-        pSCEnc->WMII.oOrientation = oO ^ ((pSCEnc->WMII.oOrientation & 1) * 2 + (pSCEnc->WMII.oOrientation >> 1));
-    else
-        pSCEnc->WMII.oOrientation ^= ((oO & 1) * 2 + (oO >> 1));
-    }
-    
-//    pSCEnc->WMISCP.nExpBias += 128;
-
-    if(pParam->bIgnoreOverlap == TRUE){
-        attachISWrite(pSCEnc->pIOHeader, pSCEnc->WMISCP.pWStream);
-        pSCEnc->pTile = pSCDec->pTile;
-        if(pSCEnc->WMISCP.cNumOfSliceMinus1H + pSCEnc->WMISCP.cNumOfSliceMinus1V == 0 && pSCEnc->WMISCP.bfBitstreamFormat == SPATIAL)
-            pSCEnc->m_param.bIndexTable = FALSE;
-        WriteWMIHeader(pSCEnc);
-    }
-    else{
-        pTileQPInfo = (JxrTranscodeTileQuantizerState *)malloc((oO == O_NONE ? 1 : (pSCEnc->WMISCP.cNumOfSliceMinus1H + 1) * (pSCEnc->WMISCP.cNumOfSliceMinus1V + 1)) * sizeof(JxrTranscodeTileQuantizerState));
-        if(pTileQPInfo == NULL || ((oO == O_NONE ? 1 : (pSCEnc->WMISCP.cNumOfSliceMinus1H + 1) * (pSCEnc->WMISCP.cNumOfSliceMinus1V + 1)) * sizeof(JxrTranscodeTileQuantizerState) < (oO == O_NONE ? 1 : (pSCEnc->WMISCP.cNumOfSliceMinus1H + 1) * (pSCEnc->WMISCP.cNumOfSliceMinus1V + 1))))
-            return ICERR_ERROR;
-        
-        if(StrEncInit(pSCEnc) != ICERR_OK)
-            return ICERR_ERROR;
-    }
+    if(JxrTranscodeEncoderOutputInitializerInitialize(pSCDec, pSCEnc, pParam,
+        oO, &orientation, &encoderOutputInitialization) != ICERR_OK)
+        return ICERR_ERROR;
+    pTileQPInfo = encoderOutputInitialization.tileQuantizers;
 
     if(JxrTranscodeAlphaPlaneInitializerInitializeEncoder(pSCDec, pSCEnc,
         pParam) != ICERR_OK)
@@ -370,7 +341,7 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
         session.hasOrientation = oO != O_NONE;
         session.hasAlphaFrame = pParam->uAlphaMode > 0;
         session.decoderHasAlpha = pSCDec->m_param.bAlphaChannel;
-        session.usedFastTileExtraction = pParam->bIgnoreOverlap;
+        session.usedFastTileExtraction = encoderOutputInitialization.usedFastTileExtraction;
         JxrTranscodeSessionRelease(&session);
     }
 
