@@ -31,15 +31,6 @@
 #include "decode.h"
 #include "JxrTranscodeTileQuantizerState.h"
 #include "JxrTranscodeOrientationState.h"
-#include "JxrTranscodeMacroblockTransform.h"
-#include "JxrTranscodeMacroblockDecoder.h"
-#include "JxrTranscodeTileContextResolver.h"
-#include "JxrTranscodeTileQuantizerCapture.h"
-#include "JxrTranscodeTileHeaderEmitter.h"
-#include "JxrTranscodeDirectMacroblockEncoder.h"
-#include "JxrTranscodeOrientedMacroblockBuffer.h"
-#include "JxrTranscodeOrientedMacroblockEncoder.h"
-#include "JxrTranscodeTileExtractionExecutor.h"
 #include "JxrTranscodeSession.h"
 #include "JxrTranscodeSessionFactory.h"
 #include "JxrTranscodeDecoderInitializer.h"
@@ -49,13 +40,8 @@
 #include "JxrTranscodeAlphaPlaneInitializer.h"
 #include "JxrTranscodeDecoderRuntimeInitializer.h"
 #include "JxrTranscodeEncoderOutputInitializer.h"
+#include "JxrTranscodeMacroblockProcessingPipeline.h"
 #include "JxrTranscodeTileExtractionDecision.h"
-
-EXTERN_C Int  encodeMB(CWMImageStrCodec *, Int, Int);
-EXTERN_C Int  writeIndexTableNull(CWMImageStrCodec *);
-
-EXTERN_C Int writeIndexTable(CWMImageStrCodec *);
-EXTERN_C Int copyTo(struct WMPStream *, struct WMPStream *, size_t);
 
 Bool isTileExtraction(CWMImageStrCodec * pSC, CWMTranscodingParam * pParam)
 {
@@ -175,153 +161,33 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
         pParam) != ICERR_OK)
         return ICERR_ERROR;
 
-    if(pParam->bIgnoreOverlap == TRUE){
-        if(JxrTranscodeTileExtractionExecutorExecute(pSCDec, pSCEnc, mbLeft,
-            mbRight, mbTop, mbBottom) != ICERR_OK)
-            return ICERR_ERROR;
-    }
-    else
-        writeIndexTableNull(pSCEnc);
+    {
+        JxrTranscodeMacroblockProcessingPipeline pipeline = {0};
 
-    for(pSCDec->cRow = 0; pSCDec->cRow < mbBottom && pParam->bIgnoreOverlap == FALSE; pSCDec->cRow ++){
-        for(pSCDec->cColumn = 0; pSCDec->cColumn < pSCDec->cmbWidth; pSCDec->cColumn ++){
-            Int cRow = (Int)pSCDec->cRow, cColumn = (Int)pSCDec->cColumn;
-            
-            memset(pMBBuf, 0, sizeof(PixelI) * cUnit);
-            if(pSCDec->m_param.bAlphaChannel){ // alpha channel
-                memset(pSCDec->m_pNextSC->p1MBbuffer[0], 0, sizeof(PixelI) * 256);
-                pSCDec->m_pNextSC->cRow = pSCDec->cRow;
-                pSCDec->m_pNextSC->cColumn = pSCDec->cColumn;
-            }
-
-            if(JxrTranscodeMacroblockDecoderDecode(pSCDec, cColumn, cRow) != ICERR_OK)
-                return ICERR_ERROR;
-
-            {
-                JxrTranscodeTileContextRequest tileContextRequest = {0};
-                JxrTranscodeTileContextResult tileContext;
-
-                tileContextRequest.sourceRow = pSCDec->cRow;
-                tileContextRequest.sourceColumn = pSCDec->cColumn;
-                tileContextRequest.macroblockLeft = mbLeft;
-                tileContextRequest.macroblockRight = mbRight;
-                tileContextRequest.macroblockTop = mbTop;
-                tileContextRequest.macroblockBottom = mbBottom;
-                tileContextRequest.macroblockWidth = mbWidth;
-                tileContextRequest.macroblockHeight = mbHeight;
-                tileContextRequest.tileColumns = pSCEnc->WMISCP.uiTileX;
-                tileContextRequest.tileColumnCount = pSCEnc->WMISCP.cNumOfSliceMinus1V + 1;
-                tileContextRequest.tileRows = pSCEnc->WMISCP.uiTileY;
-                tileContextRequest.tileRowCount = pSCEnc->WMISCP.cNumOfSliceMinus1H + 1;
-                tileContextRequest.orientation = &orientation;
-                if(JxrTranscodeTileContextResolverResolve(&tileContextRequest, &tileContext) == FALSE)
-                    return ICERR_ERROR;
-                if(tileContext.isInsideRoi){
-                    cRow = tileContext.destinationRow;
-                    cColumn = tileContext.destinationColumn;
-                    pSCEnc->m_bCtxLeft = tileContext.isTileColumnStart;
-                    pSCEnc->m_bCtxTop = tileContext.isTileRowStart;
-                    if(pSCEnc->m_bCtxLeft)
-                        pSCEnc->cTileColumn = tileContext.tileColumn;
-                    if(pSCEnc->m_bCtxTop)
-                        pSCEnc->cTileRow = tileContext.tileRow;
-
-                if(pSCEnc->m_bCtxLeft && pSCEnc->m_bCtxTop){ // a new tile, buffer tile DQuant info
-                    JxrTranscodeTileQuantizerCaptureRequest quantizerCapture = {0};
-
-                    quantizerCapture.states = pTileQPInfo;
-                    quantizerCapture.stateCount = oO == O_NONE ? 1 :
-                        (pSCEnc->WMISCP.cNumOfSliceMinus1H + 1) *
-                        (pSCEnc->WMISCP.cNumOfSliceMinus1V + 1);
-                    quantizerCapture.destinationTileRow = pSCEnc->cTileRow;
-                    quantizerCapture.destinationTileColumn = pSCEnc->cTileColumn;
-                    quantizerCapture.destinationTileColumnCount =
-                        pSCEnc->WMISCP.cNumOfSliceMinus1V + 1;
-                    quantizerCapture.storeByDestinationTile = oO != O_NONE;
-                    quantizerCapture.primaryTile = pSCDec->pTile + pSCDec->cTileColumn;
-                    quantizerCapture.primaryChannelCount = pSCEnc->WMISCP.cChannel;
-                    quantizerCapture.subband = pSCEnc->WMISCP.sbSubband;
-                    quantizerCapture.hasAlpha = pParam->uAlphaMode > 0;
-                    if(quantizerCapture.hasAlpha){
-                        quantizerCapture.alphaTile = pSCDec->m_pNextSC->pTile +
-                            pSCDec->cTileColumn;
-                        quantizerCapture.alphaChannelIndex = iAlphaPos;
-                    }
-                    if(JxrTranscodeTileQuantizerCaptureCapture(&quantizerCapture) == FALSE)
-                        return ICERR_ERROR;
-                }
-
-                if(oO == O_NONE){
-                    if(JxrTranscodeDirectMacroblockEncoderEncode(pSCDec, pSCEnc,
-                        mbLeft, mbTop, cColumn, cRow, pTileQPInfo,
-                        pParam->uAlphaMode > 0) != ICERR_OK)
-                        return ICERR_ERROR;
-                }
-                else{
-                    JxrTranscodeOrientedMacroblockBufferRequest bufferRequest = {0};
-
-                    bufferRequest.primaryMacroblock = &pSCDec->MBInfo;
-                    bufferRequest.primaryCoefficients = pMBBuf;
-                    bufferRequest.primaryCoefficientCount = cUnit;
-                    bufferRequest.primaryFrameMacroblocks = pMBInfo;
-                    bufferRequest.primaryFrameMacroblockCount =
-                        pSCEnc->cmbWidth * pSCEnc->cmbHeight;
-                    bufferRequest.primaryFrameCoefficients = pFrameBuf;
-                    bufferRequest.primaryFrameCoefficientCount =
-                        pSCEnc->cmbWidth * pSCEnc->cmbHeight * cUnit;
-                    bufferRequest.destinationRow = cRow;
-                    bufferRequest.destinationColumn = cColumn;
-                    bufferRequest.sourceMacroblockWidth = mbWidth;
-                    bufferRequest.sourceMacroblockHeight = mbHeight;
-                    bufferRequest.orientation = &orientation;
-                    bufferRequest.hasAlpha = pParam->uAlphaMode > 0;
-                    if(bufferRequest.hasAlpha){
-                        bufferRequest.alphaMacroblock = &pSCDec->m_pNextSC->MBInfo;
-                        bufferRequest.alphaCoefficients = MBBufAlpha;
-                        bufferRequest.alphaCoefficientCount = 256;
-                        bufferRequest.alphaFrameMacroblocks = pMBInfoAlpha;
-                        bufferRequest.alphaFrameMacroblockCount =
-                            pSCEnc->cmbWidth * pSCEnc->cmbHeight;
-                        bufferRequest.alphaFrameCoefficients = pFrameBufAlpha;
-                        bufferRequest.alphaFrameCoefficientCount =
-                            pSCEnc->cmbWidth * pSCEnc->cmbHeight * 256;
-                    }
-                    if(JxrTranscodeOrientedMacroblockBufferStore(&bufferRequest) == FALSE)
-                        return ICERR_ERROR;
-                }
-            }
-            }
-        }
-
-        advanceOneMBRow(pSCDec);
-
-        if(oO == O_NONE)
-            advanceOneMBRow(pSCEnc);
-    }
-
-    if(oO != O_NONE){
-        JxrTranscodeOrientedMacroblockEncoderRequest orientedEncoder = {0};
-
-        orientedEncoder.destinationCodec = pSCEnc;
-        orientedEncoder.sourceAlphaCodec = pSCDec;
-        orientedEncoder.primaryMacroblocks = pMBInfo;
-        orientedEncoder.primaryCoefficients = pFrameBuf;
-        orientedEncoder.coefficientUnit = cUnit;
-        orientedEncoder.macroblockCount = pSCEnc->cmbWidth * pSCEnc->cmbHeight;
-        orientedEncoder.destinationCoefficients = pMBBuf;
-        orientedEncoder.orientation = &orientation;
-        orientedEncoder.tileQuantizers = pTileQPInfo;
-        orientedEncoder.tileQuantizerCount =
-            (pSCEnc->WMISCP.cNumOfSliceMinus1H + 1) *
-            (pSCEnc->WMISCP.cNumOfSliceMinus1V + 1);
-        orientedEncoder.tileColumnCount = pSCEnc->WMISCP.cNumOfSliceMinus1V + 1;
-        orientedEncoder.hasAlpha = pParam->uAlphaMode > 0;
-        if(orientedEncoder.hasAlpha){
-            orientedEncoder.alphaMacroblocks = pMBInfoAlpha;
-            orientedEncoder.alphaCoefficients = pFrameBufAlpha;
-            orientedEncoder.alphaDestinationCoefficients = MBBufAlpha;
-        }
-        if(JxrTranscodeOrientedMacroblockEncoderEncode(&orientedEncoder) != ICERR_OK)
+        pipeline.decoderCodec = pSCDec;
+        pipeline.encoderCodec = pSCEnc;
+        pipeline.parameters = pParam;
+        pipeline.macroblockBuffer = pMBBuf;
+        pipeline.alphaMacroblockBuffer = MBBufAlpha;
+        pipeline.coefficientUnit = cUnit;
+        pipeline.alphaChannelIndex = iAlphaPos;
+        pipeline.macroblockLeft = mbLeft;
+        pipeline.macroblockRight = mbRight;
+        pipeline.macroblockTop = mbTop;
+        pipeline.macroblockBottom = mbBottom;
+        pipeline.macroblockWidth = mbWidth;
+        pipeline.macroblockHeight = mbHeight;
+        pipeline.orientationValue = oO;
+        pipeline.orientation = &orientation;
+        pipeline.tileQuantizers = pTileQPInfo;
+        pipeline.tileQuantizerCount = encoderOutputInitialization.tileQuantizerCount;
+        pipeline.primaryFrameBuffer = pFrameBuf;
+        pipeline.alphaFrameBuffer = pFrameBufAlpha;
+        pipeline.primaryFrameMacroblocks = pMBInfo;
+        pipeline.alphaFrameMacroblocks = pMBInfoAlpha;
+        pipeline.usedFastTileExtraction =
+            encoderOutputInitialization.usedFastTileExtraction;
+        if(JxrTranscodeMacroblockProcessingPipelineExecute(&pipeline) != ICERR_OK)
             return ICERR_ERROR;
     }
 

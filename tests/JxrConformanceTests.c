@@ -118,6 +118,7 @@
 #include "../image/decode/JxrTranscodeAlphaPlaneInitializer.h"
 #include "../image/decode/JxrTranscodeDecoderRuntimeInitializer.h"
 #include "../image/decode/JxrTranscodeEncoderOutputInitializer.h"
+#include "../image/decode/JxrTranscodeMacroblockProcessingPipeline.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
 #include "../image/decode/JxrTranscodeRoiTileLayout.h"
@@ -1013,6 +1014,15 @@ static int test_transcode_encoder_output_initializer_contract_vectors(void)
     JxrTranscodeEncoderOutputInitializerRelease(&result);
     return result.tileQuantizers == NULL && result.tileQuantizerCount == 0 &&
         !result.usedFastTileExtraction;
+}
+
+static int test_transcode_macroblock_processing_pipeline_contract_vectors(void)
+{
+    JxrTranscodeMacroblockProcessingPipeline pipeline;
+
+    memset(&pipeline, 0, sizeof(pipeline));
+    return JxrTranscodeMacroblockProcessingPipelineExecute(NULL) == ICERR_ERROR &&
+        JxrTranscodeMacroblockProcessingPipelineExecute(&pipeline) == ICERR_ERROR;
 }
 
 static int test_transcode_tile_extraction_decision_vectors(void)
@@ -5885,6 +5895,7 @@ int main(int argc, char** argv)
         { "transcode_alpha_plane_initializer_contract_vectors", test_transcode_alpha_plane_initializer_contract_vectors },
         { "transcode_decoder_runtime_initializer_contract_vectors", test_transcode_decoder_runtime_initializer_contract_vectors },
         { "transcode_encoder_output_initializer_contract_vectors", test_transcode_encoder_output_initializer_contract_vectors },
+        { "transcode_macroblock_processing_pipeline_contract_vectors", test_transcode_macroblock_processing_pipeline_contract_vectors },
         { "transcode_tile_extraction_decision_vectors", test_transcode_tile_extraction_decision_vectors },
         { "transcode_roi_geometry_vectors", test_transcode_roi_geometry_vectors },
         { "transcode_roi_tile_layout_vectors", test_transcode_roi_tile_layout_vectors },
