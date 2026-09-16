@@ -46,6 +46,7 @@
 #include "JxrTranscodeEncoderInitializer.h"
 #include "JxrTranscodeRoiInitializer.h"
 #include "JxrTranscodeFrameBufferAllocator.h"
+#include "JxrTranscodeAlphaPlaneInitializer.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 
 EXTERN_C Void freePredInfo(CWMImageStrCodec *);
@@ -63,8 +64,6 @@ EXTERN_C Int  encodeMB(CWMImageStrCodec *, Int, Int);
 EXTERN_C Int  writeIndexTableNull(CWMImageStrCodec *);
 
 EXTERN_C Int WriteWMIHeader(CWMImageStrCodec *);
-EXTERN_C Int ReadImagePlaneHeader(CWMImageInfo *, CWMIStrCodecParam *, CCoreParameters *, SimpleBitIO *);
-EXTERN_C Int WriteImagePlaneHeader(CWMImageStrCodec *);
 EXTERN_C Int writeIndexTable(CWMImageStrCodec *);
 EXTERN_C Int copyTo(struct WMPStream *, struct WMPStream *, size_t);
 
@@ -108,6 +107,7 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
     JxrTranscodeEncoderInitializationResult encoderInitialization;
     JxrTranscodeRoiInitializationResult roiInitialization;
     JxrTranscodeFrameBufferAllocation frameBuffers;
+    JxrTranscodeAlphaPlaneInitializationResult alphaInitialization;
     U8 * pIOHeaderDec, * pIOHeaderEnc;
     JxrTranscodeTileQuantizerState * pTileQPInfo = NULL;
     ORIENTATION oO = pParam->oOrientation;
@@ -138,30 +138,10 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
     for(i = 2; i < pSCDec->m_param.cNumChannels; i ++)
         pSCDec->p1MBbuffer[i] = pSCDec->p1MBbuffer[i - 1] + (pSCDec->m_param.cfColorFormat == YUV_420 ? 64 : (pSCDec->m_param.cfColorFormat == YUV_422 ? 128 : 256));
 
-    if(pSCDec->m_param.bAlphaChannel){ // alpha channel
-        SimpleBitIO SB = {0};
-
-        iAlphaPos = pSCDec->m_param.cNumChannels;
-        if((pSCDec->m_pNextSC = (CWMImageStrCodec *)malloc(sizeof(CWMImageStrCodec))) == NULL)
-            return ICERR_ERROR;
-        *pSCDec->m_pNextSC = *pSCDec;
-        pSCDec->m_pNextSC->p1MBbuffer[0] = MBBufAlpha;
-        pSCDec->m_pNextSC->WMISCP.cfColorFormat = pSCDec->m_pNextSC->WMII.cfColorFormat = pSCDec->m_pNextSC->m_param.cfColorFormat = Y_ONLY;
-        pSCDec->m_pNextSC->WMISCP.cChannel  = pSCDec->m_pNextSC->m_param.cNumChannels = 1;
-        pSCDec->m_pNextSC->m_bSecondary = TRUE;
-        pSCDec->m_pNextSC->m_pNextSC = pSCDec;
- 
-        // read plane header of second image plane
-        if(attach_SB(&SB, pSCDec->WMISCP.pWStream) != ICERR_OK)
-            return ICERR_ERROR;
-        ReadImagePlaneHeader(&pSCDec->m_pNextSC->WMII, &pSCDec->m_pNextSC->WMISCP, &pSCDec->m_pNextSC->m_param, &SB);
-        detach_SB(&SB);
-
-        if(JxrDecoderResourceInitializerInitialize(pSCDec->m_pNextSC) != ICERR_OK)
-            return ICERR_ERROR;
-    }
-    else
-        pParam->uAlphaMode = 0;
+    if(JxrTranscodeAlphaPlaneInitializerInitializeDecoder(pSCDec, pParam,
+        MBBufAlpha, &alphaInitialization) != ICERR_OK)
+        return ICERR_ERROR;
+    iAlphaPos = alphaInitialization.channelIndex;
 
     pIOHeaderDec = (U8 *)malloc((PACKETLENGTH * 4 - 1) + PACKETLENGTH * 4 + sizeof(BitIOInfo));
     if(pIOHeaderDec == NULL)
@@ -175,10 +155,8 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
     if(JxrDecoderResourceInitializerInitialize(pSCDec) != ICERR_OK)
         return ICERR_ERROR;
 
-    if(pSCDec->m_param.bAlphaChannel){ // alpha channel
-        if(JxrDecoderResourceInitializerInitialize(pSCDec->m_pNextSC) != ICERR_OK)
-            return ICERR_ERROR;
-    }
+    if(JxrTranscodeAlphaPlaneInitializerFinalizeDecoder(pSCDec) != ICERR_OK)
+        return ICERR_ERROR;
 
     // initialize encoder
     if(JxrTranscodeEncoderInitializerInitialize(pSCDec, pStreamOut, pParam,
@@ -239,26 +217,9 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
             return ICERR_ERROR;
     }
 
-    if(pParam->uAlphaMode > 0){ // alpha channel
-//        pSCEnc->WMISCP.nExpBias -= 128;
-        if((pSCEnc->m_pNextSC = (CWMImageStrCodec *)malloc(sizeof(CWMImageStrCodec))) == NULL)
-            return ICERR_ERROR;
-        *pSCEnc->m_pNextSC = *pSCEnc;
-        pSCEnc->m_pNextSC->pPlane[0] = pSCDec->m_pNextSC->p1MBbuffer[0];
-        pSCEnc->m_pNextSC->WMISCP.cfColorFormat = pSCEnc->m_pNextSC->WMII.cfColorFormat = pSCEnc->m_pNextSC->m_param.cfColorFormat = Y_ONLY;
-        pSCEnc->m_pNextSC->WMISCP.cChannel  = pSCEnc->m_pNextSC->m_param.cNumChannels = 1;
-        pSCEnc->m_pNextSC->m_bSecondary = TRUE;
-        pSCEnc->m_pNextSC->m_pNextSC = pSCEnc;
-        pSCEnc->m_pNextSC->m_param = pSCDec->m_pNextSC->m_param;
-        pSCEnc->m_param.bAlphaChannel = TRUE;
-
-        if(pParam->bIgnoreOverlap == TRUE)
-            pSCEnc->m_pNextSC->pTile = pSCDec->m_pNextSC->pTile;
-        else if(StrEncInit(pSCEnc->m_pNextSC) != ICERR_OK)
-                return ICERR_ERROR;
-
-        WriteImagePlaneHeader(pSCEnc->m_pNextSC);
-    }
+    if(JxrTranscodeAlphaPlaneInitializerInitializeEncoder(pSCDec, pSCEnc,
+        pParam) != ICERR_OK)
+        return ICERR_ERROR;
 
     if(pParam->bIgnoreOverlap == TRUE){
         if(JxrTranscodeTileExtractionExecutorExecute(pSCDec, pSCEnc, mbLeft,

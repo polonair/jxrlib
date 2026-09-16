@@ -115,6 +115,7 @@
 #include "../image/decode/JxrTranscodeEncoderInitializer.h"
 #include "../image/decode/JxrTranscodeRoiInitializer.h"
 #include "../image/decode/JxrTranscodeFrameBufferAllocator.h"
+#include "../image/decode/JxrTranscodeAlphaPlaneInitializer.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
 #include "../image/decode/JxrTranscodeRoiTileLayout.h"
@@ -939,6 +940,32 @@ static int test_transcode_frame_buffer_allocator_contract_vectors(void)
     return allocation.primaryCoefficients == NULL &&
         allocation.primaryMacroblocks == NULL && allocation.alphaCoefficients == NULL &&
         allocation.alphaMacroblocks == NULL;
+}
+
+static int test_transcode_alpha_plane_initializer_contract_vectors(void)
+{
+    CWMImageStrCodec decoderCodec;
+    CWMImageStrCodec encoderCodec;
+    CWMTranscodingParam parameters;
+    JxrTranscodeAlphaPlaneInitializationResult result;
+
+    memset(&decoderCodec, 0, sizeof(decoderCodec));
+    memset(&encoderCodec, 0, sizeof(encoderCodec));
+    memset(&parameters, 0, sizeof(parameters));
+    memset(&result, 0, sizeof(result));
+    parameters.uAlphaMode = 1;
+    if (JxrTranscodeAlphaPlaneInitializerInitializeDecoder(&decoderCodec,
+        &parameters, NULL, &result) != ICERR_OK || parameters.uAlphaMode != 0 ||
+        result.hasAlpha || result.channelIndex != 0)
+        return 0;
+    if (JxrTranscodeAlphaPlaneInitializerFinalizeDecoder(&decoderCodec) != ICERR_OK ||
+        JxrTranscodeAlphaPlaneInitializerInitializeEncoder(&decoderCodec,
+            &encoderCodec, &parameters) != ICERR_OK || encoderCodec.m_pNextSC != NULL)
+        return 0;
+    return JxrTranscodeAlphaPlaneInitializerInitializeDecoder(NULL, &parameters,
+        NULL, &result) == ICERR_ERROR &&
+        JxrTranscodeAlphaPlaneInitializerInitializeEncoder(NULL, &encoderCodec,
+            &parameters) == ICERR_ERROR;
 }
 
 static int test_transcode_tile_extraction_decision_vectors(void)
@@ -5808,6 +5835,7 @@ int main(int argc, char** argv)
         { "transcode_encoder_initializer_contract_vectors", test_transcode_encoder_initializer_contract_vectors },
         { "transcode_roi_initializer_contract_vectors", test_transcode_roi_initializer_contract_vectors },
         { "transcode_frame_buffer_allocator_contract_vectors", test_transcode_frame_buffer_allocator_contract_vectors },
+        { "transcode_alpha_plane_initializer_contract_vectors", test_transcode_alpha_plane_initializer_contract_vectors },
         { "transcode_tile_extraction_decision_vectors", test_transcode_tile_extraction_decision_vectors },
         { "transcode_roi_geometry_vectors", test_transcode_roi_geometry_vectors },
         { "transcode_roi_tile_layout_vectors", test_transcode_roi_tile_layout_vectors },
