@@ -119,6 +119,7 @@
 #include "../image/decode/JxrTranscodeDecoderRuntimeInitializer.h"
 #include "../image/decode/JxrTranscodeEncoderOutputInitializer.h"
 #include "../image/decode/JxrTranscodeMacroblockProcessingPipeline.h"
+#include "../image/decode/JxrTranscodeSessionRunner.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 #include "JxrTranscodeRoiGeometry.h"
 #include "../image/decode/JxrTranscodeRoiTileLayout.h"
@@ -1023,6 +1024,15 @@ static int test_transcode_macroblock_processing_pipeline_contract_vectors(void)
     memset(&pipeline, 0, sizeof(pipeline));
     return JxrTranscodeMacroblockProcessingPipelineExecute(NULL) == ICERR_ERROR &&
         JxrTranscodeMacroblockProcessingPipelineExecute(&pipeline) == ICERR_ERROR;
+}
+
+static int test_transcode_session_runner_contract_vectors(void)
+{
+    CWMTranscodingParam parameters;
+
+    memset(&parameters, 0, sizeof(parameters));
+    return JxrTranscodeSessionRunnerRun(NULL, NULL, &parameters) == ICERR_ERROR &&
+        JxrTranscodeSessionRunnerRun(NULL, NULL, NULL) == ICERR_ERROR;
 }
 
 static int test_transcode_tile_extraction_decision_vectors(void)
@@ -5896,6 +5906,7 @@ int main(int argc, char** argv)
         { "transcode_decoder_runtime_initializer_contract_vectors", test_transcode_decoder_runtime_initializer_contract_vectors },
         { "transcode_encoder_output_initializer_contract_vectors", test_transcode_encoder_output_initializer_contract_vectors },
         { "transcode_macroblock_processing_pipeline_contract_vectors", test_transcode_macroblock_processing_pipeline_contract_vectors },
+        { "transcode_session_runner_contract_vectors", test_transcode_session_runner_contract_vectors },
         { "transcode_tile_extraction_decision_vectors", test_transcode_tile_extraction_decision_vectors },
         { "transcode_roi_geometry_vectors", test_transcode_roi_geometry_vectors },
         { "transcode_roi_tile_layout_vectors", test_transcode_roi_tile_layout_vectors },

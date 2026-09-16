@@ -213,6 +213,7 @@
     <ClCompile Include="..\decode\JxrTranscodeDecoderRuntimeInitializer.c" />
     <ClCompile Include="..\decode\JxrTranscodeEncoderOutputInitializer.c" />
     <ClCompile Include="..\decode\JxrTranscodeMacroblockProcessingPipeline.c" />
+    <ClCompile Include="..\decode\JxrTranscodeSessionRunner.c" />
     <ClCompile Include="..\decode\JxrTranscodeTileExtractionDecision.c" />
     <ClCompile Include="..\decode\JxrTranscodeRoiGeometry.c" />
     <ClCompile Include="..\decode\JxrTranscodeRoiTileLayout.c" />
