@@ -862,8 +862,26 @@ static int test_transcode_session_release_contract_vectors(void)
     memset(&session, 0, sizeof(session));
     JxrTranscodeSessionRelease(NULL);
     JxrTranscodeSessionRelease(&session);
-    return session.macroblockBuffer == NULL && session.decoderCodec == NULL &&
-        session.encoderCodec == NULL && session.tileQuantizers == NULL;
+    if (session.macroblockBuffer != NULL || session.decoderCodec != NULL ||
+        session.encoderCodec != NULL || session.tileQuantizers != NULL) return 0;
+
+    /* A failed construction owns raw codec allocations, but not their runtime state. */
+    session.decoderCodec = (CWMImageStrCodec*)calloc(1, sizeof(CWMImageStrCodec));
+    session.encoderCodec = (CWMImageStrCodec*)calloc(1, sizeof(CWMImageStrCodec));
+    session.macroblockBuffer = (PixelI*)malloc(sizeof(PixelI));
+    session.primaryFrameBuffer = (PixelI*)malloc(sizeof(PixelI));
+    session.primaryFrameMacroblocks = (CWMIMBInfo*)malloc(sizeof(CWMIMBInfo));
+    if (session.decoderCodec == NULL || session.encoderCodec == NULL ||
+        session.macroblockBuffer == NULL || session.primaryFrameBuffer == NULL ||
+        session.primaryFrameMacroblocks == NULL) {
+        JxrTranscodeSessionRelease(&session);
+        return 0;
+    }
+    JxrTranscodeSessionRelease(&session);
+    return session.macroblockBuffer == NULL && session.primaryFrameBuffer == NULL &&
+        session.primaryFrameMacroblocks == NULL && session.decoderCodec == NULL &&
+        session.encoderCodec == NULL && session.decoderPrimaryResourcesInitialized == FALSE &&
+        session.encoderOutputInitialized == FALSE;
 }
 
 static int test_transcode_session_factory_contract_vectors(void)

@@ -18,6 +18,9 @@ typedef struct JxrTranscodeSession {
     Bool hasOrientation;
     Bool hasAlphaFrame;
     Bool decoderHasAlpha;
+    /* These stages make release safe while construction is still in progress. */
+    Bool decoderPrimaryResourcesInitialized;
+    Bool encoderOutputInitialized;
     Bool usedFastTileExtraction;
 } JxrTranscodeSession;
 

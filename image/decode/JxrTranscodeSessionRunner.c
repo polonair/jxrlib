@@ -48,14 +48,8 @@ static Bool JxrTranscodeSessionRunnerCanUseFastTileExtraction(
 Int JxrTranscodeSessionRunnerRun(struct WMPStream* inputStream,
     struct WMPStream* outputStream, CWMTranscodingParam* parameters)
 {
-    PixelI* macroblockBuffer;
     PixelI alphaMacroblockBuffer[256];
-    PixelI* primaryFrameBuffer = NULL;
-    PixelI* alphaFrameBuffer = NULL;
-    CWMIMBInfo* primaryFrameMacroblocks = NULL;
-    CWMIMBInfo* alphaFrameMacroblocks = NULL;
-    CWMImageStrCodec* decoderCodec;
-    CWMImageStrCodec* encoderCodec;
+    JxrTranscodeSession session = {0};
     CWMDecoderParameters decoderParameters = {0};
     JxrTranscodeDecoderInitializationResult decoderInitialization;
     JxrTranscodeEncoderInitializationResult encoderInitialization;
@@ -64,9 +58,6 @@ Int JxrTranscodeSessionRunnerRun(struct WMPStream* inputStream,
     JxrTranscodeAlphaPlaneInitializationResult alphaInitialization;
     JxrTranscodeDecoderRuntimeState decoderRuntime;
     JxrTranscodeEncoderOutputInitializationResult encoderOutputInitialization;
-    U8* decoderIoHeader;
-    U8* encoderIoHeader;
-    JxrTranscodeTileQuantizerState* tileQuantizers = NULL;
     ORIENTATION orientationValue;
     JxrTranscodeOrientationState orientation;
     size_t alphaChannelIndex = 0;
@@ -77,42 +68,47 @@ Int JxrTranscodeSessionRunnerRun(struct WMPStream* inputStream,
     size_t macroblockBottom;
     size_t macroblockWidth;
     size_t macroblockHeight;
+    Int status = ICERR_ERROR;
 
     if (inputStream == NULL || outputStream == NULL || parameters == NULL)
         return ICERR_ERROR;
     orientationValue = parameters->oOrientation;
-    if (JxrTranscodeSessionFactoryCreateCodec(inputStream, &decoderCodec) != ICERR_OK ||
-        JxrTranscodeDecoderInitializerInitialize(decoderCodec, parameters,
-            &decoderParameters, &decoderInitialization) != ICERR_OK)
-        return ICERR_ERROR;
+    if (JxrTranscodeSessionFactoryCreateCodec(inputStream,
+        &session.decoderCodec) != ICERR_OK)
+        goto cleanup;
+    if (JxrTranscodeDecoderInitializerInitialize(session.decoderCodec, parameters,
+        &decoderParameters, &decoderInitialization) != ICERR_OK)
+        goto cleanup;
     orientationValue = decoderInitialization.orientationValue;
     orientation = decoderInitialization.orientation;
     parameters->bIgnoreOverlap = JxrTranscodeSessionRunnerCanUseFastTileExtraction(
-        decoderCodec, parameters);
+        session.decoderCodec, parameters);
 
     coefficientUnit = decoderInitialization.coefficientUnit;
-    if (JxrTranscodeDecoderRuntimeInitializerAllocateMacroblockBuffer(decoderCodec,
+    if (JxrTranscodeDecoderRuntimeInitializerAllocateMacroblockBuffer(session.decoderCodec,
         coefficientUnit, &decoderRuntime) != ICERR_OK)
-        return ICERR_ERROR;
-    macroblockBuffer = decoderRuntime.macroblockBuffer;
-    if (JxrTranscodeAlphaPlaneInitializerInitializeDecoder(decoderCodec, parameters,
+        goto cleanup;
+    session.macroblockBuffer = decoderRuntime.macroblockBuffer;
+    if (JxrTranscodeAlphaPlaneInitializerInitializeDecoder(session.decoderCodec, parameters,
         alphaMacroblockBuffer, &alphaInitialization) != ICERR_OK)
-        return ICERR_ERROR;
+        goto cleanup;
     alphaChannelIndex = alphaInitialization.channelIndex;
-    if (JxrTranscodeDecoderRuntimeInitializerInitializePrimaryInput(decoderCodec,
-        &decoderRuntime) != ICERR_OK ||
-        JxrTranscodeAlphaPlaneInitializerFinalizeDecoder(decoderCodec) != ICERR_OK)
-        return ICERR_ERROR;
-    decoderIoHeader = decoderRuntime.ioHeaderAllocation;
+    if (JxrTranscodeDecoderRuntimeInitializerInitializePrimaryInput(session.decoderCodec,
+        &decoderRuntime) != ICERR_OK)
+        goto cleanup;
+    session.decoderIoHeader = decoderRuntime.ioHeaderAllocation;
+    session.decoderPrimaryResourcesInitialized = TRUE;
+    if (JxrTranscodeAlphaPlaneInitializerFinalizeDecoder(session.decoderCodec) != ICERR_OK)
+        goto cleanup;
 
-    if (JxrTranscodeEncoderInitializerInitialize(decoderCodec, outputStream,
+    if (JxrTranscodeEncoderInitializerInitialize(session.decoderCodec, outputStream,
         parameters, &encoderInitialization) != ICERR_OK)
-        return ICERR_ERROR;
-    encoderCodec = encoderInitialization.encoderCodec;
-    encoderIoHeader = encoderInitialization.ioHeaderAllocation;
-    if (JxrTranscodeRoiInitializerInitialize(decoderCodec, encoderCodec, parameters,
+        goto cleanup;
+    session.encoderCodec = encoderInitialization.encoderCodec;
+    session.encoderIoHeader = encoderInitialization.ioHeaderAllocation;
+    if (JxrTranscodeRoiInitializerInitialize(session.decoderCodec, session.encoderCodec, parameters,
         &orientation, &roiInitialization) != ICERR_OK)
-        return ICERR_ERROR;
+        goto cleanup;
     macroblockLeft = roiInitialization.macroblockLeft;
     macroblockRight = roiInitialization.macroblockRight;
     macroblockTop = roiInitialization.macroblockTop;
@@ -120,29 +116,31 @@ Int JxrTranscodeSessionRunnerRun(struct WMPStream* inputStream,
     macroblockWidth = roiInitialization.macroblockWidth;
     macroblockHeight = roiInitialization.macroblockHeight;
 
-    if (JxrTranscodeFrameBufferAllocatorAllocate(encoderCodec, parameters,
+    if (JxrTranscodeFrameBufferAllocatorAllocate(session.encoderCodec, parameters,
         orientationValue, coefficientUnit, &frameBuffers) != ICERR_OK)
-        return ICERR_ERROR;
-    primaryFrameBuffer = frameBuffers.primaryCoefficients;
-    alphaFrameBuffer = frameBuffers.alphaCoefficients;
-    primaryFrameMacroblocks = frameBuffers.primaryMacroblocks;
-    alphaFrameMacroblocks = frameBuffers.alphaMacroblocks;
-    if (JxrTranscodeEncoderOutputInitializerInitialize(decoderCodec, encoderCodec,
+        goto cleanup;
+    session.primaryFrameBuffer = frameBuffers.primaryCoefficients;
+    session.alphaFrameBuffer = frameBuffers.alphaCoefficients;
+    session.primaryFrameMacroblocks = frameBuffers.primaryMacroblocks;
+    session.alphaFrameMacroblocks = frameBuffers.alphaMacroblocks;
+    if (JxrTranscodeEncoderOutputInitializerInitialize(session.decoderCodec, session.encoderCodec,
         parameters, orientationValue, &orientation,
         &encoderOutputInitialization) != ICERR_OK)
-        return ICERR_ERROR;
-    tileQuantizers = encoderOutputInitialization.tileQuantizers;
-    if (JxrTranscodeAlphaPlaneInitializerInitializeEncoder(decoderCodec,
-        encoderCodec, parameters) != ICERR_OK)
-        return ICERR_ERROR;
+        goto cleanup;
+    session.tileQuantizers = encoderOutputInitialization.tileQuantizers;
+    session.usedFastTileExtraction = encoderOutputInitialization.usedFastTileExtraction;
+    session.encoderOutputInitialized = TRUE;
+    if (JxrTranscodeAlphaPlaneInitializerInitializeEncoder(session.decoderCodec,
+        session.encoderCodec, parameters) != ICERR_OK)
+        goto cleanup;
 
     {
         JxrTranscodeMacroblockProcessingPipeline pipeline = {0};
 
-        pipeline.decoderCodec = decoderCodec;
-        pipeline.encoderCodec = encoderCodec;
+        pipeline.decoderCodec = session.decoderCodec;
+        pipeline.encoderCodec = session.encoderCodec;
         pipeline.parameters = parameters;
-        pipeline.macroblockBuffer = macroblockBuffer;
+        pipeline.macroblockBuffer = session.macroblockBuffer;
         pipeline.alphaMacroblockBuffer = alphaMacroblockBuffer;
         pipeline.coefficientUnit = coefficientUnit;
         pipeline.alphaChannelIndex = alphaChannelIndex;
@@ -154,37 +152,23 @@ Int JxrTranscodeSessionRunnerRun(struct WMPStream* inputStream,
         pipeline.macroblockHeight = macroblockHeight;
         pipeline.orientationValue = orientationValue;
         pipeline.orientation = &orientation;
-        pipeline.tileQuantizers = tileQuantizers;
+        pipeline.tileQuantizers = session.tileQuantizers;
         pipeline.tileQuantizerCount = encoderOutputInitialization.tileQuantizerCount;
-        pipeline.primaryFrameBuffer = primaryFrameBuffer;
-        pipeline.alphaFrameBuffer = alphaFrameBuffer;
-        pipeline.primaryFrameMacroblocks = primaryFrameMacroblocks;
-        pipeline.alphaFrameMacroblocks = alphaFrameMacroblocks;
-        pipeline.usedFastTileExtraction =
-            encoderOutputInitialization.usedFastTileExtraction;
+        pipeline.primaryFrameBuffer = session.primaryFrameBuffer;
+        pipeline.alphaFrameBuffer = session.alphaFrameBuffer;
+        pipeline.primaryFrameMacroblocks = session.primaryFrameMacroblocks;
+        pipeline.alphaFrameMacroblocks = session.alphaFrameMacroblocks;
+        pipeline.usedFastTileExtraction = session.usedFastTileExtraction;
         if (JxrTranscodeMacroblockProcessingPipelineExecute(&pipeline) != ICERR_OK)
-            return ICERR_ERROR;
+            goto cleanup;
     }
+    status = ICERR_OK;
 
-    {
-        JxrTranscodeSession session = {0};
-
-        session.macroblockBuffer = macroblockBuffer;
-        session.primaryFrameBuffer = primaryFrameBuffer;
-        session.alphaFrameBuffer = alphaFrameBuffer;
-        session.primaryFrameMacroblocks = primaryFrameMacroblocks;
-        session.alphaFrameMacroblocks = alphaFrameMacroblocks;
-        session.decoderCodec = decoderCodec;
-        session.encoderCodec = encoderCodec;
-        session.decoderIoHeader = decoderIoHeader;
-        session.encoderIoHeader = encoderIoHeader;
-        session.tileQuantizers = tileQuantizers;
-        session.hasOrientation = orientationValue != O_NONE;
-        session.hasAlphaFrame = parameters->uAlphaMode > 0;
-        session.decoderHasAlpha = decoderCodec->m_param.bAlphaChannel;
-        session.usedFastTileExtraction =
-            encoderOutputInitialization.usedFastTileExtraction;
-        JxrTranscodeSessionRelease(&session);
-    }
-    return ICERR_OK;
+cleanup:
+    session.hasOrientation = orientationValue != O_NONE;
+    session.hasAlphaFrame = parameters->uAlphaMode > 0;
+    session.decoderHasAlpha = session.decoderCodec != NULL &&
+        session.decoderCodec->m_param.bAlphaChannel;
+    JxrTranscodeSessionRelease(&session);
+    return status;
 }

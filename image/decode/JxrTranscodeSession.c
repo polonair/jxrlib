@@ -10,33 +10,31 @@ Void JxrTranscodeSessionRelease(JxrTranscodeSession* session)
 {
     if (session == NULL) return;
     free(session->macroblockBuffer);
-    if (session->hasOrientation) {
-        free(session->primaryFrameBuffer);
-        free(session->primaryFrameMacroblocks);
-        if (session->hasAlphaFrame) {
-            free(session->alphaFrameBuffer);
-            free(session->alphaFrameMacroblocks);
-        }
-    }
+    free(session->primaryFrameBuffer);
+    free(session->primaryFrameMacroblocks);
+    free(session->alphaFrameBuffer);
+    free(session->alphaFrameMacroblocks);
     if (session->decoderCodec != NULL) {
-        freePredInfo(session->decoderCodec);
-        freeTileInfo(session->decoderCodec);
-        JxrDecoderResourceInitializerReleaseIo(session->decoderCodec);
-        FreeCodingContextDec(session->decoderCodec);
+        if (session->decoderPrimaryResourcesInitialized) {
+            freePredInfo(session->decoderCodec);
+            freeTileInfo(session->decoderCodec);
+            JxrDecoderResourceInitializerReleaseIo(session->decoderCodec);
+            FreeCodingContextDec(session->decoderCodec);
+        }
         if (session->decoderHasAlpha) free(session->decoderCodec->m_pNextSC);
         free(session->decoderCodec);
     }
     free(session->decoderIoHeader);
     if (session->encoderCodec != NULL) {
-        if (!session->usedFastTileExtraction) {
+        if (session->encoderOutputInitialized && !session->usedFastTileExtraction) {
             freePredInfo(session->encoderCodec);
             freeTileInfo(session->encoderCodec);
             StrIOEncTerm(session->encoderCodec);
-            free(session->tileQuantizers);
             FreeCodingContextEnc(session->encoderCodec);
         }
         free(session->encoderCodec);
     }
+    free(session->tileQuantizers);
     free(session->encoderIoHeader);
     memset(session, 0, sizeof(*session));
 }
