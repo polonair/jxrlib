@@ -47,19 +47,10 @@
 #include "JxrTranscodeRoiInitializer.h"
 #include "JxrTranscodeFrameBufferAllocator.h"
 #include "JxrTranscodeAlphaPlaneInitializer.h"
+#include "JxrTranscodeDecoderRuntimeInitializer.h"
 #include "JxrTranscodeTileExtractionDecision.h"
 
-EXTERN_C Void freePredInfo(CWMImageStrCodec *);
-
-EXTERN_C Int ReadWMIHeader(CWMImageInfo *, CWMIStrCodecParam *, CCoreParameters *);
-#include "JxrDecoderResourceInitializer.h"
-#include "JxrDecoderInputInitializer.h"
-
-EXTERN_C Void FreeCodingContextDec(CWMImageStrCodec *);
-
 EXTERN_C Int StrEncInit(CWMImageStrCodec *);
-EXTERN_C Void StrIOEncTerm(CWMImageStrCodec *);
-EXTERN_C Void FreeCodingContextEnc(CWMImageStrCodec *);
 EXTERN_C Int  encodeMB(CWMImageStrCodec *, Int, Int);
 EXTERN_C Int  writeIndexTableNull(CWMImageStrCodec *);
 
@@ -108,13 +99,14 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
     JxrTranscodeRoiInitializationResult roiInitialization;
     JxrTranscodeFrameBufferAllocation frameBuffers;
     JxrTranscodeAlphaPlaneInitializationResult alphaInitialization;
+    JxrTranscodeDecoderRuntimeState decoderRuntime;
     U8 * pIOHeaderDec, * pIOHeaderEnc;
     JxrTranscodeTileQuantizerState * pTileQPInfo = NULL;
     ORIENTATION oO = pParam->oOrientation;
     JxrTranscodeOrientationState orientation;
     size_t iAlphaPos = 0;
     size_t cUnit;
-    size_t i, mbLeft, mbRight, mbTop, mbBottom, mbWidth, mbHeight;
+    size_t mbLeft, mbRight, mbTop, mbBottom, mbWidth, mbHeight;
 
     if(pStreamIn == NULL || pStreamOut == NULL || pParam == NULL)
         return ICERR_ERROR;
@@ -131,29 +123,20 @@ Int WMPhotoTranscode(struct WMPStream * pStreamIn, struct WMPStream * pStreamOut
     pParam->bIgnoreOverlap = isTileExtraction(pSCDec, pParam);
 
     cUnit = decoderInitialization.coefficientUnit;
-    pSCDec->p1MBbuffer[0] = pMBBuf = (PixelI *)malloc(cUnit * sizeof(PixelI));
-    if(pMBBuf == NULL)
+    if(JxrTranscodeDecoderRuntimeInitializerAllocateMacroblockBuffer(pSCDec,
+        cUnit, &decoderRuntime) != ICERR_OK)
         return ICERR_ERROR;
-    pSCDec->p1MBbuffer[1] = pSCDec->p1MBbuffer[0] + 256;
-    for(i = 2; i < pSCDec->m_param.cNumChannels; i ++)
-        pSCDec->p1MBbuffer[i] = pSCDec->p1MBbuffer[i - 1] + (pSCDec->m_param.cfColorFormat == YUV_420 ? 64 : (pSCDec->m_param.cfColorFormat == YUV_422 ? 128 : 256));
+    pMBBuf = decoderRuntime.macroblockBuffer;
 
     if(JxrTranscodeAlphaPlaneInitializerInitializeDecoder(pSCDec, pParam,
         MBBufAlpha, &alphaInitialization) != ICERR_OK)
         return ICERR_ERROR;
     iAlphaPos = alphaInitialization.channelIndex;
 
-    pIOHeaderDec = (U8 *)malloc((PACKETLENGTH * 4 - 1) + PACKETLENGTH * 4 + sizeof(BitIOInfo));
-    if(pIOHeaderDec == NULL)
+    if(JxrTranscodeDecoderRuntimeInitializerInitializePrimaryInput(pSCDec,
+        &decoderRuntime) != ICERR_OK)
         return ICERR_ERROR;
-    memset(pIOHeaderDec, 0, (PACKETLENGTH * 4 - 1) + PACKETLENGTH * 4 + sizeof(BitIOInfo));
-    pSCDec->pIOHeader = (BitIOInfo *)((U8 *)ALIGNUP(pIOHeaderDec, PACKETLENGTH * 4) + PACKETLENGTH * 2);
-    
-    if(JxrDecoderInputInitializerInitialize(pSCDec) != ICERR_OK)
-        return ICERR_ERROR;
-
-    if(JxrDecoderResourceInitializerInitialize(pSCDec) != ICERR_OK)
-        return ICERR_ERROR;
+    pIOHeaderDec = decoderRuntime.ioHeaderAllocation;
 
     if(JxrTranscodeAlphaPlaneInitializerFinalizeDecoder(pSCDec) != ICERR_OK)
         return ICERR_ERROR;

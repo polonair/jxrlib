@@ -210,6 +210,7 @@
     <ClCompile Include="..\decode\JxrTranscodeRoiInitializer.c" />
     <ClCompile Include="..\decode\JxrTranscodeFrameBufferAllocator.c" />
     <ClCompile Include="..\decode\JxrTranscodeAlphaPlaneInitializer.c" />
+    <ClCompile Include="..\decode\JxrTranscodeDecoderRuntimeInitializer.c" />
     <ClCompile Include="..\decode\JxrTranscodeTileExtractionDecision.c" />
     <ClCompile Include="..\decode\JxrTranscodeRoiGeometry.c" />
     <ClCompile Include="..\decode\JxrTranscodeRoiTileLayout.c" />
