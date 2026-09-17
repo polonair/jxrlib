@@ -48,8 +48,8 @@ static Int JxrTranscodeMacroblockProcessingPipelineStoreOrEncode(
             pipeline->encoderPlanes.primaryCodec->cmbHeight;
 
         bufferRequest.primaryMacroblock = &pipeline->decoderPlanes.primaryCodec->MBInfo;
-        bufferRequest.primaryCoefficients = pipeline->macroblockBuffer;
-        bufferRequest.primaryCoefficientCount = pipeline->coefficientUnit;
+        bufferRequest.primaryCoefficients = pipeline->macroblockBuffers.primaryCoefficients;
+        bufferRequest.primaryCoefficientCount = pipeline->macroblockBuffers.primaryCoefficientCount;
         bufferRequest.primaryFrameMacroblocks = pipeline->primaryFrameMacroblocks;
         bufferRequest.primaryFrameMacroblockCount = macroblockCount;
         bufferRequest.primaryFrameCoefficients = pipeline->primaryFrameBuffer;
@@ -63,8 +63,8 @@ static Int JxrTranscodeMacroblockProcessingPipelineStoreOrEncode(
         bufferRequest.hasAlpha = pipeline->decoderPlanes.hasAlpha;
         if (bufferRequest.hasAlpha) {
             bufferRequest.alphaMacroblock = &pipeline->decoderPlanes.alphaCodec->MBInfo;
-            bufferRequest.alphaCoefficients = pipeline->alphaMacroblockBuffer;
-            bufferRequest.alphaCoefficientCount = 256;
+            bufferRequest.alphaCoefficients = pipeline->macroblockBuffers.alphaCoefficients;
+            bufferRequest.alphaCoefficientCount = pipeline->macroblockBuffers.alphaCoefficientCount;
             bufferRequest.alphaFrameMacroblocks = pipeline->alphaFrameMacroblocks;
             bufferRequest.alphaFrameMacroblockCount = macroblockCount;
             bufferRequest.alphaFrameCoefficients = pipeline->alphaFrameBuffer;
@@ -89,7 +89,7 @@ static Int JxrTranscodeMacroblockProcessingPipelineEncodeOriented(
     encoder.coefficientUnit = pipeline->coefficientUnit;
     encoder.macroblockCount = pipeline->encoderPlanes.primaryCodec->cmbWidth *
         pipeline->encoderPlanes.primaryCodec->cmbHeight;
-    encoder.destinationCoefficients = pipeline->macroblockBuffer;
+    encoder.destinationCoefficients = pipeline->macroblockBuffers.primaryCoefficients;
     encoder.orientation = pipeline->orientation;
     encoder.tileQuantizers = pipeline->tileQuantizers;
     encoder.tileQuantizerCount = pipeline->tileQuantizerCount;
@@ -98,7 +98,7 @@ static Int JxrTranscodeMacroblockProcessingPipelineEncodeOriented(
     if (encoder.hasAlpha) {
         encoder.alphaMacroblocks = pipeline->alphaFrameMacroblocks;
         encoder.alphaCoefficients = pipeline->alphaFrameBuffer;
-        encoder.alphaDestinationCoefficients = pipeline->alphaMacroblockBuffer;
+        encoder.alphaDestinationCoefficients = pipeline->macroblockBuffers.alphaCoefficients;
     }
     return JxrTranscodeOrientedMacroblockEncoderEncode(&encoder);
 }
@@ -108,7 +108,9 @@ Int JxrTranscodeMacroblockProcessingPipelineExecute(
 {
     if (pipeline == NULL || pipeline->decoderPlanes.primaryCodec == NULL ||
         pipeline->encoderPlanes.primaryCodec == NULL || pipeline->parameters == NULL ||
-        pipeline->macroblockBuffer == NULL || pipeline->orientation == NULL)
+        pipeline->macroblockBuffers.primaryCoefficients == NULL || pipeline->orientation == NULL)
+        return ICERR_ERROR;
+    if (pipeline->decoderPlanes.hasAlpha != pipeline->macroblockBuffers.hasAlpha)
         return ICERR_ERROR;
     if (pipeline->usedFastTileExtraction)
     {
@@ -136,11 +138,11 @@ Int JxrTranscodeMacroblockProcessingPipelineExecute(
             JxrTranscodeTileContextRequest contextRequest = {0};
             JxrTranscodeTileContextResult context;
 
-            memset(pipeline->macroblockBuffer, 0, sizeof(PixelI) *
-                pipeline->coefficientUnit);
+            memset(pipeline->macroblockBuffers.primaryCoefficients, 0, sizeof(PixelI) *
+                pipeline->macroblockBuffers.primaryCoefficientCount);
             if (pipeline->decoderPlanes.hasAlpha) {
-                memset(pipeline->decoderPlanes.alphaCodec->p1MBbuffer[0], 0,
-                    sizeof(PixelI) * 256);
+                memset(pipeline->macroblockBuffers.alphaCoefficients, 0,
+                    sizeof(PixelI) * pipeline->macroblockBuffers.alphaCoefficientCount);
                 pipeline->decoderPlanes.alphaCodec->cRow =
                     pipeline->decoderPlanes.primaryCodec->cRow;
                 pipeline->decoderPlanes.alphaCodec->cColumn =

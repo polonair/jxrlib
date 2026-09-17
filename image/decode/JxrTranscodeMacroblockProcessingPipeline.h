@@ -6,13 +6,13 @@
 #include "JxrTranscodeOrientationState.h"
 #include "JxrTranscodeTileQuantizerState.h"
 #include "JxrTranscodePlanePair.h"
+#include "JxrTranscodePlaneBuffers.h"
 
 typedef struct JxrTranscodeMacroblockProcessingPipeline {
     JxrTranscodePlanePair decoderPlanes;
     JxrTranscodePlanePair encoderPlanes;
     CWMTranscodingParam* parameters;
-    PixelI* macroblockBuffer;
-    PixelI* alphaMacroblockBuffer;
+    JxrTranscodePlaneBuffers macroblockBuffers;
     size_t coefficientUnit;
     size_t alphaChannelIndex;
     size_t macroblockLeft;

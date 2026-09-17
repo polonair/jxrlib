@@ -106,6 +106,7 @@
 #include "../image/decode/JxrTranscodeTileContextResolver.h"
 #include "../image/decode/JxrTranscodeTileQuantizerCapture.h"
 #include "../image/decode/JxrTranscodeDirectMacroblockEncoder.h"
+#include "../image/decode/JxrTranscodePlaneBuffers.h"
 #include "../image/decode/JxrTranscodeOrientedMacroblockBuffer.h"
 #include "../image/decode/JxrTranscodeOrientedMacroblockEncoder.h"
 #include "../image/decode/JxrTranscodeTileExtractionExecutor.h"
@@ -1116,6 +1117,23 @@ static int test_transcode_plane_pair_vectors(void)
     return JxrTranscodePlanePairResolveLegacy(&planes, &primaryCodec, FALSE) &&
         planes.primaryCodec == &primaryCodec && planes.alphaCodec == NULL &&
         !planes.hasAlpha;
+}
+
+static int test_transcode_plane_buffers_vectors(void)
+{
+    PixelI primary[4];
+    PixelI alpha[2];
+    JxrTranscodePlaneBuffers buffers;
+
+    if (JxrTranscodePlaneBuffersInitialize(NULL, primary, 4, NULL, 0, FALSE) ||
+        JxrTranscodePlaneBuffersInitialize(&buffers, NULL, 4, NULL, 0, FALSE) ||
+        JxrTranscodePlaneBuffersInitialize(&buffers, primary, 0, NULL, 0, FALSE) ||
+        JxrTranscodePlaneBuffersInitialize(&buffers, primary, 4, NULL, 0, TRUE))
+        return 0;
+    return JxrTranscodePlaneBuffersInitialize(&buffers, primary, 4, alpha, 2, TRUE) &&
+        buffers.primaryCoefficients == primary && buffers.primaryCoefficientCount == 4 &&
+        buffers.alphaCoefficients == alpha && buffers.alphaCoefficientCount == 2 &&
+        buffers.hasAlpha;
 }
 
 static int test_transcode_decoder_runtime_initializer_contract_vectors(void)
@@ -6131,6 +6149,7 @@ int main(int argc, char** argv)
         { "transcode_secondary_plane_setup_vectors", test_transcode_secondary_plane_setup_vectors },
         { "transcode_secondary_plane_link_vectors", test_transcode_secondary_plane_link_vectors },
         { "transcode_plane_pair_vectors", test_transcode_plane_pair_vectors },
+        { "transcode_plane_buffers_vectors", test_transcode_plane_buffers_vectors },
         { "transcode_decoder_runtime_initializer_contract_vectors", test_transcode_decoder_runtime_initializer_contract_vectors },
         { "transcode_macroblock_buffer_layout_vectors", test_transcode_macroblock_buffer_layout_vectors },
         { "transcode_bit_io_header_layout_vectors", test_transcode_bit_io_header_layout_vectors },
