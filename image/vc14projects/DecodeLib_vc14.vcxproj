@@ -214,6 +214,7 @@
     <ClCompile Include="..\decode\JxrTranscodeMacroblockBufferLayout.c" />
     <ClCompile Include="..\decode\JxrTranscodeBitIoHeaderLayout.c" />
     <ClCompile Include="..\decode\JxrTranscodeSecondaryPlaneSetup.c" />
+    <ClCompile Include="..\decode\JxrTranscodeSecondaryPlaneLink.c" />
     <ClCompile Include="..\decode\JxrTranscodeEncoderOutputInitializer.c" />
     <ClCompile Include="..\decode\JxrTranscodeMacroblockProcessingPipeline.c" />
     <ClCompile Include="..\decode\JxrTranscodeSessionRunner.c" />

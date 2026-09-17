@@ -120,6 +120,7 @@
 #include "../image/decode/JxrTranscodeMacroblockBufferLayout.h"
 #include "../image/decode/JxrTranscodeBitIoHeaderLayout.h"
 #include "../image/decode/JxrTranscodeSecondaryPlaneSetup.h"
+#include "../image/decode/JxrTranscodeSecondaryPlaneLink.h"
 #include "../image/decode/JxrTranscodeEncoderOutputInitializer.h"
 #include "../image/decode/JxrTranscodeMacroblockProcessingPipeline.h"
 #include "../image/decode/JxrTranscodeSessionRunner.h"
@@ -971,6 +972,7 @@ static int test_transcode_alpha_plane_initializer_contract_vectors(void)
 {
     CWMImageStrCodec decoderCodec;
     CWMImageStrCodec encoderCodec;
+    CWMImageStrCodec invalidDecoderCodec;
     CWMTranscodingParam parameters;
     JxrTranscodeAlphaPlaneInitializationResult result;
 
@@ -987,10 +989,18 @@ static int test_transcode_alpha_plane_initializer_contract_vectors(void)
         JxrTranscodeAlphaPlaneInitializerInitializeEncoder(&decoderCodec,
             &encoderCodec, &parameters) != ICERR_OK || encoderCodec.m_pNextSC != NULL)
         return 0;
-    return JxrTranscodeAlphaPlaneInitializerInitializeDecoder(NULL, &parameters,
-        NULL, &result) == ICERR_ERROR &&
+    if (JxrTranscodeAlphaPlaneInitializerInitializeDecoder(NULL, &parameters,
+        NULL, &result) != ICERR_ERROR ||
         JxrTranscodeAlphaPlaneInitializerInitializeEncoder(NULL, &encoderCodec,
-            &parameters) == ICERR_ERROR;
+            &parameters) != ICERR_ERROR)
+        return 0;
+    memset(&invalidDecoderCodec, 0, sizeof(invalidDecoderCodec));
+    invalidDecoderCodec.m_param.bAlphaChannel = TRUE;
+    invalidDecoderCodec.m_param.cNumChannels = 1;
+    parameters.uAlphaMode = 1;
+    return JxrTranscodeAlphaPlaneInitializerInitializeDecoder(&invalidDecoderCodec,
+        &parameters, (PixelI*)&decoderCodec, &result) == ICERR_ERROR &&
+        invalidDecoderCodec.m_pNextSC == NULL;
 }
 
 static int test_transcode_secondary_plane_setup_vectors(void)
@@ -1034,12 +1044,37 @@ static int test_transcode_secondary_plane_setup_vectors(void)
         !secondaryCodec->m_bUVResolutionChange || !secondaryCodec->bTileExtraction ||
         !secondaryCodec->bUseHardTileBoundaries || secondaryCodec->cmbWidth != 2 ||
         secondaryCodec->cmbHeight != 3 || secondaryCodec->cbChannel != sizeof(PixelI) ||
-        !secondaryCodec->m_bSecondary || secondaryCodec->m_pNextSC != &primaryCodec ||
+        !secondaryCodec->m_bSecondary || secondaryCodec->m_pNextSC != NULL ||
         secondaryCodec->pTile != NULL || secondaryCodec->p1MBbuffer[0] != NULL) {
         free(secondaryCodec);
         return 0;
     }
     free(secondaryCodec);
+    return 1;
+}
+
+static int test_transcode_secondary_plane_link_vectors(void)
+{
+    CWMImageStrCodec primaryCodec;
+    CWMImageStrCodec* secondaryCodec;
+    JxrTranscodeSecondaryPlaneLink link;
+
+    memset(&primaryCodec, 0, sizeof(primaryCodec));
+    secondaryCodec = (CWMImageStrCodec*)calloc(1, sizeof(CWMImageStrCodec));
+    if (secondaryCodec == NULL) return 0;
+    JxrTranscodeSecondaryPlaneLinkInitialize(&link);
+    if (!JxrTranscodeSecondaryPlaneLinkAttach(&link, &primaryCodec,
+        secondaryCodec) || primaryCodec.m_pNextSC != secondaryCodec ||
+        secondaryCodec->m_pNextSC != &primaryCodec ||
+        JxrTranscodeSecondaryPlaneLinkAttach(&link, &primaryCodec, secondaryCodec)) {
+        JxrTranscodeSecondaryPlaneLinkDetachAndRelease(&link);
+        return 0;
+    }
+    JxrTranscodeSecondaryPlaneLinkDetachAndRelease(&link);
+    if (primaryCodec.m_pNextSC != NULL || link.primaryCodec != NULL ||
+        link.secondaryCodec != NULL)
+        return 0;
+    JxrTranscodeSecondaryPlaneLinkReleaseAttached(&primaryCodec);
     return 1;
 }
 
@@ -6054,6 +6089,7 @@ int main(int argc, char** argv)
         { "transcode_frame_buffer_allocator_contract_vectors", test_transcode_frame_buffer_allocator_contract_vectors },
         { "transcode_alpha_plane_initializer_contract_vectors", test_transcode_alpha_plane_initializer_contract_vectors },
         { "transcode_secondary_plane_setup_vectors", test_transcode_secondary_plane_setup_vectors },
+        { "transcode_secondary_plane_link_vectors", test_transcode_secondary_plane_link_vectors },
         { "transcode_decoder_runtime_initializer_contract_vectors", test_transcode_decoder_runtime_initializer_contract_vectors },
         { "transcode_macroblock_buffer_layout_vectors", test_transcode_macroblock_buffer_layout_vectors },
         { "transcode_bit_io_header_layout_vectors", test_transcode_bit_io_header_layout_vectors },

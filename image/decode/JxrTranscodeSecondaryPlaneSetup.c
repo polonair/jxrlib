@@ -40,7 +40,6 @@ Int JxrTranscodeSecondaryPlaneSetupCreate(CWMImageStrCodec* primaryCodec,
     secondary->WMISCP.cChannel = 1;
     secondary->m_param.cNumChannels = 1;
     secondary->m_bSecondary = TRUE;
-    secondary->m_pNextSC = primaryCodec;
     *secondaryCodec = secondary;
     return ICERR_OK;
 }

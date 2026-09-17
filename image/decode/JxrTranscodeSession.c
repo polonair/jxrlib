@@ -2,6 +2,7 @@
 
 #include "decode.h"
 #include "JxrDecoderResourceInitializer.h"
+#include "JxrTranscodeSecondaryPlaneLink.h"
 #include "../encode/encode.h"
 
 EXTERN_C Void StrIOEncTerm(CWMImageStrCodec* codec);
@@ -21,7 +22,8 @@ Void JxrTranscodeSessionRelease(JxrTranscodeSession* session)
             JxrDecoderResourceInitializerReleaseIo(session->decoderCodec);
             FreeCodingContextDec(session->decoderCodec);
         }
-        if (session->decoderHasAlpha) free(session->decoderCodec->m_pNextSC);
+        if (session->decoderHasAlpha)
+            JxrTranscodeSecondaryPlaneLinkReleaseAttached(session->decoderCodec);
         free(session->decoderCodec);
     }
     free(session->decoderIoHeader);
@@ -32,6 +34,7 @@ Void JxrTranscodeSessionRelease(JxrTranscodeSession* session)
             StrIOEncTerm(session->encoderCodec);
             FreeCodingContextEnc(session->encoderCodec);
         }
+        JxrTranscodeSecondaryPlaneLinkReleaseAttached(session->encoderCodec);
         free(session->encoderCodec);
     }
     free(session->tileQuantizers);
