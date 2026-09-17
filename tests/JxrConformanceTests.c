@@ -118,6 +118,7 @@
 #include "../image/decode/JxrTranscodeAlphaPlaneInitializer.h"
 #include "../image/decode/JxrTranscodeDecoderRuntimeInitializer.h"
 #include "../image/decode/JxrTranscodeMacroblockBufferLayout.h"
+#include "../image/decode/JxrTranscodeBitIoHeaderLayout.h"
 #include "../image/decode/JxrTranscodeEncoderOutputInitializer.h"
 #include "../image/decode/JxrTranscodeMacroblockProcessingPipeline.h"
 #include "../image/decode/JxrTranscodeSessionRunner.h"
@@ -1051,6 +1052,45 @@ static int test_transcode_macroblock_buffer_layout_vectors(void)
         codec.p1MBbuffer[2] == coefficients + 320 &&
         !JxrTranscodeMacroblockBufferLayoutBindCompatibilityPointers(NULL,
             coefficients, &layout);
+}
+
+static int test_transcode_bit_io_header_layout_vectors(void)
+{
+    JxrTranscodeBitIoHeaderLayout layout;
+    CWMImageStrCodec codec;
+    U8* allocation;
+    size_t expectedAllocationBytes = (PACKETLENGTH * 4 - 1) +
+        (PACKETLENGTH * 4) + sizeof(BitIOInfo);
+
+    memset(&codec, 0, sizeof(codec));
+    if (!JxrTranscodeBitIoHeaderLayoutInitialize(&layout, 0,
+        sizeof(BitIOInfo)) || layout.allocationBytes != expectedAllocationBytes ||
+        layout.headerBitIoOffset != PACKETLENGTH * 2)
+        return 0;
+    if (!JxrTranscodeBitIoHeaderLayoutInitialize(&layout, 1,
+        sizeof(BitIOInfo)) || layout.headerBitIoOffset !=
+        (PACKETLENGTH * 4 - 1) + PACKETLENGTH * 2)
+        return 0;
+    if (JxrTranscodeBitIoHeaderLayoutInitialize(NULL, 0, sizeof(BitIOInfo)) ||
+        JxrTranscodeBitIoHeaderLayoutInitialize(&layout, 0, 0))
+        return 0;
+    allocation = (U8*)malloc(expectedAllocationBytes);
+    if (allocation == NULL) return 0;
+    if (!JxrTranscodeBitIoHeaderLayoutInitialize(&layout,
+        (UINTPTR_T)allocation, sizeof(BitIOInfo)) ||
+        !JxrTranscodeBitIoHeaderLayoutBindCompatibilityPointer(&codec,
+            allocation, &layout)) {
+        free(allocation);
+        return 0;
+    }
+    if ((U8*)codec.pIOHeader != allocation + layout.headerBitIoOffset ||
+        JxrTranscodeBitIoHeaderLayoutBindCompatibilityPointer(NULL,
+            allocation, &layout)) {
+        free(allocation);
+        return 0;
+    }
+    free(allocation);
+    return 1;
 }
 
 static int test_transcode_encoder_output_initializer_contract_vectors(void)
@@ -5964,6 +6004,7 @@ int main(int argc, char** argv)
         { "transcode_alpha_plane_initializer_contract_vectors", test_transcode_alpha_plane_initializer_contract_vectors },
         { "transcode_decoder_runtime_initializer_contract_vectors", test_transcode_decoder_runtime_initializer_contract_vectors },
         { "transcode_macroblock_buffer_layout_vectors", test_transcode_macroblock_buffer_layout_vectors },
+        { "transcode_bit_io_header_layout_vectors", test_transcode_bit_io_header_layout_vectors },
         { "transcode_encoder_output_initializer_contract_vectors", test_transcode_encoder_output_initializer_contract_vectors },
         { "transcode_macroblock_processing_pipeline_contract_vectors", test_transcode_macroblock_processing_pipeline_contract_vectors },
         { "transcode_session_runner_contract_vectors", test_transcode_session_runner_contract_vectors },

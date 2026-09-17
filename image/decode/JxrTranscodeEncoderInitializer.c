@@ -1,17 +1,26 @@
 #include "JxrTranscodeEncoderInitializer.h"
 #include "JxrTranscodeSessionFactory.h"
+#include "JxrTranscodeBitIoHeaderLayout.h"
 
 static Int JxrTranscodeEncoderInitializerAllocateIoHeader(
     CWMImageStrCodec* encoderCodec, U8** ioHeaderAllocation)
 {
-    size_t allocationSize = (PACKETLENGTH * 4 - 1) + PACKETLENGTH * 4 +
-        sizeof(BitIOInfo);
-    U8* allocation = (U8*)malloc(allocationSize);
+    JxrTranscodeBitIoHeaderLayout ioHeaderLayout;
+    U8* allocation;
 
+    if (encoderCodec == NULL || ioHeaderAllocation == NULL ||
+        !JxrTranscodeBitIoHeaderLayoutInitialize(&ioHeaderLayout, 0,
+            sizeof(BitIOInfo))) return ICERR_ERROR;
+    allocation = (U8*)malloc(ioHeaderLayout.allocationBytes);
     if (allocation == NULL) return ICERR_ERROR;
-    memset(allocation, 0, allocationSize);
-    encoderCodec->pIOHeader = (BitIOInfo*)((U8*)ALIGNUP(allocation,
-        PACKETLENGTH * 4) + PACKETLENGTH * 2);
+    if (!JxrTranscodeBitIoHeaderLayoutInitialize(&ioHeaderLayout,
+        (UINTPTR_T)allocation, sizeof(BitIOInfo)) ||
+        !JxrTranscodeBitIoHeaderLayoutBindCompatibilityPointer(encoderCodec,
+            allocation, &ioHeaderLayout)) {
+        free(allocation);
+        return ICERR_ERROR;
+    }
+    memset(allocation, 0, ioHeaderLayout.allocationBytes);
     *ioHeaderAllocation = allocation;
     return ICERR_OK;
 }
