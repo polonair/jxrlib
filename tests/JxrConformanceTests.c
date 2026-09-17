@@ -119,6 +119,7 @@
 #include "../image/decode/JxrTranscodeDecoderRuntimeInitializer.h"
 #include "../image/decode/JxrTranscodeMacroblockBufferLayout.h"
 #include "../image/decode/JxrTranscodeBitIoHeaderLayout.h"
+#include "../image/decode/JxrTranscodeSecondaryPlaneSetup.h"
 #include "../image/decode/JxrTranscodeEncoderOutputInitializer.h"
 #include "../image/decode/JxrTranscodeMacroblockProcessingPipeline.h"
 #include "../image/decode/JxrTranscodeSessionRunner.h"
@@ -990,6 +991,56 @@ static int test_transcode_alpha_plane_initializer_contract_vectors(void)
         NULL, &result) == ICERR_ERROR &&
         JxrTranscodeAlphaPlaneInitializerInitializeEncoder(NULL, &encoderCodec,
             &parameters) == ICERR_ERROR;
+}
+
+static int test_transcode_secondary_plane_setup_vectors(void)
+{
+    CWMImageStrCodec primaryCodec;
+    CWMImageStrCodec* secondaryCodec = NULL;
+    CWMDecoderParameters decoderParameters;
+
+    memset(&primaryCodec, 0, sizeof(primaryCodec));
+    memset(&decoderParameters, 0, sizeof(decoderParameters));
+    primaryCodec.WMII.cfColorFormat = YUV_444;
+    primaryCodec.WMII.cWidth = 31;
+    primaryCodec.WMISCP.cfColorFormat = YUV_444;
+    primaryCodec.WMISCP.cChannel = 3;
+    primaryCodec.WMIBI.cbStride = 99;
+    primaryCodec.m_param.cfColorFormat = YUV_444;
+    primaryCodec.m_param.cNumChannels = 3;
+    primaryCodec.m_Dparam = &decoderParameters;
+    primaryCodec.cSB = 4;
+    primaryCodec.m_bUVResolutionChange = TRUE;
+    primaryCodec.bTileExtraction = TRUE;
+    primaryCodec.bUseHardTileBoundaries = TRUE;
+    primaryCodec.cmbWidth = 2;
+    primaryCodec.cmbHeight = 3;
+    primaryCodec.cbChannel = sizeof(PixelI);
+    primaryCodec.pTile = (CWMITile*)1;
+    primaryCodec.p1MBbuffer[0] = (PixelI*)1;
+    if (JxrTranscodeSecondaryPlaneSetupCreate(NULL, &secondaryCodec) != ICERR_ERROR ||
+        secondaryCodec != NULL || JxrTranscodeSecondaryPlaneSetupCreate(&primaryCodec,
+            NULL) != ICERR_ERROR ||
+        JxrTranscodeSecondaryPlaneSetupCreate(&primaryCodec, &secondaryCodec) != ICERR_OK)
+        return 0;
+    if (secondaryCodec->WMII.cfColorFormat != Y_ONLY ||
+        secondaryCodec->WMII.cWidth != 31 ||
+        secondaryCodec->WMISCP.cfColorFormat != Y_ONLY ||
+        secondaryCodec->WMISCP.cChannel != 1 ||
+        secondaryCodec->WMIBI.cbStride != 99 ||
+        secondaryCodec->m_param.cfColorFormat != Y_ONLY ||
+        secondaryCodec->m_param.cNumChannels != 1 ||
+        secondaryCodec->m_Dparam != &decoderParameters || secondaryCodec->cSB != 4 ||
+        !secondaryCodec->m_bUVResolutionChange || !secondaryCodec->bTileExtraction ||
+        !secondaryCodec->bUseHardTileBoundaries || secondaryCodec->cmbWidth != 2 ||
+        secondaryCodec->cmbHeight != 3 || secondaryCodec->cbChannel != sizeof(PixelI) ||
+        !secondaryCodec->m_bSecondary || secondaryCodec->m_pNextSC != &primaryCodec ||
+        secondaryCodec->pTile != NULL || secondaryCodec->p1MBbuffer[0] != NULL) {
+        free(secondaryCodec);
+        return 0;
+    }
+    free(secondaryCodec);
+    return 1;
 }
 
 static int test_transcode_decoder_runtime_initializer_contract_vectors(void)
@@ -6002,6 +6053,7 @@ int main(int argc, char** argv)
         { "transcode_roi_initializer_contract_vectors", test_transcode_roi_initializer_contract_vectors },
         { "transcode_frame_buffer_allocator_contract_vectors", test_transcode_frame_buffer_allocator_contract_vectors },
         { "transcode_alpha_plane_initializer_contract_vectors", test_transcode_alpha_plane_initializer_contract_vectors },
+        { "transcode_secondary_plane_setup_vectors", test_transcode_secondary_plane_setup_vectors },
         { "transcode_decoder_runtime_initializer_contract_vectors", test_transcode_decoder_runtime_initializer_contract_vectors },
         { "transcode_macroblock_buffer_layout_vectors", test_transcode_macroblock_buffer_layout_vectors },
         { "transcode_bit_io_header_layout_vectors", test_transcode_bit_io_header_layout_vectors },
