@@ -861,12 +861,17 @@ static int test_transcode_oriented_macroblock_encoder_contract_vectors(void)
 
 static int test_transcode_tile_extraction_executor_vectors(void)
 {
+    JxrTranscodeTileExtractionRequest request;
+
+    memset(&request, 0, sizeof(request));
     if (JxrTranscodeTileExtractionExecutorPacketCount(SPATIAL, SB_ALL) != 1 ||
         JxrTranscodeTileExtractionExecutorPacketCount(FREQUENCY, SB_DC_ONLY) != 1 ||
         JxrTranscodeTileExtractionExecutorPacketCount(FREQUENCY, SB_NO_HIGHPASS) != 2 ||
         JxrTranscodeTileExtractionExecutorPacketCount(FREQUENCY, SB_NO_FLEXBITS) != 3 ||
         JxrTranscodeTileExtractionExecutorPacketCount(FREQUENCY, SB_ALL) != 4) return 0;
-    return JxrTranscodeTileExtractionExecutorContainsTile(2, 3, 2, 5, 3, 7) &&
+    return JxrTranscodeTileExtractionExecutorExecute(NULL) == ICERR_ERROR &&
+        JxrTranscodeTileExtractionExecutorExecute(&request) == ICERR_ERROR &&
+        JxrTranscodeTileExtractionExecutorContainsTile(2, 3, 2, 5, 3, 7) &&
         !JxrTranscodeTileExtractionExecutorContainsTile(5, 3, 2, 5, 3, 7) &&
         !JxrTranscodeTileExtractionExecutorContainsTile(2, 7, 2, 5, 3, 7);
 }

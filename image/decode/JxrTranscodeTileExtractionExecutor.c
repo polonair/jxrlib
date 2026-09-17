@@ -22,10 +22,11 @@ Bool JxrTranscodeTileExtractionExecutorContainsTile(U32 tileColumn, U32 tileRow,
         tileRow >= macroblockTop && tileRow < macroblockBottom;
 }
 
-Int JxrTranscodeTileExtractionExecutorExecute(CWMImageStrCodec* sourceCodec,
-    CWMImageStrCodec* destinationCodec, size_t macroblockLeft,
-    size_t macroblockRight, size_t macroblockTop, size_t macroblockBottom)
+Int JxrTranscodeTileExtractionExecutorExecute(
+    const JxrTranscodeTileExtractionRequest* request)
 {
+    CWMImageStrCodec* sourceCodec;
+    CWMImageStrCodec* destinationCodec;
     size_t sourcePacketCount;
     size_t destinationPacketCount;
     size_t sourceTileColumnCount;
@@ -37,10 +38,18 @@ Int JxrTranscodeTileExtractionExecutorExecute(CWMImageStrCodec* sourceCodec,
     size_t packet;
     size_t outputIndex = 0;
 
+    if (request == NULL) return ICERR_ERROR;
+    sourceCodec = request->sourcePlanes.primaryCodec;
+    destinationCodec = request->destinationPlanes.primaryCodec;
     if (sourceCodec == NULL || destinationCodec == NULL ||
+        request->sourcePlanes.hasAlpha != request->destinationPlanes.hasAlpha ||
+        (request->sourcePlanes.hasAlpha &&
+            (request->sourcePlanes.alphaCodec == NULL ||
+             request->destinationPlanes.alphaCodec == NULL)) ||
         sourceCodec->pIndexTable == NULL || sourceCodec->WMISCP.pWStream == NULL ||
-        destinationCodec->WMISCP.pWStream == NULL || macroblockLeft > macroblockRight ||
-        macroblockTop > macroblockBottom) return ICERR_ERROR;
+        destinationCodec->WMISCP.pWStream == NULL ||
+        request->macroblockLeft > request->macroblockRight ||
+        request->macroblockTop > request->macroblockBottom) return ICERR_ERROR;
     sourcePacketCount = JxrTranscodeTileExtractionExecutorPacketCount(
         sourceCodec->WMISCP.bfBitstreamFormat, sourceCodec->WMISCP.sbSubband);
     destinationPacketCount = JxrTranscodeTileExtractionExecutorPacketCount(
@@ -64,7 +73,8 @@ Int JxrTranscodeTileExtractionExecutorExecute(CWMImageStrCodec* sourceCodec,
             ++tileColumn)
             if (JxrTranscodeTileExtractionExecutorContainsTile(
                 sourceCodec->WMISCP.uiTileX[tileColumn], sourceCodec->WMISCP.uiTileY[tileRow],
-                macroblockLeft, macroblockRight, macroblockTop, macroblockBottom))
+                request->macroblockLeft, request->macroblockRight,
+                request->macroblockTop, request->macroblockBottom))
                 for (packet = 0; packet < destinationPacketCount; ++packet, ++outputIndex)
                     destinationCodec->pIndexTable[outputIndex] =
                         sourceCodec->pIndexTable[(tileRow * sourceTileColumnCount + tileColumn) *
@@ -88,7 +98,8 @@ Int JxrTranscodeTileExtractionExecutorExecute(CWMImageStrCodec* sourceCodec,
             ++tileColumn)
             if (JxrTranscodeTileExtractionExecutorContainsTile(
                 sourceCodec->WMISCP.uiTileX[tileColumn], sourceCodec->WMISCP.uiTileY[tileRow],
-                macroblockLeft, macroblockRight, macroblockTop, macroblockBottom))
+                request->macroblockLeft, request->macroblockRight,
+                request->macroblockTop, request->macroblockBottom))
                 for (packet = 0; packet < destinationPacketCount; ++packet) {
                     sourceCodec->WMISCP.pWStream->SetPos(sourceCodec->WMISCP.pWStream,
                         sourceCodec->pIndexTable[(tileRow * sourceTileColumnCount + tileColumn) *

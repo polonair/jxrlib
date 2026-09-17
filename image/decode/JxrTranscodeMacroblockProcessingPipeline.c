@@ -111,9 +111,17 @@ Int JxrTranscodeMacroblockProcessingPipelineExecute(
         pipeline->macroblockBuffer == NULL || pipeline->orientation == NULL)
         return ICERR_ERROR;
     if (pipeline->usedFastTileExtraction)
-        return JxrTranscodeTileExtractionExecutorExecute(pipeline->decoderPlanes.primaryCodec,
-            pipeline->encoderPlanes.primaryCodec, pipeline->macroblockLeft, pipeline->macroblockRight,
-            pipeline->macroblockTop, pipeline->macroblockBottom);
+    {
+        JxrTranscodeTileExtractionRequest request = {0};
+
+        request.sourcePlanes = pipeline->decoderPlanes;
+        request.destinationPlanes = pipeline->encoderPlanes;
+        request.macroblockLeft = pipeline->macroblockLeft;
+        request.macroblockRight = pipeline->macroblockRight;
+        request.macroblockTop = pipeline->macroblockTop;
+        request.macroblockBottom = pipeline->macroblockBottom;
+        return JxrTranscodeTileExtractionExecutorExecute(&request);
+    }
     if (writeIndexTableNull(pipeline->encoderPlanes.primaryCodec) != ICERR_OK)
         return ICERR_ERROR;
 
