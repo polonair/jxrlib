@@ -31,25 +31,19 @@ static Int JxrTranscodeMacroblockDecoderDecodePlane(CWMImageStrCodec* codec,
     return ICERR_OK;
 }
 
-Int JxrTranscodeMacroblockDecoderDecode(CWMImageStrCodec* primaryCodec,
+Int JxrTranscodeMacroblockDecoderDecode(const JxrTranscodePlanePair* planes,
     Int macroblockColumn, Int macroblockRow)
 {
-    CWMImageStrCodec* codec;
-    size_t planeCount;
-    size_t planeIndex;
-
-    if (primaryCodec == NULL) return ICERR_ERROR;
-    codec = primaryCodec;
-    planeCount = primaryCodec->m_param.bAlphaChannel ? 2 : 1;
-    for (planeIndex = 0; planeIndex < planeCount; ++planeIndex) {
-        if (planeIndex == 0 && planeCount == 2) {
-            if (primaryCodec->m_pNextSC == NULL) return ICERR_ERROR;
-            primaryCodec->m_pNextSC->cTileColumn = primaryCodec->cTileColumn;
-            primaryCodec->m_pNextSC->cTileRow = primaryCodec->cTileRow;
-        }
-        if (JxrTranscodeMacroblockDecoderDecodePlane(codec, macroblockColumn,
-            macroblockRow) != ICERR_OK) return ICERR_ERROR;
-        codec = codec->m_pNextSC;
+    if (planes == NULL || planes->primaryCodec == NULL ||
+        (planes->hasAlpha && planes->alphaCodec == NULL)) return ICERR_ERROR;
+    if (planes->hasAlpha) {
+        planes->alphaCodec->cTileColumn = planes->primaryCodec->cTileColumn;
+        planes->alphaCodec->cTileRow = planes->primaryCodec->cTileRow;
     }
+    if (JxrTranscodeMacroblockDecoderDecodePlane(planes->primaryCodec,
+        macroblockColumn, macroblockRow) != ICERR_OK) return ICERR_ERROR;
+    if (planes->hasAlpha && JxrTranscodeMacroblockDecoderDecodePlane(
+        planes->alphaCodec, macroblockColumn, macroblockRow) != ICERR_OK)
+        return ICERR_ERROR;
     return ICERR_OK;
 }

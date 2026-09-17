@@ -5,10 +5,11 @@
 #include "strcodec.h"
 #include "JxrTranscodeOrientationState.h"
 #include "JxrTranscodeTileQuantizerState.h"
+#include "JxrTranscodePlanePair.h"
 
 typedef struct JxrTranscodeMacroblockProcessingPipeline {
-    CWMImageStrCodec* decoderCodec;
-    CWMImageStrCodec* encoderCodec;
+    JxrTranscodePlanePair decoderPlanes;
+    JxrTranscodePlanePair encoderPlanes;
     CWMTranscodingParam* parameters;
     PixelI* macroblockBuffer;
     PixelI* alphaMacroblockBuffer;

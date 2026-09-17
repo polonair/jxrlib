@@ -7,6 +7,7 @@
 typedef struct JxrTranscodeOrientedMacroblockEncoderRequest {
     CWMImageStrCodec* destinationCodec;
     const CWMImageStrCodec* sourceAlphaCodec;
+    CWMImageStrCodec* destinationAlphaCodec;
     CWMIMBInfo* primaryMacroblocks;
     PixelI* primaryCoefficients;
     size_t coefficientUnit;

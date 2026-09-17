@@ -720,11 +720,15 @@ static int test_transcode_macroblock_transform_vectors(void)
 static int test_transcode_macroblock_decoder_contract_vectors(void)
 {
     CWMImageStrCodec codec;
+    JxrTranscodePlanePair planes;
 
     memset(&codec, 0, sizeof(codec));
     if (JxrTranscodeMacroblockDecoderDecode(NULL, 0, 0) != ICERR_ERROR) return 0;
+    memset(&planes, 0, sizeof(planes));
+    planes.primaryCodec = &codec;
     codec.m_param.bAlphaChannel = TRUE;
-    return JxrTranscodeMacroblockDecoderDecode(&codec, 0, 0) == ICERR_ERROR;
+    planes.hasAlpha = TRUE;
+    return JxrTranscodeMacroblockDecoderDecode(&planes, 0, 0) == ICERR_ERROR;
 }
 
 static int test_transcode_tile_context_resolver_vectors(void)
@@ -776,15 +780,23 @@ static int test_transcode_direct_macroblock_encoder_contract_vectors(void)
 {
     CWMImageStrCodec sourceCodec;
     CWMImageStrCodec destinationCodec;
+    JxrTranscodePlanePair sourcePlanes;
+    JxrTranscodePlanePair destinationPlanes;
     JxrTranscodeTileQuantizerState quantizers;
 
     memset(&sourceCodec, 0, sizeof(sourceCodec));
     memset(&destinationCodec, 0, sizeof(destinationCodec));
+    memset(&sourcePlanes, 0, sizeof(sourcePlanes));
+    memset(&destinationPlanes, 0, sizeof(destinationPlanes));
+    sourcePlanes.primaryCodec = &sourceCodec;
+    destinationPlanes.primaryCodec = &destinationCodec;
     memset(&quantizers, 0, sizeof(quantizers));
-    if (JxrTranscodeDirectMacroblockEncoderEncode(NULL, &destinationCodec, 0, 0,
-        0, 0, &quantizers, FALSE) != ICERR_ERROR) return 0;
-    return JxrTranscodeDirectMacroblockEncoderEncode(&sourceCodec, &destinationCodec,
-        0, 0, 0, 0, &quantizers, TRUE) == ICERR_ERROR;
+    if (JxrTranscodeDirectMacroblockEncoderEncode(NULL, &destinationPlanes, 0, 0,
+        0, 0, &quantizers) != ICERR_ERROR) return 0;
+    sourcePlanes.hasAlpha = TRUE;
+    destinationPlanes.hasAlpha = TRUE;
+    return JxrTranscodeDirectMacroblockEncoderEncode(&sourcePlanes, &destinationPlanes,
+        0, 0, 0, 0, &quantizers) == ICERR_ERROR;
 }
 
 static int test_transcode_oriented_macroblock_buffer_vectors(void)
@@ -1076,6 +1088,29 @@ static int test_transcode_secondary_plane_link_vectors(void)
         return 0;
     JxrTranscodeSecondaryPlaneLinkReleaseAttached(&primaryCodec);
     return 1;
+}
+
+static int test_transcode_plane_pair_vectors(void)
+{
+    CWMImageStrCodec primaryCodec;
+    CWMImageStrCodec alphaCodec;
+    JxrTranscodePlanePair planes;
+
+    memset(&primaryCodec, 0, sizeof(primaryCodec));
+    memset(&alphaCodec, 0, sizeof(alphaCodec));
+    memset(&planes, 0, sizeof(planes));
+    if (JxrTranscodePlanePairResolveLegacy(NULL, &primaryCodec, FALSE) ||
+        JxrTranscodePlanePairResolveLegacy(&planes, NULL, FALSE) ||
+        JxrTranscodePlanePairResolveLegacy(&planes, &primaryCodec, TRUE))
+        return 0;
+    primaryCodec.m_pNextSC = &alphaCodec;
+    if (!JxrTranscodePlanePairResolveLegacy(&planes, &primaryCodec, TRUE) ||
+        planes.primaryCodec != &primaryCodec || planes.alphaCodec != &alphaCodec ||
+        !planes.hasAlpha)
+        return 0;
+    return JxrTranscodePlanePairResolveLegacy(&planes, &primaryCodec, FALSE) &&
+        planes.primaryCodec == &primaryCodec && planes.alphaCodec == NULL &&
+        !planes.hasAlpha;
 }
 
 static int test_transcode_decoder_runtime_initializer_contract_vectors(void)
@@ -6090,6 +6125,7 @@ int main(int argc, char** argv)
         { "transcode_alpha_plane_initializer_contract_vectors", test_transcode_alpha_plane_initializer_contract_vectors },
         { "transcode_secondary_plane_setup_vectors", test_transcode_secondary_plane_setup_vectors },
         { "transcode_secondary_plane_link_vectors", test_transcode_secondary_plane_link_vectors },
+        { "transcode_plane_pair_vectors", test_transcode_plane_pair_vectors },
         { "transcode_decoder_runtime_initializer_contract_vectors", test_transcode_decoder_runtime_initializer_contract_vectors },
         { "transcode_macroblock_buffer_layout_vectors", test_transcode_macroblock_buffer_layout_vectors },
         { "transcode_bit_io_header_layout_vectors", test_transcode_bit_io_header_layout_vectors },

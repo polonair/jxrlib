@@ -14,6 +14,7 @@
 #include "JxrTranscodeEncoderOutputInitializer.h"
 #include "JxrTranscodeMacroblockProcessingPipeline.h"
 #include "JxrTranscodeTileExtractionDecision.h"
+#include "JxrTranscodePlanePair.h"
 
 static Bool JxrTranscodeSessionRunnerCanUseFastTileExtraction(
     CWMImageStrCodec* decoderCodec, CWMTranscodingParam* parameters)
@@ -137,8 +138,11 @@ Int JxrTranscodeSessionRunnerRun(struct WMPStream* inputStream,
     {
         JxrTranscodeMacroblockProcessingPipeline pipeline = {0};
 
-        pipeline.decoderCodec = session.decoderCodec;
-        pipeline.encoderCodec = session.encoderCodec;
+        if (!JxrTranscodePlanePairResolveLegacy(&pipeline.decoderPlanes,
+            session.decoderCodec, parameters->uAlphaMode > 0) ||
+            !JxrTranscodePlanePairResolveLegacy(&pipeline.encoderPlanes,
+                session.encoderCodec, parameters->uAlphaMode > 0))
+            goto cleanup;
         pipeline.parameters = parameters;
         pipeline.macroblockBuffer = session.macroblockBuffer;
         pipeline.alphaMacroblockBuffer = alphaMacroblockBuffer;

@@ -3,14 +3,24 @@
 #include "../encode/encode.h"
 #include "JxrTranscodeTileHeaderEmitter.h"
 
-Int JxrTranscodeDirectMacroblockEncoderEncode(CWMImageStrCodec* sourceCodec,
-    CWMImageStrCodec* destinationCodec, size_t macroblockLeft, size_t macroblockTop,
+Int JxrTranscodeDirectMacroblockEncoderEncode(
+    const JxrTranscodePlanePair* sourcePlanes,
+    const JxrTranscodePlanePair* destinationPlanes, size_t macroblockLeft, size_t macroblockTop,
     Int destinationColumn, Int destinationRow,
-    JxrTranscodeTileQuantizerState* quantizers, Bool hasAlpha)
+    JxrTranscodeTileQuantizerState* quantizers)
 {
+    CWMImageStrCodec* sourceCodec;
+    CWMImageStrCodec* destinationCodec;
+    Bool hasAlpha;
+
+    if (sourcePlanes == NULL || destinationPlanes == NULL) return ICERR_ERROR;
+    sourceCodec = sourcePlanes->primaryCodec;
+    destinationCodec = destinationPlanes->primaryCodec;
+    hasAlpha = sourcePlanes->hasAlpha;
     if (sourceCodec == NULL || destinationCodec == NULL || quantizers == NULL ||
-        (hasAlpha && (sourceCodec->m_pNextSC == NULL ||
-            destinationCodec->m_pNextSC == NULL))) return ICERR_ERROR;
+        hasAlpha != destinationPlanes->hasAlpha ||
+        (hasAlpha && (sourcePlanes->alphaCodec == NULL ||
+            destinationPlanes->alphaCodec == NULL))) return ICERR_ERROR;
     destinationCodec->cColumn = sourceCodec->cColumn - macroblockLeft + 1;
     destinationCodec->cRow = sourceCodec->cRow - macroblockTop + 1;
     destinationCodec->MBInfo = sourceCodec->MBInfo;
@@ -20,11 +30,11 @@ Int JxrTranscodeDirectMacroblockEncoderEncode(CWMImageStrCodec* sourceCodec,
     if (encodeMB(destinationCodec, destinationColumn, destinationRow) != ICERR_OK)
         return ICERR_ERROR;
     if (hasAlpha) {
-        destinationCodec->m_pNextSC->cColumn = destinationCodec->cColumn;
-        destinationCodec->m_pNextSC->cRow = destinationCodec->cRow;
-        getTilePos(destinationCodec->m_pNextSC, destinationColumn, destinationRow);
-        destinationCodec->m_pNextSC->MBInfo = sourceCodec->m_pNextSC->MBInfo;
-        if (encodeMB(destinationCodec->m_pNextSC, destinationColumn,
+        destinationPlanes->alphaCodec->cColumn = destinationCodec->cColumn;
+        destinationPlanes->alphaCodec->cRow = destinationCodec->cRow;
+        getTilePos(destinationPlanes->alphaCodec, destinationColumn, destinationRow);
+        destinationPlanes->alphaCodec->MBInfo = sourcePlanes->alphaCodec->MBInfo;
+        if (encodeMB(destinationPlanes->alphaCodec, destinationColumn,
             destinationRow) != ICERR_OK) return ICERR_ERROR;
     }
     return ICERR_OK;

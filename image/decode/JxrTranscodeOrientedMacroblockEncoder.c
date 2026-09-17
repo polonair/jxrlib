@@ -11,8 +11,7 @@ static Bool JxrTranscodeOrientedMacroblockEncoderIsValid(
         request->tileQuantizers != NULL && request->tileQuantizerCount > 0 &&
         request->tileColumnCount > 0 &&
         (!request->hasAlpha || (request->sourceAlphaCodec != NULL &&
-            request->sourceAlphaCodec->m_pNextSC != NULL &&
-            request->destinationCodec->m_pNextSC != NULL &&
+            request->destinationAlphaCodec != NULL &&
             request->alphaMacroblocks != NULL && request->alphaCoefficients != NULL &&
             request->alphaDestinationCoefficients != NULL));
 }
@@ -57,13 +56,13 @@ Int JxrTranscodeOrientedMacroblockEncoderEncode(
             if (encodeMB(destinationCodec, macroblockColumn, macroblockRow) != ICERR_OK)
                 return ICERR_ERROR;
             if (request->hasAlpha) {
-                CWMImageStrCodec* alphaCodec = destinationCodec->m_pNextSC;
+                CWMImageStrCodec* alphaCodec = request->destinationAlphaCodec;
                 JxrTranscodeMacroblockTransformState alphaTransform = {0};
 
                 alphaCodec->cColumn = destinationCodec->cColumn;
                 alphaCodec->cRow = destinationCodec->cRow;
                 getTilePos(alphaCodec, macroblockColumn, macroblockRow);
-                alphaCodec->MBInfo = request->sourceAlphaCodec->m_pNextSC->MBInfo;
+                alphaCodec->MBInfo = request->sourceAlphaCodec->MBInfo;
                 alphaTransform.sourceMacroblocks = request->alphaMacroblocks;
                 alphaTransform.sourceCoefficients = request->alphaCoefficients;
                 alphaTransform.coefficientUnit = 256;
