@@ -1,4 +1,5 @@
 #include "JxrTranscodeDecoderInitializer.h"
+#include "JxrTranscodeMacroblockBufferLayout.h"
 
 EXTERN_C Int ReadWMIHeader(CWMImageInfo*, CWMIStrCodecParam*, CCoreParameters*);
 
@@ -6,7 +7,7 @@ Int JxrTranscodeDecoderInitializerInitialize(CWMImageStrCodec* decoderCodec,
     CWMTranscodingParam* parameters, CWMDecoderParameters* decoderParameters,
     JxrTranscodeDecoderInitializationResult* result)
 {
-    size_t coefficientUnit;
+    JxrTranscodeMacroblockBufferLayout macroblockLayout;
 
     if (decoderCodec == NULL || parameters == NULL || decoderParameters == NULL ||
         result == NULL) return ICERR_ERROR;
@@ -26,10 +27,9 @@ Int JxrTranscodeDecoderInitializerInitialize(CWMImageStrCodec* decoderCodec,
     decoderCodec->m_Dparam = decoderParameters;
     decoderParameters->bSkipFlexbits = decoderCodec->WMISCP.sbSubband == SB_NO_FLEXBITS;
     decoderCodec->m_param.bTranscode = TRUE;
-    coefficientUnit = decoderCodec->m_param.cfColorFormat == YUV_420 ? 384 :
-        (decoderCodec->m_param.cfColorFormat == YUV_422 ? 512 :
-            256 * decoderCodec->m_param.cNumChannels);
-    if (coefficientUnit > 256 * MAX_CHANNELS) return ICERR_ERROR;
-    result->coefficientUnit = coefficientUnit;
+    if (!JxrTranscodeMacroblockBufferLayoutInitialize(
+        decoderCodec->m_param.cfColorFormat, decoderCodec->m_param.cNumChannels,
+        &macroblockLayout)) return ICERR_ERROR;
+    result->coefficientUnit = macroblockLayout.coefficientCount;
     return ICERR_OK;
 }

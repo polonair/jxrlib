@@ -1,26 +1,30 @@
 #include "JxrTranscodeDecoderRuntimeInitializer.h"
 #include "JxrDecoderInputInitializer.h"
 #include "JxrDecoderResourceInitializer.h"
+#include "JxrTranscodeMacroblockBufferLayout.h"
 
 Int JxrTranscodeDecoderRuntimeInitializerAllocateMacroblockBuffer(
     CWMImageStrCodec* decoderCodec, size_t coefficientUnit,
     JxrTranscodeDecoderRuntimeState* state)
 {
-    size_t channel;
-    size_t channelOffset;
+    JxrTranscodeMacroblockBufferLayout macroblockLayout;
 
     if (decoderCodec == NULL || state == NULL || coefficientUnit == 0)
         return ICERR_ERROR;
+    if (!JxrTranscodeMacroblockBufferLayoutInitialize(
+        decoderCodec->m_param.cfColorFormat, decoderCodec->m_param.cNumChannels,
+        &macroblockLayout) || macroblockLayout.coefficientCount != coefficientUnit)
+        return ICERR_ERROR;
     memset(state, 0, sizeof(*state));
-    state->macroblockBuffer = (PixelI*)malloc(coefficientUnit * sizeof(PixelI));
+    state->macroblockBuffer = (PixelI*)malloc(macroblockLayout.coefficientCount *
+        sizeof(PixelI));
     if (state->macroblockBuffer == NULL) return ICERR_ERROR;
-    decoderCodec->p1MBbuffer[0] = state->macroblockBuffer;
-    decoderCodec->p1MBbuffer[1] = decoderCodec->p1MBbuffer[0] + 256;
-    channelOffset = decoderCodec->m_param.cfColorFormat == YUV_420 ? 64 :
-        (decoderCodec->m_param.cfColorFormat == YUV_422 ? 128 : 256);
-    for (channel = 2; channel < decoderCodec->m_param.cNumChannels; channel++)
-        decoderCodec->p1MBbuffer[channel] = decoderCodec->p1MBbuffer[channel - 1] +
-            channelOffset;
+    if (!JxrTranscodeMacroblockBufferLayoutBindCompatibilityPointers(decoderCodec,
+        state->macroblockBuffer, &macroblockLayout)) {
+        free(state->macroblockBuffer);
+        state->macroblockBuffer = NULL;
+        return ICERR_ERROR;
+    }
     return ICERR_OK;
 }
 

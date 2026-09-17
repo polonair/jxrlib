@@ -117,6 +117,7 @@
 #include "../image/decode/JxrTranscodeFrameBufferAllocator.h"
 #include "../image/decode/JxrTranscodeAlphaPlaneInitializer.h"
 #include "../image/decode/JxrTranscodeDecoderRuntimeInitializer.h"
+#include "../image/decode/JxrTranscodeMacroblockBufferLayout.h"
 #include "../image/decode/JxrTranscodeEncoderOutputInitializer.h"
 #include "../image/decode/JxrTranscodeMacroblockProcessingPipeline.h"
 #include "../image/decode/JxrTranscodeSessionRunner.h"
@@ -997,6 +998,8 @@ static int test_transcode_decoder_runtime_initializer_contract_vectors(void)
 
     memset(&decoderCodec, 0, sizeof(decoderCodec));
     memset(&state, 0, sizeof(state));
+    decoderCodec.m_param.cfColorFormat = Y_ONLY;
+    decoderCodec.m_param.cNumChannels = 1;
     if (JxrTranscodeDecoderRuntimeInitializerAllocateMacroblockBuffer(NULL,
         256, &state) != ICERR_ERROR ||
         JxrTranscodeDecoderRuntimeInitializerAllocateMacroblockBuffer(
@@ -1010,6 +1013,44 @@ static int test_transcode_decoder_runtime_initializer_contract_vectors(void)
         return 0;
     JxrTranscodeDecoderRuntimeInitializerRelease(&state);
     return state.macroblockBuffer == NULL && state.ioHeaderAllocation == NULL;
+}
+
+static int test_transcode_macroblock_buffer_layout_vectors(void)
+{
+    JxrTranscodeMacroblockBufferLayout layout;
+    CWMImageStrCodec codec;
+    PixelI coefficients[1024];
+
+    memset(&codec, 0, sizeof(codec));
+    if (!JxrTranscodeMacroblockBufferLayoutInitialize(Y_ONLY, 1, &layout) ||
+        layout.coefficientCount != 256 || layout.channelCount != 1 ||
+        layout.channelOffsets[0] != 0)
+        return 0;
+    if (!JxrTranscodeMacroblockBufferLayoutInitialize(YUV_420, 3, &layout) ||
+        layout.coefficientCount != 384 || layout.channelOffsets[0] != 0 ||
+        layout.channelOffsets[1] != 256 || layout.channelOffsets[2] != 320)
+        return 0;
+    if (!JxrTranscodeMacroblockBufferLayoutInitialize(YUV_422, 3, &layout) ||
+        layout.coefficientCount != 512 || layout.channelOffsets[2] != 384)
+        return 0;
+    if (!JxrTranscodeMacroblockBufferLayoutInitialize(YUV_444, 4, &layout) ||
+        layout.coefficientCount != 1024 || layout.channelOffsets[2] != 512 ||
+        layout.channelOffsets[3] != 768)
+        return 0;
+    if (JxrTranscodeMacroblockBufferLayoutInitialize(Y_ONLY, 0, &layout) ||
+        JxrTranscodeMacroblockBufferLayoutInitialize(Y_ONLY, MAX_CHANNELS + 1,
+            &layout) || JxrTranscodeMacroblockBufferLayoutInitialize(Y_ONLY, 1,
+            NULL))
+        return 0;
+    if (!JxrTranscodeMacroblockBufferLayoutInitialize(YUV_420, 3, &layout) ||
+        !JxrTranscodeMacroblockBufferLayoutBindCompatibilityPointers(&codec,
+            coefficients, &layout))
+        return 0;
+    return codec.p1MBbuffer[0] == coefficients &&
+        codec.p1MBbuffer[1] == coefficients + 256 &&
+        codec.p1MBbuffer[2] == coefficients + 320 &&
+        !JxrTranscodeMacroblockBufferLayoutBindCompatibilityPointers(NULL,
+            coefficients, &layout);
 }
 
 static int test_transcode_encoder_output_initializer_contract_vectors(void)
@@ -5922,6 +5963,7 @@ int main(int argc, char** argv)
         { "transcode_frame_buffer_allocator_contract_vectors", test_transcode_frame_buffer_allocator_contract_vectors },
         { "transcode_alpha_plane_initializer_contract_vectors", test_transcode_alpha_plane_initializer_contract_vectors },
         { "transcode_decoder_runtime_initializer_contract_vectors", test_transcode_decoder_runtime_initializer_contract_vectors },
+        { "transcode_macroblock_buffer_layout_vectors", test_transcode_macroblock_buffer_layout_vectors },
         { "transcode_encoder_output_initializer_contract_vectors", test_transcode_encoder_output_initializer_contract_vectors },
         { "transcode_macroblock_processing_pipeline_contract_vectors", test_transcode_macroblock_processing_pipeline_contract_vectors },
         { "transcode_session_runner_contract_vectors", test_transcode_session_runner_contract_vectors },

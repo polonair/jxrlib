@@ -211,6 +211,7 @@
     <ClCompile Include="..\decode\JxrTranscodeFrameBufferAllocator.c" />
     <ClCompile Include="..\decode\JxrTranscodeAlphaPlaneInitializer.c" />
     <ClCompile Include="..\decode\JxrTranscodeDecoderRuntimeInitializer.c" />
+    <ClCompile Include="..\decode\JxrTranscodeMacroblockBufferLayout.c" />
     <ClCompile Include="..\decode\JxrTranscodeEncoderOutputInitializer.c" />
     <ClCompile Include="..\decode\JxrTranscodeMacroblockProcessingPipeline.c" />
     <ClCompile Include="..\decode\JxrTranscodeSessionRunner.c" />
