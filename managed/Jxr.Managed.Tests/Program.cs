@@ -21,6 +21,7 @@ namespace Jxr.Managed.Tests
             new TestCase("adaptive_scan_vectors", TestAdaptiveScanVectors),
             new TestCase("adaptive_scan_state_vectors", TestAdaptiveScanStateVectors),
             new TestCase("adaptive_scan_default_vectors", TestAdaptiveScanDefaultVectors),
+            new TestCase("explicit_entropy_context", TestExplicitEntropyContext),
             new TestCase("coefficient_buffer_vectors", TestCoefficientBufferVectors),
             new TestCase("coefficient_plane_state_vectors", TestCoefficientPlaneStateVectors),
             new TestCase("macroblock_state_vectors", TestMacroblockStateVectors),
@@ -165,6 +166,64 @@ namespace Jxr.Managed.Tests
                     scans.Horizontal.GetCoefficientIndex(index, out value) != JxrError.None || value != expectedHorizontal[index] ||
                     scans.Vertical.GetCoefficientIndex(index, out value) != JxrError.None || value != expectedVertical[index]) return false;
             }
+            return true;
+        }
+
+        // Same reset vector as native explicit_entropy_context.  Totals and
+        // configuration survive; model counters and scan indexes reset.
+        private static bool TestExplicitEntropyContext()
+        {
+            JxrEntropyContext context = new JxrEntropyContext();
+            JxrAdaptiveModel dc = context.DcModel;
+            JxrAdaptiveModel lp = context.LpModel;
+            JxrAdaptiveModel ac = context.AcModel;
+            JxrAdaptiveScan scan = context.LowpassScan;
+            JxrAdaptiveScan horizontal = context.HorizontalScan;
+            JxrAdaptiveScan vertical = context.VerticalScan;
+            JxrLowpassCbpState lowpassCbp = context.LowpassCbp;
+            JxrCbpPredictionModel highpassCbp = context.HighpassCbp;
+            int flcState, bits, zeroCount, oneCount, cbpState;
+            uint index, total;
+
+            if (dc.Set(0, 0, 2) != JxrError.None ||
+                lp.Set(1, 7, 4) != JxrError.None ||
+                ac.Set(1, 0, 9) != JxrError.None ||
+                highpassCbp.Set(0, 2, 4, 1) != JxrError.None ||
+                highpassCbp.Set(1, -4, -2, 0) != JxrError.None ||
+                scan.ResetTotals(16) != JxrError.None ||
+                scan.ObserveNonZero(2) != JxrError.None ||
+                scan.ObserveNonZero(2) != JxrError.None ||
+                scan.ObserveNonZero(2) != JxrError.None ||
+                scan.SetCoefficientIndex(2, 14) != JxrError.None)
+                return false;
+            lowpassCbp.Observe(0, 3);
+            context.TrimFlexBits = 3;
+            context.InRoi = true;
+            context.Reset();
+
+            if (context.DcModel != dc || context.LpModel != lp || context.AcModel != ac ||
+                context.LowpassScan != scan || context.HorizontalScan != horizontal ||
+                context.VerticalScan != vertical || context.LowpassCbp != lowpassCbp ||
+                context.HighpassCbp != highpassCbp ||
+                scan.GetCoefficientIndex(1, out index) != JxrError.None || index != 1 ||
+                scan.GetCoefficientIndex(2, out index) != JxrError.None || index != 4 ||
+                scan.GetTotal(1, out total) != JxrError.None || total != 33 ||
+                horizontal.GetCoefficientIndex(1, out index) != JxrError.None || index != 5 ||
+                vertical.GetCoefficientIndex(1, out index) != JxrError.None || index != 10 ||
+                dc.Band != JxrAdaptiveBand.Dc || lp.Band != JxrAdaptiveBand.Lowpass ||
+                ac.Band != JxrAdaptiveBand.Highpass ||
+                dc.Get(0, out flcState, out bits) != JxrError.None || flcState != 0 || bits != 8 ||
+                dc.Get(1, out flcState, out bits) != JxrError.None || bits != 8 ||
+                lp.Get(0, out flcState, out bits) != JxrError.None || bits != 4 ||
+                lp.Get(1, out flcState, out bits) != JxrError.None || flcState != 0 || bits != 4 ||
+                ac.Get(0, out flcState, out bits) != JxrError.None || bits != 0 ||
+                ac.Get(1, out flcState, out bits) != JxrError.None || bits != 0 ||
+                lowpassCbp.ZeroCount != 1 || lowpassCbp.MaxCount != 1 ||
+                highpassCbp.Get(0, out zeroCount, out oneCount, out cbpState) != JxrError.None ||
+                zeroCount != -4 || oneCount != 4 || cbpState != 0 ||
+                highpassCbp.Get(1, out zeroCount, out oneCount, out cbpState) != JxrError.None ||
+                zeroCount != -4 || oneCount != 4 || cbpState != 0 ||
+                context.TrimFlexBits != 3 || !context.InRoi) return false;
             return true;
         }
 

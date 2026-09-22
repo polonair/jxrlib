@@ -3492,12 +3492,48 @@ static int test_bit_cursor_ring_wrap_vectors(void)
 
 static int test_explicit_entropy_context(void)
 {
-    CCodingContext native; JxrEntropyContext state;
-    memset(&native, 0, sizeof(native)); JxrEntropyContextInit(&state, &native);
+    CCodingContext native;
+    JxrEntropyContext state;
+    memset(&native, 0, sizeof(native));
+    JxrEntropyContextInit(&state, &native);
+    native.m_aModelDC.m_iFlcBits[0] = 2;
+    native.m_aModelLP.m_iFlcState[1] = 7;
+    native.m_aModelAC.m_iFlcBits[1] = 9;
+    native.m_iCBPCountZero = -3;
+    native.m_iCBPCountMax = 5;
+    native.m_aCBPModel.m_iCount0[0] = 2;
+    native.m_aCBPModel.m_iCount1[1] = -2;
+    native.m_aCBPModel.m_iState[0] = 1;
+    native.m_iTrimFlexBits = 3;
+    native.m_bInROI = TRUE;
+    JxrAdaptiveScanResetTotals(native.m_aScanLowpass, 16);
+    JxrAdaptiveScanObserveNonZero(native.m_aScanLowpass, 2);
+    JxrAdaptiveScanObserveNonZero(native.m_aScanLowpass, 2);
+    JxrAdaptiveScanObserveNonZero(native.m_aScanLowpass, 2);
+    native.m_aScanLowpass[2].uScan = 14;
     JxrEntropyContextReset(&state);
     return state.native == &native && state.dcModel == &native.m_aModelDC &&
         state.lpModel == &native.m_aModelLP && state.acModel == &native.m_aModelAC &&
-        state.lowpassScan[1].uScan == 1 && state.dcModel->m_iFlcBits[0] == 8;
+        state.lowpassScan == native.m_aScanLowpass &&
+        state.horizontalScan == native.m_aScanHoriz &&
+        state.verticalScan == native.m_aScanVert &&
+        state.lowpassScan[1].uScan == 1 && state.lowpassScan[2].uScan == 4 &&
+        state.lowpassScan[1].uTotal == 33 &&
+        state.horizontalScan[1].uScan == 5 && state.verticalScan[1].uScan == 10 &&
+        state.dcModel->m_band == BAND_DC && state.lpModel->m_band == BAND_LP &&
+        state.acModel->m_band == BAND_AC &&
+        state.dcModel->m_iFlcBits[0] == 8 && state.dcModel->m_iFlcBits[1] == 8 &&
+        state.lpModel->m_iFlcBits[0] == 4 && state.lpModel->m_iFlcBits[1] == 4 &&
+        state.acModel->m_iFlcBits[0] == 0 && state.acModel->m_iFlcBits[1] == 0 &&
+        state.lpModel->m_iFlcState[1] == 0 &&
+        native.m_iCBPCountZero == 1 && native.m_iCBPCountMax == 1 &&
+        native.m_aCBPModel.m_iCount0[0] == -4 &&
+        native.m_aCBPModel.m_iCount0[1] == -4 &&
+        native.m_aCBPModel.m_iCount1[0] == 4 &&
+        native.m_aCBPModel.m_iCount1[1] == 4 &&
+        native.m_aCBPModel.m_iState[0] == 0 &&
+        native.m_aCBPModel.m_iState[1] == 0 &&
+        native.m_iTrimFlexBits == 3 && native.m_bInROI == TRUE;
 }
 
 static int test_adaptive_scan_vectors(void)

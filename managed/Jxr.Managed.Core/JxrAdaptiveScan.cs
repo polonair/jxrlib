@@ -21,6 +21,15 @@ namespace Jxr.Managed.Core
 
         public int Count { get { return coefficientIndexes.Length; } }
 
+        // InitZigzagScan writes uScan only; uTotal survives this operation.
+        public JxrError ResetIndexes(uint[] indexes)
+        {
+            int index;
+            if (indexes == null || indexes.Length != Count) return JxrError.InvalidArgument;
+            for (index = 0; index < Count; index++) coefficientIndexes[index] = indexes[index];
+            return JxrError.None;
+        }
+
         public JxrError ResetTotals(int count)
         {
             int index;
@@ -41,6 +50,13 @@ namespace Jxr.Managed.Core
             coefficientIndex = 0;
             if (position < 0 || position >= Count) return JxrError.InvalidArgument;
             coefficientIndex = coefficientIndexes[position];
+            return JxrError.None;
+        }
+
+        public JxrError SetCoefficientIndex(int position, uint coefficientIndex)
+        {
+            if (position < 0 || position >= Count) return JxrError.InvalidArgument;
+            coefficientIndexes[position] = coefficientIndex;
             return JxrError.None;
         }
 

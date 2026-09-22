@@ -326,6 +326,17 @@ namespace Jxr.Managed.Core
         private readonly int[] oneCounts = new int[2];
         private readonly int[] states = new int[2];
 
+        public void Reset()
+        {
+            int context;
+            for (context = 0; context < 2; context++)
+            {
+                zeroCounts[context] = -4;
+                oneCounts[context] = 4;
+                states[context] = 0;
+            }
+        }
+
         public JxrError Get(int context, out int zeroCount, out int oneCount, out int state)
         {
             zeroCount = 0; oneCount = 0; state = 0;
@@ -388,6 +399,12 @@ namespace Jxr.Managed.Core
 
         public int ZeroCount { get { return zeroCount; } }
         public int MaxCount { get { return maxCount; } }
+
+        public void Reset()
+        {
+            zeroCount = 1;
+            maxCount = 1;
+        }
 
         public void Observe(int cbp, int maximumCbp)
         {

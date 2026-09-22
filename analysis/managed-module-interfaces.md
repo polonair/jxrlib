@@ -158,15 +158,29 @@ namespace Jxr.Managed.Internal
 
     internal sealed class JxrEntropyContext
     {
-        internal JxrAdaptiveHuffman DcModel;
-        internal JxrAdaptiveHuffman LpModel;
-        internal JxrAdaptiveHuffman HpModel;
+        internal JxrAdaptiveModel DcModel;
+        internal JxrAdaptiveModel LpModel;
+        internal JxrAdaptiveModel AcModel;
         internal JxrAdaptiveScan LowpassScan;
         internal JxrAdaptiveScan HorizontalScan;
         internal JxrAdaptiveScan VerticalScan;
+        internal JxrLowpassCbpState LowpassCbp;
+        internal JxrCbpPredictionModel HighpassCbp;
+        internal void Reset() {}
     }
 }
 ```
+
+The implemented `JxrEntropyContext` owns the three `CAdaptiveModel` equivalents,
+three scan states, and LP/HP CBP counters.  `Reset` mirrors native
+`JxrEntropyContextReset`: DC FLC bits become `(8,8)`, LP `(4,4)`, AC `(0,0)`;
+LP CBP counters become `(1,1)` and HP CBP counts/states become
+`(-4,4,0)` for each context.  It reinitializes scan indexes but preserves
+scan totals and object identities.  Trim flex bits and ROI flags also survive.
+The native and managed tests named `explicit_entropy_context` compare these
+same reset transitions.  Decoder/encoder specific Huffman table adaptation
+in `ResetCodingContextDec`/`ResetCodingContextEnc` is a separate integration
+operation; those native functions perform more than `JxrEntropyContextReset`.
 
 The `DcCodec`, `LpCodec` and `HpCodec` methods receive a reader, one explicit
 entropy context, a coefficient range and a macroblock position.  They modify
