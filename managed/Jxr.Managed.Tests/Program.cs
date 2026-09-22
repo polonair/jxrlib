@@ -16,6 +16,7 @@ namespace Jxr.Managed.Tests
     {
         private static readonly TestCase[] Tests = {
             new TestCase("bit_math_vectors", TestBitMathVectors),
+            new TestCase("bit_reader_vectors", TestBitReaderVectors),
             new TestCase("adaptive_scan_vectors", TestAdaptiveScanVectors),
             new TestCase("adaptive_scan_state_vectors", TestAdaptiveScanStateVectors),
             new TestCase("adaptive_scan_default_vectors", TestAdaptiveScanDefaultVectors),
@@ -70,6 +71,27 @@ namespace Jxr.Managed.Tests
                 JxrBitMath.LowMask32(31) == 0x7fffffffU &&
                 JxrBitMath.LowMask32(32) == 0xffffffffU &&
                 JxrBitMath.LowMask32(33) == 0xffffffffU;
+        }
+
+        // Direct counterpart of native bit_reader_vectors.  The final read
+        // deliberately consumes the padded nibble before reporting EOF.
+        private static bool TestBitReaderVectors()
+        {
+            uint value;
+            JxrBitReader reader = new JxrBitReader(new byte[] { 0xb1, 0xab, 0xcd, 0xf0 });
+            if (reader.ReadBits(0, out value) != JxrError.None || value != 0 ||
+                reader.ReadBits(3, out value) != JxrError.None || value != 5 ||
+                reader.ReadBits(5, out value) != JxrError.None || value != 17 ||
+                reader.ReadBits(16, out value) != JxrError.None || value != 0xabcdU ||
+                reader.ReadBits(4, out value) != JxrError.None || value != 15 ||
+                reader.ReadBits(16, out value) != JxrError.UnexpectedEndOfStream ||
+                !reader.HasFailed || reader.ByteIndex != 4 || reader.BufferedBitCount != 0 ||
+                reader.BitPosition != 32) return false;
+
+            reader = new JxrBitReader(new byte[] { 0xde, 0xad, 0xbe, 0xef });
+            return reader.ReadBits(32, out value) == JxrError.None && value == 0xdeadbeefU &&
+                reader.ByteIndex == 4 && reader.BufferedBitCount == 0 &&
+                reader.ReadBits(33, out value) == JxrError.InvalidArgument && reader.HasFailed;
         }
 
         // Direct counterpart of native adaptive_scan_vectors.

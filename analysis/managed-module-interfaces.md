@@ -86,6 +86,15 @@ intermediate arithmetic when validating `offset + count`.  A range is valid
 only if its buffer is non-null and `0 <= Offset <= Buffer.Length` and
 `0 <= Count <= Buffer.Length - Offset`.
 
+`JxrBitReader` is the managed port of the standalone MSB-first reader in
+`JxrManagedBitIO.c`.  It owns no stream: its input is one caller-owned
+`byte[]`, and its explicit state is `ByteIndex`, `Accumulator`,
+`BufferedBitCount`, `BitPosition` and `HasFailed`.  `ReadBits` accepts
+zero through 32 bits and retains the native partial-consumption rule when EOF
+is reached; `PeekBits` and `ConsumeBits` are managed-only, explicit helpers
+needed by `AdaptiveHuffman`.  The `bit_reader_vectors` test executes the same
+fields and EOF transition in the native and managed runners.
+
 ## Bitstream and entropy contracts
 
 The lowest porting layer is independent of headers, image dimensions and pixel

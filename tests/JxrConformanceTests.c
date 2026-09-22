@@ -226,6 +226,29 @@ static int test_bit_io_vectors(void)
         !JxrBitReaderRead(&reader, 16, &value);
 }
 
+/* Direct state-vector coverage for JxrManagedBitIO's reader half. */
+static int test_bit_reader_vectors(void)
+{
+    U8 data[4] = { 0xb1, 0xab, 0xcd, 0xf0 };
+    U8 fullWord[4] = { 0xde, 0xad, 0xbe, 0xef };
+    U32 value;
+    JxrBitReader reader;
+
+    JxrBitReaderInit(&reader, data, sizeof(data));
+    if (!JxrBitReaderRead(&reader, 0, &value) || value != 0 ||
+        !JxrBitReaderRead(&reader, 3, &value) || value != 5 ||
+        !JxrBitReaderRead(&reader, 5, &value) || value != 17 ||
+        !JxrBitReaderRead(&reader, 16, &value) || value != 0xabcd ||
+        !JxrBitReaderRead(&reader, 4, &value) || value != 15 ||
+        JxrBitReaderRead(&reader, 16, &value)) return 0;
+    if (!reader.failed || reader.byteIndex != 4 || reader.bitCount != 0) return 0;
+
+    JxrBitReaderInit(&reader, fullWord, sizeof(fullWord));
+    return JxrBitReaderRead(&reader, 32, &value) && value == 0xdeadbeefU &&
+        reader.byteIndex == 4 && reader.bitCount == 0 &&
+        !JxrBitReaderRead(&reader, 33, &value) && reader.failed;
+}
+
 static int test_adaptive_state(void)
 {
     CCodingContext context; Int mean[2] = { 0, 0 };
@@ -6220,6 +6243,7 @@ int main(int argc, char** argv)
     JxrTestCase tests[] = {
         { "smoke", test_smoke },
         { "bit_io_vectors", test_bit_io_vectors },
+        { "bit_reader_vectors", test_bit_reader_vectors },
         { "adaptive_state", test_adaptive_state },
         { "adaptive_model_state_vectors", test_adaptive_model_state_vectors },
         { "huffman_state_set_vectors", test_huffman_state_set_vectors },
