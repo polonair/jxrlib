@@ -17,6 +17,7 @@ namespace Jxr.Managed.Tests
         private static readonly TestCase[] Tests = {
             new TestCase("bit_math_vectors", TestBitMathVectors),
             new TestCase("bit_reader_vectors", TestBitReaderVectors),
+            new TestCase("packet_header_syntax_reader_vectors", TestPacketHeaderSyntaxReaderVectors),
             new TestCase("adaptive_scan_vectors", TestAdaptiveScanVectors),
             new TestCase("adaptive_scan_state_vectors", TestAdaptiveScanStateVectors),
             new TestCase("adaptive_scan_default_vectors", TestAdaptiveScanDefaultVectors),
@@ -92,6 +93,26 @@ namespace Jxr.Managed.Tests
             return reader.ReadBits(32, out value) == JxrError.None && value == 0xdeadbeefU &&
                 reader.ByteIndex == 4 && reader.BufferedBitCount == 0 &&
                 reader.ReadBits(33, out value) == JxrError.InvalidArgument && reader.HasFailed;
+        }
+
+        // Direct counterpart of native packet_header_syntax_reader_vectors.
+        private static bool TestPacketHeaderSyntaxReaderVectors()
+        {
+            JxrPacketHeader header;
+            JxrBitReader reader = new JxrBitReader(new byte[] { 0x00, 0x00, 0x01, 0xad });
+            if (JxrPacketReader.ReadHeader(reader, out header) != JxrError.None ||
+                header == null || !header.IsValid || header.TileId != 21 || header.PacketType != 5)
+                return false;
+
+            reader = new JxrBitReader(new byte[] { 0x00, 0x02, 0x01, 0xad });
+            if (JxrPacketReader.ReadHeader(reader, out header) != JxrError.None || header.IsValid)
+                return false;
+
+            reader = new JxrBitReader(new byte[] { 0x00, 0x00, 0x01 });
+            return JxrPacketReader.ReadHeader(reader, out header) == JxrError.UnexpectedEndOfStream &&
+                header != null && header.Prefix0 == 0 && header.Prefix1 == 0 && header.Marker == 1 &&
+                reader.BitPosition == 24 && reader.HasFailed &&
+                JxrPacketReader.ReadHeader(null, out header) == JxrError.InvalidArgument && header == null;
         }
 
         // Direct counterpart of native adaptive_scan_vectors.

@@ -95,6 +95,13 @@ is reached; `PeekBits` and `ConsumeBits` are managed-only, explicit helpers
 needed by `AdaptiveHuffman`.  The `bit_reader_vectors` test executes the same
 fields and EOF transition in the native and managed runners.
 
+`JxrPacketReader` is the next, syntax-only layer.  It consumes four octets
+from a `JxrBitReader` into `JxrPacketHeader`: two zero prefixes, marker `1`,
+and the five-bit tile ID plus three-bit packet type.  It neither refills input
+nor attaches decoder streams; those responsibilities remain with the future
+packet transport module.  `packet_header_syntax_reader_vectors` covers valid,
+invalid and truncated headers in both runners.
+
 ## Bitstream and entropy contracts
 
 The lowest porting layer is independent of headers, image dimensions and pixel
