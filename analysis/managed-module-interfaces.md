@@ -181,6 +181,55 @@ The entropy layer produces a plane of coefficients; it does not allocate
 pixels.  Prediction, quantization and transforms work on explicit plane
 buffers, which makes their native vectors directly reusable.
 
+`CoefficientState` is the first managed component at this boundary.  It ports
+`JxrCoefficientBuffer`, `JxrCoefficientPlaneState`, macroblock DC/quantizer
+state and LP/HP CBP state.  Pointer-plus-length views become
+`JxrCoefficientBuffer(int[] values, int offset, int count)`.  A caller-owned
+array is never implicitly mutated through an alias: `JxrMacroblockSnapshot`
+and `JxrMacroblockCbpState` use explicit `LoadFrom` and `CopyTo` operations.
+This is the managed replacement for the temporary native load/commit bridge.
+
+```csharp
+namespace Jxr.Managed.Core
+{
+    internal sealed class JxrCoefficientBuffer
+    {
+        internal JxrError Get(int index, out int value) { value = 0; return JxrError.None; }
+        internal JxrError Set(int index, int value) { return JxrError.None; }
+        internal JxrError Add(int index, int value) { return JxrError.None; }
+        internal void Clear() {}
+    }
+
+    internal sealed class JxrCoefficientPlaneState
+    {
+        internal JxrError GetBlock(int plane, int offset, int count,
+            out JxrCoefficientBuffer block)
+        { block = null; return JxrError.None; }
+    }
+
+    internal sealed class JxrMacroblockState
+    {
+        internal JxrError LoadFrom(JxrMacroblockSnapshot source) { return JxrError.None; }
+        internal JxrError CopyTo(JxrMacroblockSnapshot destination) { return JxrError.None; }
+        internal JxrError ClearDc(int channelCount) { return JxrError.None; }
+    }
+
+    internal sealed class JxrMacroblockCbpState
+    {
+        internal JxrError LoadFrom(int[] cbp, int[] differential) { return JxrError.None; }
+        internal JxrError CopyTo(int[] cbp, int[] differential) { return JxrError.None; }
+    }
+}
+```
+
+`JxrLowpassCbpState` owns its two adaptive counters, while
+`JxrHighpassCbpState` explicitly groups pattern Huffman state, count Huffman
+state and `JxrCbpPredictionModel`.  The reference vectors named
+`coefficient_buffer_vectors`, `coefficient_plane_state_vectors`,
+`macroblock_state_vectors`, `macroblock_cbp_state_vectors`,
+`lowpass_cbp_state_vectors` and `highpass_cbp_state_vectors` run in both the
+native and managed runners.
+
 ```csharp
 namespace Jxr.Managed.Internal
 {

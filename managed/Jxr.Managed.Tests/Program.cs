@@ -19,6 +19,12 @@ namespace Jxr.Managed.Tests
             new TestCase("adaptive_scan_vectors", TestAdaptiveScanVectors),
             new TestCase("adaptive_scan_state_vectors", TestAdaptiveScanStateVectors),
             new TestCase("adaptive_scan_default_vectors", TestAdaptiveScanDefaultVectors),
+            new TestCase("coefficient_buffer_vectors", TestCoefficientBufferVectors),
+            new TestCase("coefficient_plane_state_vectors", TestCoefficientPlaneStateVectors),
+            new TestCase("macroblock_state_vectors", TestMacroblockStateVectors),
+            new TestCase("macroblock_cbp_state_vectors", TestMacroblockCbpStateVectors),
+            new TestCase("lowpass_cbp_state_vectors", TestLowpassCbpStateVectors),
+            new TestCase("highpass_cbp_state_vectors", TestHighpassCbpStateVectors),
             new TestCase("huffman_state_set_vectors", TestHuffmanStateSetVectors),
             new TestCase("adaptive_huffman_vectors", TestAdaptiveHuffmanVectors),
             new TestCase("adaptive_huffman_table_catalog_vectors", TestAdaptiveHuffmanTableCatalogVectors),
@@ -117,6 +123,141 @@ namespace Jxr.Managed.Tests
                     scans.Vertical.GetCoefficientIndex(index, out value) != JxrError.None || value != expectedVertical[index]) return false;
             }
             return true;
+        }
+
+        // Direct counterpart of native coefficient_buffer_vectors.
+        private static bool TestCoefficientBufferVectors()
+        {
+            int[] values = { 3, 5, 7, 11, 13 };
+            int value;
+            JxrCoefficientBuffer buffer = new JxrCoefficientBuffer(values, 1, 3);
+            if (buffer.Get(0, out value) != JxrError.None || value != 5 ||
+                buffer.Get(2, out value) != JxrError.None || value != 11 ||
+                buffer.Set(1, -2) != JxrError.None || buffer.Add(2, 4) != JxrError.None ||
+                values[0] != 3 || values[1] != 5 || values[2] != -2 ||
+                values[3] != 15 || values[4] != 13) return false;
+            buffer.Clear();
+            return values[0] == 3 && values[1] == 0 && values[2] == 0 &&
+                values[3] == 0 && values[4] == 13 &&
+                buffer.Get(3, out value) == JxrError.InvalidArgument;
+        }
+
+        // Direct counterpart of native coefficient_plane_state_vectors.
+        private static bool TestCoefficientPlaneStateVectors()
+        {
+            int[] plane0 = new int[256];
+            int[] plane1 = new int[256];
+            int[] values;
+            int length;
+            JxrCoefficientBuffer block;
+            JxrCoefficientPlaneState state = new JxrCoefficientPlaneState(
+                new int[][] { plane0, plane1 }, JxrCoefficientColorFormat.Yuv444, 2);
+            if (state.GetBlock(1, 4, 16, out block) != JxrError.None ||
+                state.GetPlane(0, out values) != JxrError.None || values != plane0 ||
+                state.GetLength(0, out length) != JxrError.None || length != 256 ||
+                state.GetLength(1, out length) != JxrError.None || length != 256 ||
+                block.Offset != 4 || block.Count != 16) return false;
+            return block.Set(0, 42) == JxrError.None && plane1[4] == 42 &&
+                state.GetBlock(1, 250, 7, out block) == JxrError.InvalidArgument;
+        }
+
+        // Direct counterpart of native macroblock_state_vectors.  Snapshots
+        // explicitly replace the native load/commit bridge.
+        private static bool TestMacroblockStateVectors()
+        {
+            int channel;
+            int coefficient;
+            JxrMacroblockSnapshot snapshot = new JxrMacroblockSnapshot(16);
+            JxrMacroblockState state = new JxrMacroblockState(16);
+            for (channel = 0; channel < 16; channel++)
+            {
+                int index;
+                for (index = 0; index < JxrMacroblockState.CoefficientsPerChannel; index++)
+                    snapshot.SetDcCoefficient(channel, index, -1);
+            }
+            snapshot.Orientation = 1;
+            if (state.LoadFrom(snapshot) != JxrError.None || state.ClearDc(2) != JxrError.None ||
+                state.GetDcCoefficient(0, 0, out coefficient) != JxrError.None || coefficient != 0 ||
+                state.GetDcCoefficient(1, 15, out coefficient) != JxrError.None || coefficient != 0 ||
+                state.GetDcCoefficient(2, 0, out coefficient) != JxrError.None || coefficient != -1 ||
+                state.SetDcCoefficient(1, 5, 42) != JxrError.None ||
+                state.GetDcCoefficient(1, 5, out coefficient) != JxrError.None || coefficient != 42)
+                return false;
+            state.ResetQuantizerIndices();
+            state.SetLowpassQuantizerIndex(3);
+            state.SetHighpassQuantizerIndex(7);
+            if (state.LowpassQuantizerIndex != 3 || state.HighpassQuantizerIndex != 7 ||
+                state.Orientation != 1 || snapshot.LowpassQuantizerIndex == 3 ||
+                state.CopyTo(snapshot) != JxrError.None ||
+                snapshot.GetDcCoefficient(0, 0, out coefficient) != JxrError.None || coefficient != 0 ||
+                snapshot.GetDcCoefficient(1, 5, out coefficient) != JxrError.None || coefficient != 42 ||
+                snapshot.LowpassQuantizerIndex != 3 || snapshot.HighpassQuantizerIndex != 7 ||
+                state.Orientation != 1) return false;
+            snapshot.SetDcCoefficient(0, 0, 7);
+            snapshot.LowpassQuantizerIndex = 2;
+            snapshot.HighpassQuantizerIndex = 4;
+            snapshot.Orientation = 9;
+            return state.LoadFrom(snapshot) == JxrError.None &&
+                state.GetDcCoefficient(0, 0, out coefficient) == JxrError.None && coefficient == 7 &&
+                state.LowpassQuantizerIndex == 2 && state.HighpassQuantizerIndex == 4 &&
+                state.Orientation == 9;
+        }
+
+        // Direct counterpart of native macroblock_cbp_state_vectors.
+        private static bool TestMacroblockCbpStateVectors()
+        {
+            int[] cbp = new int[16];
+            int[] differential = new int[16];
+            int value;
+            JxrMacroblockCbpState state = new JxrMacroblockCbpState(16);
+            if (state.LoadFrom(cbp, differential) != JxrError.None ||
+                state.SetCbp(0, 0x1234) != JxrError.None || state.SetCbp(1, 0x3f) != JxrError.None ||
+                state.SetCbp(2, 0x55) != JxrError.None || state.SetCbp(15, 0x7a) != JxrError.None ||
+                state.SetDifferential(0, 0x4321) != JxrError.None ||
+                state.SetDifferential(1, 0x2a) != JxrError.None ||
+                state.SetDifferential(2, 0x15) != JxrError.None ||
+                state.GetCbp(0, out value) != JxrError.None || value != 0x1234 ||
+                state.GetCbp(1, out value) != JxrError.None || value != 0x3f ||
+                state.GetCbp(2, out value) != JxrError.None || value != 0x55 ||
+                state.GetCbp(15, out value) != JxrError.None || value != 0x7a ||
+                state.GetDifferential(0, out value) != JxrError.None || value != 0x4321 ||
+                state.GetDifferential(1, out value) != JxrError.None || value != 0x2a ||
+                state.GetDifferential(2, out value) != JxrError.None || value != 0x15 || cbp[0] != 0)
+                return false;
+            if (state.CopyTo(cbp, differential) != JxrError.None || cbp[0] != 0x1234 ||
+                cbp[1] != 0x3f || cbp[2] != 0x55 || cbp[15] != 0x7a ||
+                differential[0] != 0x4321 || differential[1] != 0x2a || differential[2] != 0x15)
+                return false;
+            cbp[0] = 7;
+            differential[0] = 9;
+            return state.LoadFrom(cbp, differential) == JxrError.None &&
+                state.GetCbp(0, out value) == JxrError.None && value == 7 &&
+                state.GetDifferential(0, out value) == JxrError.None && value == 9;
+        }
+
+        // Direct counterpart of native lowpass_cbp_state_vectors.
+        private static bool TestLowpassCbpStateVectors()
+        {
+            JxrLowpassCbpState state = new JxrLowpassCbpState(1, 1);
+            state.Observe(0, 3);
+            if (state.ZeroCount != -2 || state.MaxCount != 2) return false;
+            state.Observe(3, 3);
+            if (state.ZeroCount != -1 || state.MaxCount != -1) return false;
+            state = new JxrLowpassCbpState(-8, 7);
+            state.Observe(0, 3);
+            return state.ZeroCount == -8 && state.MaxCount == 7;
+        }
+
+        // Direct counterpart of native highpass_cbp_state_vectors.
+        private static bool TestHighpassCbpStateVectors()
+        {
+            JxrAdaptiveHuffman pattern = new JxrAdaptiveHuffman(4, null, null);
+            JxrAdaptiveHuffman count = new JxrAdaptiveHuffman(4, null, null);
+            JxrCbpPredictionModel model = new JxrCbpPredictionModel();
+            JxrHighpassCbpState state = new JxrHighpassCbpState(pattern, count, model);
+            return state.PatternHuffman == pattern && state.CountHuffman == count &&
+                state.PredictionModel == model && state.Adapt() == JxrError.None &&
+                pattern.IsInitialized && count.IsInitialized;
         }
 
         // Direct counterpart of native huffman_state_set_vectors.
