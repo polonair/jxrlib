@@ -3510,6 +3510,24 @@ static int test_adaptive_scan_state_vectors(void)
         JxrAdaptiveScanStateGetCoefficientIndex(&state, 2) == 2;
 }
 
+static int test_adaptive_scan_default_vectors(void)
+{
+    CCodingContext context;
+    U32 expectedLowpass[16] = { 0, 1, 4, 5, 2, 8, 6, 9, 3, 12, 10, 7, 13, 11, 14, 15 };
+    U32 expectedHorizontal[16] = { 0, 5, 10, 12, 1, 2, 8, 4, 6, 9, 3, 14, 13, 7, 11, 15 };
+    U32 expectedVertical[16] = { 0, 10, 2, 12, 5, 9, 4, 8, 1, 13, 6, 15, 14, 3, 11, 7 };
+    Int index;
+
+    memset(&context, 0, sizeof(context));
+    InitZigzagScan(&context);
+    for (index = 0; index < 16; ++index) {
+        if (context.m_aScanLowpass[index].uScan != expectedLowpass[index] ||
+            context.m_aScanHoriz[index].uScan != expectedHorizontal[index] ||
+            context.m_aScanVert[index].uScan != expectedVertical[index]) return 0;
+    }
+    return 1;
+}
+
 static int test_coefficient_buffer_vectors(void)
 {
     PixelI values[5] = { 3, 5, 7, 11, 13 };
@@ -6304,6 +6322,7 @@ int main(int argc, char** argv)
         { "explicit_entropy_context", test_explicit_entropy_context },
         { "adaptive_scan_vectors", test_adaptive_scan_vectors },
         { "adaptive_scan_state_vectors", test_adaptive_scan_state_vectors },
+        { "adaptive_scan_default_vectors", test_adaptive_scan_default_vectors },
         { "coefficient_buffer_vectors", test_coefficient_buffer_vectors },
         { "huffman_decoder_vectors", test_huffman_decoder_vectors },
         { "lp_residual_vectors", test_lp_residual_vectors },

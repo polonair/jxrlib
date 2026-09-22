@@ -134,8 +134,10 @@ namespace Jxr.Managed.Internal
 
     internal sealed class JxrAdaptiveScan
     {
-        internal int GetCoefficientIndex(int scanPosition) { return 0; }
-        internal void ObserveNonZero(int scanPosition) {}
+        internal JxrError ResetTotals(int count) { return JxrError.None; }
+        internal JxrError GetCoefficientIndex(int scanPosition, out uint coefficientIndex)
+        { coefficientIndex = 0; return JxrError.None; }
+        internal JxrError ObserveNonZero(int scanPosition) { return JxrError.None; }
     }
 
     internal sealed class JxrEntropyContext

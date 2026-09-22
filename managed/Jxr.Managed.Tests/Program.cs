@@ -16,6 +16,9 @@ namespace Jxr.Managed.Tests
     {
         private static readonly TestCase[] Tests = {
             new TestCase("bit_math_vectors", TestBitMathVectors),
+            new TestCase("adaptive_scan_vectors", TestAdaptiveScanVectors),
+            new TestCase("adaptive_scan_state_vectors", TestAdaptiveScanStateVectors),
+            new TestCase("adaptive_scan_default_vectors", TestAdaptiveScanDefaultVectors),
             new TestCase("huffman_state_set_vectors", TestHuffmanStateSetVectors),
             new TestCase("adaptive_huffman_vectors", TestAdaptiveHuffmanVectors),
             new TestCase("adaptive_huffman_table_catalog_vectors", TestAdaptiveHuffmanTableCatalogVectors),
@@ -61,6 +64,59 @@ namespace Jxr.Managed.Tests
                 JxrBitMath.LowMask32(31) == 0x7fffffffU &&
                 JxrBitMath.LowMask32(32) == 0xffffffffU &&
                 JxrBitMath.LowMask32(33) == 0xffffffffU;
+        }
+
+        // Direct counterpart of native adaptive_scan_vectors.
+        private static bool TestAdaptiveScanVectors()
+        {
+            JxrAdaptiveScan scan = new JxrAdaptiveScan(new uint[] { 0, 1, 2, 3 });
+            uint value;
+            if (scan.ResetTotals(4) != JxrError.None ||
+                scan.GetTotal(0, out value) != JxrError.None || value != JxrAdaptiveScan.MaximumTotal ||
+                scan.GetTotal(1, out value) != JxrError.None || value != 32 ||
+                scan.GetTotal(2, out value) != JxrError.None || value != 30 ||
+                scan.GetCoefficientIndex(2, out value) != JxrError.None || value != 2) return false;
+            return scan.ObserveNonZero(2) == JxrError.None &&
+                scan.ObserveNonZero(2) == JxrError.None &&
+                scan.ObserveNonZero(2) == JxrError.None &&
+                scan.GetCoefficientIndex(1, out value) == JxrError.None && value == 2 &&
+                scan.GetTotal(1, out value) == JxrError.None && value == 33 &&
+                scan.GetCoefficientIndex(2, out value) == JxrError.None && value == 1 &&
+                scan.GetTotal(2, out value) == JxrError.None && value == 32;
+        }
+
+        // Direct counterpart of native adaptive_scan_state_vectors.
+        private static bool TestAdaptiveScanStateVectors()
+        {
+            JxrAdaptiveScan scan = new JxrAdaptiveScan(new uint[] { 3, 2, 1, 0 });
+            uint value;
+            if (scan.ResetTotals(4) != JxrError.None ||
+                scan.GetCoefficientIndex(2, out value) != JxrError.None || value != 1) return false;
+            return scan.ObserveNonZero(2) == JxrError.None &&
+                scan.ObserveNonZero(2) == JxrError.None &&
+                scan.ObserveNonZero(2) == JxrError.None &&
+                scan.GetCoefficientIndex(1, out value) == JxrError.None && value == 1 &&
+                scan.GetCoefficientIndex(2, out value) == JxrError.None && value == 2 &&
+                scan.ResetTotals(0) == JxrError.None &&
+                scan.ObserveNonZero(4) == JxrError.InvalidArgument;
+        }
+
+        // Mirrors InitZigzagScan's LP, horizontal and vertical defaults.
+        private static bool TestAdaptiveScanDefaultVectors()
+        {
+            JxrAdaptiveScanSet scans = JxrAdaptiveScanSet.CreateDefault();
+            uint[] expectedLowpass = { 0, 1, 4, 5, 2, 8, 6, 9, 3, 12, 10, 7, 13, 11, 14, 15 };
+            uint[] expectedHorizontal = { 0, 5, 10, 12, 1, 2, 8, 4, 6, 9, 3, 14, 13, 7, 11, 15 };
+            uint[] expectedVertical = { 0, 10, 2, 12, 5, 9, 4, 8, 1, 13, 6, 15, 14, 3, 11, 7 };
+            uint value;
+            int index;
+            for (index = 0; index < 16; index++)
+            {
+                if (scans.Lowpass.GetCoefficientIndex(index, out value) != JxrError.None || value != expectedLowpass[index] ||
+                    scans.Horizontal.GetCoefficientIndex(index, out value) != JxrError.None || value != expectedHorizontal[index] ||
+                    scans.Vertical.GetCoefficientIndex(index, out value) != JxrError.None || value != expectedVertical[index]) return false;
+            }
+            return true;
         }
 
         // Direct counterpart of native huffman_state_set_vectors.
