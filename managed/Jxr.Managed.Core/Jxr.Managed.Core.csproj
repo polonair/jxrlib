@@ -1,0 +1,20 @@
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{A4E4A589-1762-4FC4-89B2-0EC6EF9A3C00}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <RootNamespace>Jxr.Managed.Core</RootNamespace>
+    <AssemblyName>Jxr.Managed.Core</AssemblyName>
+    <TargetFrameworkVersion>v2.0</TargetFrameworkVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols><DebugType>full</DebugType><Optimize>false</Optimize><OutputPath>bin\Debug\</OutputPath>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType><Optimize>true</Optimize><OutputPath>bin\Release\</OutputPath>
+  </PropertyGroup>
+  <ItemGroup><Reference Include="System" /></ItemGroup>
+  <ItemGroup><Compile Include="JxrError.cs" /><Compile Include="JxrBitReader.cs" /><Compile Include="JxrHuffmanTable.cs" /><Compile Include="JxrAdaptiveHuffmanTableCatalog.cs" /><Compile Include="JxrAdaptiveHuffman.cs" /><Compile Include="JxrHuffmanStateSet.cs" /></ItemGroup>
+  <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
+</Project>

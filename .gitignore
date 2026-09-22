@@ -3,3 +3,5 @@
 /jxrtestlib/Release/*
 /jxrgluelib/Release/*
 /tests/work/
+/managed/**/bin/
+/managed/**/obj/

@@ -50,6 +50,7 @@
 #include "JxrEntropyState.h"
 #include "JxrAdaptiveScan.h"
 #include "JxrCoefficientBuffer.h"
+#include "JxrAdaptiveHuffman.h"
 #include "JxrHuffmanDecoder.h"
 #include "JxrLpResidualDecoder.h"
 #include "JxrLowpassCbpState.h"
@@ -273,6 +274,86 @@ static int test_huffman_state_set_vectors(void)
     if (JxrHuffmanStateSetGet(&stateSet, 3) != &huffman) return 0;
     JxrHuffmanStateSetObserve(&stateSet, 3, 1);
     return huffman.m_iDiscriminant == 12;
+}
+
+static int test_adaptive_huffman_vectors(void)
+{
+    CAdaptiveHuffman state;
+    Int primaryDelta[3] = { -2, 0, 5 };
+    Int secondaryDelta[3] = { 4, -1, 2 };
+    U8 inputData[2] = { 0, 0 };
+    BitIOInfo input;
+
+    memset(&state, 0, sizeof(state));
+    state.m_iNSymbols = 3;
+    state.m_pDelta = primaryDelta;
+    state.m_pDelta1 = secondaryDelta;
+    state.m_iDiscriminant = 7;
+    state.m_iDiscriminant1 = -3;
+    JxrAdaptiveHuffmanObserve(&state, 2);
+    if (state.m_iDiscriminant != 12 || state.m_iDiscriminant1 != -1) return 0;
+
+    memset(&state, 0, sizeof(state));
+    state.m_iNSymbols = 6;
+    JxrAdaptiveHuffmanAdapt(&state);
+    if (!state.m_bInitialize || state.m_iTableIndex != 1 ||
+        state.m_iDiscriminant != 0 || state.m_iLowerBound != -8 ||
+        state.m_iUpperBound != 8) return 0;
+    state.m_iDiscriminant1 = 9;
+    JxrAdaptiveHuffmanAdapt(&state);
+    if (state.m_iTableIndex != 2 || state.m_iDiscriminant != 0 ||
+        state.m_iDiscriminant1 != 0) return 0;
+
+    memset(&state, 0, sizeof(state));
+    state.m_iNSymbols = 5;
+    JxrAdaptiveHuffmanAdapt(&state);
+    state.m_iDiscriminant = 9;
+    JxrAdaptiveHuffmanAdapt(&state);
+    if (state.m_iTableIndex != 1) return 0;
+    state.m_iDiscriminant = 100;
+    JxrAdaptiveHuffmanAdapt(&state);
+    if (state.m_iDiscriminant != 64 || state.m_iUpperBound != (1 << 30)) return 0;
+
+    memset(&state, 0, sizeof(state));
+    state.m_iNSymbols = 5;
+    JxrAdaptiveHuffmanAdapt(&state);
+    if (state.m_hufDecTable == NULL || state.m_hufDecTable[0] != 28 ||
+        state.m_pTable[0] != 5 || state.m_pTable[1] != 1 ||
+        state.m_pTable[2] != 1 || state.m_pTable[7] != 0 ||
+        state.m_pTable[8] != 4 || state.m_pDelta[3] != 1) return 0;
+    memset(&input, 0, sizeof(input));
+    input.iMask = -2;
+    input.pbCurrent = inputData;
+    if (JxrAdaptiveHuffmanDecode(&state, &input) != 3 ||
+        state.m_iDiscriminant != 1 || input.cBitsUsed != 4) return 0;
+
+    memset(&state, 0, sizeof(state)); state.m_iNSymbols = 4;
+    JxrAdaptiveHuffmanAdapt(&state);
+    if (state.m_hufDecTable[0] != 19) return 0;
+    memset(&state, 0, sizeof(state)); state.m_iNSymbols = 6;
+    JxrAdaptiveHuffmanAdapt(&state);
+    if (state.m_hufDecTable[0] != 12) return 0;
+    state.m_iDiscriminant1 = 9;
+    JxrAdaptiveHuffmanAdapt(&state);
+    if (state.m_hufDecTable[0] != 4) return 0;
+    memset(&state, 0, sizeof(state)); state.m_iNSymbols = 7;
+    JxrAdaptiveHuffmanAdapt(&state);
+    if (state.m_hufDecTable[0] != 45) return 0;
+    memset(&state, 0, sizeof(state)); state.m_iNSymbols = 8;
+    JxrAdaptiveHuffmanAdapt(&state);
+    if (state.m_hufDecTable[0] != 53) return 0;
+    state.m_iDiscriminant = 9;
+    JxrAdaptiveHuffmanAdapt(&state);
+    if (state.m_iTableIndex != 1 || state.m_hufDecTable[0] != 53) return 0;
+    memset(&state, 0, sizeof(state)); state.m_iNSymbols = 9;
+    JxrAdaptiveHuffmanAdapt(&state);
+    if (state.m_hufDecTable[0] != 13) return 0;
+    memset(&state, 0, sizeof(state)); state.m_iNSymbols = 12;
+    JxrAdaptiveHuffmanAdapt(&state);
+    if (state.m_hufDecTable[0] != -32736) return 0;
+    state.m_iDiscriminant1 = 9;
+    JxrAdaptiveHuffmanAdapt(&state);
+    return state.m_hufDecTable[0] == -32736;
 }
 
 static int test_highpass_cbp_state_vectors(void)
@@ -6120,6 +6201,7 @@ int main(int argc, char** argv)
         { "adaptive_state", test_adaptive_state },
         { "adaptive_model_state_vectors", test_adaptive_model_state_vectors },
         { "huffman_state_set_vectors", test_huffman_state_set_vectors },
+        { "adaptive_huffman_vectors", test_adaptive_huffman_vectors },
         { "highpass_cbp_state_vectors", test_highpass_cbp_state_vectors },
         { "macroblock_state_vectors", test_macroblock_state_vectors },
         { "coefficient_plane_state_vectors", test_coefficient_plane_state_vectors },
