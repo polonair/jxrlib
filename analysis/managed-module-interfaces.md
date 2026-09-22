@@ -91,6 +91,10 @@ only if its buffer is non-null and `0 <= Offset <= Buffer.Length` and
 The lowest porting layer is independent of headers, image dimensions and pixel
 output.  It accepts a byte source and exposes only a validated bit cursor.
 
+`JxrBitMath` is a stateless prerequisite for this layer.  It exposes only
+`RotateLeft32(uint value, uint count)` and `LowMask32(uint bitCount)`; both
+return `uint`, normalize rotation counts modulo 32 and never use signed shifts.
+
 ```csharp
 namespace Jxr.Managed.Internal
 {

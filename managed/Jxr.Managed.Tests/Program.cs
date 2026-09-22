@@ -15,6 +15,7 @@ namespace Jxr.Managed.Tests
     internal static class Program
     {
         private static readonly TestCase[] Tests = {
+            new TestCase("bit_math_vectors", TestBitMathVectors),
             new TestCase("huffman_state_set_vectors", TestHuffmanStateSetVectors),
             new TestCase("adaptive_huffman_vectors", TestAdaptiveHuffmanVectors),
             new TestCase("adaptive_huffman_table_catalog_vectors", TestAdaptiveHuffmanTableCatalogVectors),
@@ -38,6 +39,28 @@ namespace Jxr.Managed.Tests
             }
             if (!found) { Console.WriteLine("Unknown test"); return 2; }
             return passed ? 0 : 1;
+        }
+
+        // Direct counterpart of native bit_math_vectors, including count
+        // normalization beyond the 32-bit rotation boundary.
+        private static bool TestBitMathVectors()
+        {
+            uint value = 0x12345678U;
+            return JxrBitMath.RotateLeft32(value, 0) == 0x12345678U &&
+                JxrBitMath.RotateLeft32(value, 1) == 0x2468acf0U &&
+                JxrBitMath.RotateLeft32(value, 14) == 0x159e048dU &&
+                JxrBitMath.RotateLeft32(value, 16) == 0x56781234U &&
+                JxrBitMath.RotateLeft32(value, 31) == 0x091a2b3cU &&
+                JxrBitMath.RotateLeft32(value, 32) == 0x12345678U &&
+                JxrBitMath.RotateLeft32(value, 33) == 0x2468acf0U &&
+                JxrBitMath.RotateLeft32(value, 63) == 0x091a2b3cU &&
+                JxrBitMath.LowMask32(0) == 0U &&
+                JxrBitMath.LowMask32(1) == 0x1U &&
+                JxrBitMath.LowMask32(14) == 0x3fffU &&
+                JxrBitMath.LowMask32(16) == 0xffffU &&
+                JxrBitMath.LowMask32(31) == 0x7fffffffU &&
+                JxrBitMath.LowMask32(32) == 0xffffffffU &&
+                JxrBitMath.LowMask32(33) == 0xffffffffU;
         }
 
         // Direct counterpart of native huffman_state_set_vectors.

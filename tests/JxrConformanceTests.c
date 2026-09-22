@@ -3624,12 +3624,16 @@ static int test_bit_math_vectors(void)
         JxrBitMathRotateLeft32(value, 14) == 0x159e048dU &&
         JxrBitMathRotateLeft32(value, 16) == 0x56781234U &&
         JxrBitMathRotateLeft32(value, 31) == 0x091a2b3cU &&
+        JxrBitMathRotateLeft32(value, 32) == 0x12345678U &&
+        JxrBitMathRotateLeft32(value, 33) == 0x2468acf0U &&
+        JxrBitMathRotateLeft32(value, 63) == 0x091a2b3cU &&
         JxrBitMathLowMask32(0) == 0U &&
         JxrBitMathLowMask32(1) == 0x1U &&
         JxrBitMathLowMask32(14) == 0x3fffU &&
         JxrBitMathLowMask32(16) == 0xffffU &&
         JxrBitMathLowMask32(31) == 0x7fffffffU &&
-        JxrBitMathLowMask32(32) == 0xffffffffU;
+        JxrBitMathLowMask32(32) == 0xffffffffU &&
+        JxrBitMathLowMask32(33) == 0xffffffffU;
 }
 
 static int test_decoder_coefficient_predictor_vectors(void)
