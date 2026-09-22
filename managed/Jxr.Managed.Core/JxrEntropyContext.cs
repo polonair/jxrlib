@@ -13,6 +13,13 @@ namespace Jxr.Managed.Core
     // chroma, as in the two-element native FLC state and bit arrays.
     public sealed class JxrAdaptiveModel
     {
+        private static readonly int[] lumaWeights = { 240, 12, 1 };
+        private static readonly int[][] channelWeights = {
+            new int[] { 0,240,120,80,60,48,40,34,30,27,24,22,20,18,17,16 },
+            new int[] { 0,12,6,4,3,2,2,2,2,1,1,1,1,1,1,1 },
+            new int[] { 0,16,8,5,4,3,3,2,2,2,2,1,1,1,1,1 }
+        };
+        private static readonly int[] subsampledWeights = { 120,37,2,120,18,1 };
         private readonly int[] flcStates = new int[2];
         private readonly int[] flcBits = new int[2];
         private JxrAdaptiveBand band;
@@ -46,6 +53,59 @@ namespace Jxr.Managed.Core
             if (channel < 0 || channel >= 2) return JxrError.InvalidArgument;
             flcStates[channel] = flcState;
             flcBits[channel] = bitCount;
+            return JxrError.None;
+        }
+
+        // Exact managed form of UpdateModelMB in image/sys/image.c.  The
+        // laplacian mean array is scaled in place, like the native input.
+        public JxrError UpdateForMacroblock(JxrCodecColorFormat colorFormat,
+            int channelCount, int[] laplacianMean)
+        {
+            int bandIndex = (int)band - (int)JxrAdaptiveBand.Dc;
+            int channel;
+            if (laplacianMean == null || laplacianMean.Length < 2 ||
+                channelCount < 1 || channelCount > 16 || bandIndex < 0 || bandIndex > 2)
+                return JxrError.InvalidArgument;
+            laplacianMean[0] = unchecked(laplacianMean[0] * lumaWeights[bandIndex]);
+            if (colorFormat == JxrCodecColorFormat.Yuv420)
+                laplacianMean[1] = unchecked(laplacianMean[1] * subsampledWeights[bandIndex]);
+            else if (colorFormat == JxrCodecColorFormat.Yuv422)
+                laplacianMean[1] = unchecked(laplacianMean[1] * subsampledWeights[3 + bandIndex]);
+            else
+            {
+                laplacianMean[1] = unchecked(laplacianMean[1] * channelWeights[bandIndex][channelCount - 1]);
+                if (band == JxrAdaptiveBand.Highpass) laplacianMean[1] >>= 4;
+            }
+            for (channel = 0; channel < 2; channel++)
+            {
+                int mean = laplacianMean[channel];
+                int modelState = flcStates[channel];
+                int delta = unchecked(mean - 70) >> 2;
+                if (delta <= -8)
+                {
+                    delta += 4;
+                    if (delta < -16) delta = -16;
+                    modelState += delta;
+                    if (modelState < -8)
+                    {
+                        if (flcBits[channel] == 0) modelState = -8;
+                        else { modelState = 0; flcBits[channel]--; }
+                    }
+                }
+                else if (delta >= 8)
+                {
+                    delta -= 4;
+                    if (delta > 15) delta = 15;
+                    modelState += delta;
+                    if (modelState > 8)
+                    {
+                        if (flcBits[channel] >= 15) { flcBits[channel] = 15; modelState = 8; }
+                        else { modelState = 0; flcBits[channel]++; }
+                    }
+                }
+                flcStates[channel] = modelState;
+                if (colorFormat == JxrCodecColorFormat.YOnly) break;
+            }
             return JxrError.None;
         }
     }

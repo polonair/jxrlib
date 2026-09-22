@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using Jxr.Managed.Core;
 
 namespace Jxr.Managed.Tests
@@ -22,6 +23,8 @@ namespace Jxr.Managed.Tests
             new TestCase("adaptive_scan_state_vectors", TestAdaptiveScanStateVectors),
             new TestCase("adaptive_scan_default_vectors", TestAdaptiveScanDefaultVectors),
             new TestCase("explicit_entropy_context", TestExplicitEntropyContext),
+            new TestCase("minimal_entropy_codec_fixture", TestMinimalEntropyCodecFixture),
+            new TestCase("color_entropy_codec_fixture", TestColorEntropyCodecFixture),
             new TestCase("coefficient_buffer_vectors", TestCoefficientBufferVectors),
             new TestCase("coefficient_plane_state_vectors", TestCoefficientPlaneStateVectors),
             new TestCase("macroblock_state_vectors", TestMacroblockStateVectors),
@@ -51,6 +54,121 @@ namespace Jxr.Managed.Tests
             }
             if (!found) { Console.WriteLine("Unknown test"); return 2; }
             return passed ? 0 : 1;
+        }
+
+        // Native decoder trace: DC [1320,1330), LP [1330,1544),
+        // HP [1544,3502); the same JPEG XR bytes are the oracle.
+        private static bool TestMinimalEntropyCodecFixture()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "minimal-profile\\minimal-gray-16x16.jxr"))) directory = directory.Parent;
+            if (directory == null) return false;
+            byte[] bytes = File.ReadAllBytes(Path.Combine(directory.FullName,
+                "minimal-profile\\minimal-gray-16x16.jxr"));
+            JxrBitReader reader = new JxrBitReader(bytes);
+            int remaining = 1320;
+            while (remaining > 0)
+            {
+                int count = Math.Min(remaining, 32);
+                if (reader.ConsumeBits(count) != JxrError.None) return false;
+                remaining -= count;
+            }
+            JxrCodecConfiguration format = new JxrCodecConfiguration(
+                JxrCodecColorFormat.YOnly, 1, true, false, true, true,
+                false, true, true, false, false, 0, 0, 1, 1,
+                new int[][] { new int[] { 1 } });
+            JxrCodecState state = new JxrCodecState(format, reader, reader, reader, reader);
+            if (JxrDcCodec.Decode(state) != JxrError.None || reader.BitPosition != 1330)
+            { Console.WriteLine("DC bit position: " + reader.BitPosition); return false; }
+            if (JxrLpCodec.Decode(state) != JxrError.None || reader.BitPosition != 1544)
+            { Console.WriteLine("LP bit position: " + reader.BitPosition); return false; }
+            int[] dequantized = ReadTraceValues(Path.Combine(directory.FullName,
+                "minimal-profile\\trace\\decoder-mb-000-000-after_dequantization.json"));
+            int[] dcOffsets = { 0,128,64,208,32,240,48,224,
+                16,192,80,144,112,176,96,160 };
+            if (dequantized == null || dequantized.Length != 256) return false;
+            for (int coefficient = 0; coefficient < 16; coefficient++)
+            {
+                int actual;
+                if (state.Macroblock.GetDcCoefficient(0, coefficient, out actual) != JxrError.None ||
+                    actual != dequantized[dcOffsets[coefficient]])
+                { Console.WriteLine("DC/LP coefficient " + coefficient + ": " + actual);
+                  return false; }
+            }
+            JxrMacroblockSnapshot snapshot = new JxrMacroblockSnapshot(16);
+            if (state.Macroblock.CopyTo(snapshot) != JxrError.None) return false;
+            snapshot.Orientation = 1; // native getACPredMode: vertical for this MB
+            if (state.Macroblock.LoadFrom(snapshot) != JxrError.None) return false;
+            int[] values;
+            if (state.CoefficientPlanes.GetPlane(0, out values) != JxrError.None) return false;
+            Array.Copy(dequantized, values, values.Length);
+            if (JxrHpCodec.Decode(state) != JxrError.None || reader.BitPosition != 3502)
+            { Console.WriteLine("HP bit position: " + reader.BitPosition); return false; }
+            int cbp, differential;
+            if (state.MacroblockCbp.GetCbp(0, out cbp) != JxrError.None ||
+                state.MacroblockCbp.GetDifferential(0, out differential) != JxrError.None)
+                return false;
+            int[] expected = ReadTraceValues(Path.Combine(directory.FullName,
+                "minimal-profile\\trace\\decoder-mb-000-000-after_hp.json"));
+            if (expected == null || expected.Length != 256) return false;
+            for (int coefficient = 0; coefficient < 256; coefficient++)
+                if (values[coefficient] != expected[coefficient])
+                { Console.WriteLine("HP coefficient " + coefficient + ": " +
+                    values[coefficient] + " != " + expected[coefficient]); return false; }
+            return cbp == 65535 && differential == 0;
+        }
+
+        private static int[] ReadTraceValues(string path)
+        {
+            string trace = File.ReadAllText(path);
+            int start = trace.IndexOf("\"values\": [", StringComparison.Ordinal);
+            if (start < 0) return null;
+            start = trace.IndexOf('[', start) + 1;
+            int end = trace.IndexOf(']', start);
+            if (end < start) return null;
+            string[] fields = trace.Substring(start, end - start).Split(',');
+            int[] values = new int[fields.Length];
+            for (int index = 0; index < fields.Length; index++)
+                values[index] = Int32.Parse(fields[index].Trim(),
+                    System.Globalization.CultureInfo.InvariantCulture);
+            return values;
+        }
+
+        // First YUV444 macroblock of the native real-image trace.  Native
+        // ranges: DC [1384,1424), LP [1424,1607), HP [1607,1620).
+        private static bool TestColorEntropyCodecFixture()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "real-image-profile\\test-sign-334x330.jxr"))) directory = directory.Parent;
+            if (directory == null) return false;
+            JxrBitReader reader = new JxrBitReader(File.ReadAllBytes(Path.Combine(
+                directory.FullName, "real-image-profile\\test-sign-334x330.jxr")));
+            int remaining = 1384;
+            while (remaining > 0)
+            {
+                int count = Math.Min(remaining, 32);
+                if (reader.ConsumeBits(count) != JxrError.None) return false;
+                remaining -= count;
+            }
+            JxrCodecConfiguration format = new JxrCodecConfiguration(
+                JxrCodecColorFormat.Yuv444, 3, true, false, true, true,
+                false, true, true, false, false, 0, 0, 1, 1,
+                new int[][] { new int[] { 1 }, new int[] { 1 }, new int[] { 1 } });
+            JxrCodecState state = new JxrCodecState(format, reader, reader, reader, reader);
+            if (JxrDcCodec.Decode(state) != JxrError.None || reader.BitPosition != 1424)
+            { Console.WriteLine("Color DC bit position: " + reader.BitPosition); return false; }
+            if (JxrLpCodec.Decode(state) != JxrError.None || reader.BitPosition != 1607)
+            { Console.WriteLine("Color LP bit position: " + reader.BitPosition); return false; }
+            if (JxrHpCodec.Decode(state) != JxrError.None || reader.BitPosition != 1620)
+            { Console.WriteLine("Color HP bit position: " + reader.BitPosition); return false; }
+            int cbp, difference, luminanceDc;
+            if (state.MacroblockCbp.GetCbp(0, out cbp) != JxrError.None ||
+                state.MacroblockCbp.GetDifferential(0, out difference) != JxrError.None ||
+                state.Macroblock.GetDcCoefficient(0, 0, out luminanceDc) != JxrError.None)
+                return false;
+            return cbp == 0 && difference == 1 && luminanceDc == 176;
         }
 
         // Direct counterpart of native bit_math_vectors, including count

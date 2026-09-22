@@ -208,6 +208,7 @@ namespace Jxr.Managed.Core
             Array.Copy(dcCoefficients, snapshot.GetValues(), dcCoefficients.Length);
             snapshot.LowpassQuantizerIndex = lowpassQuantizerIndex;
             snapshot.HighpassQuantizerIndex = highpassQuantizerIndex;
+            snapshot.Orientation = orientation;
             return JxrError.None;
         }
 
