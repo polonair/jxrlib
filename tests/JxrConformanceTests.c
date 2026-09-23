@@ -29,6 +29,7 @@
 #include "../image/encode/JxrEncoderPacketStreamCleanup.h"
 #include "../image/encode/JxrEncoderPacketStreamInitializer.h"
 #include "../image/encode/JxrEncoderQuantizerInitializer.h"
+#include "../image/encode/JxrEncoderQuantizationPipeline.h"
 #include "../image/encode/JxrEncoderChromaResamplingSetup.h"
 #include "../image/encode/JxrEncoderTileStateInitializer.h"
 #include "../image/encode/JxrEncoderOutputInitializer.h"
@@ -3803,6 +3804,171 @@ static int test_decoder_dequantizer_vectors(void)
     return destination[32] == 3 && destination[16] == 6 && destination[48] == 9;
 }
 
+static U64 quantization_hash_value(U64 hash, I32 value)
+{
+    return (hash ^ (U32)value) * (U64)1099511628211ULL;
+}
+
+/* Stable native oracle for every QP index, both arithmetic modes and both
+   chroma shifts. The managed runner recomputes exactly the same signature. */
+static int test_quantization_reference_vectors(void)
+{
+    static const PixelI samples[] = {
+        -1000000, -257, -17, -1, 0, 1, 17, 257, 1000000
+    };
+    U64 hash = (U64)14695981039346656037ULL;
+    int scaled, chroma, index, sample;
+    for (scaled = 0; scaled < 2; ++scaled)
+        for (chroma = 0; chroma < 2; ++chroma)
+            for (index = 0; index < 256; ++index) {
+                CWMIQuantizer quantizer;
+                memset(&quantizer, 0, sizeof(quantizer));
+                quantizer.iIndex = (U8)index;
+                remapQP(&quantizer, chroma ? SHIFTZERO - 1 : SHIFTZERO,
+                    scaled ? TRUE : FALSE);
+                hash = quantization_hash_value(hash, quantizer.iQP);
+                hash = quantization_hash_value(hash, quantizer.iOffset);
+                hash = quantization_hash_value(hash, quantizer.iMan);
+                hash = quantization_hash_value(hash, quantizer.iExp);
+                for (sample = 0; sample < sizeof(samples) / sizeof(samples[0]); ++sample) {
+                    I32 quantized = JxrEncoderQuantizationPipelineQuantizeCoefficient(
+                        samples[sample], &quantizer);
+                    hash = quantization_hash_value(hash, quantized);
+                    hash = quantization_hash_value(hash,
+                        JxrPredictionMathDequantize(quantized, quantizer.iQP));
+                }
+                quantizer.iOffset = quantizer.iQP >> 1;
+                hash = quantization_hash_value(hash,
+                    JxrEncoderQuantizationPipelineQuantizeCoefficient(257, &quantizer));
+            }
+    if (hash != (U64)0x1fa6c38918dde471ULL) {
+        printf("native quantization signature: %016llx\n", (unsigned long long)hash);
+        return 0;
+    }
+    return 1;
+}
+
+/* Exercises the native block-offset selection and DC import/export for each
+   chroma layout, each subband level, and the transcode bypass. */
+static int test_quantization_macroblock_vectors(void)
+{
+    static const COLORFORMAT formats[] = { Y_ONLY, YUV_444, YUV_422, YUV_420 };
+    static const SUBBAND bands[] = { SB_ALL, SB_NO_HIGHPASS, SB_DC_ONLY };
+    U64 hash = (U64)14695981039346656037ULL;
+    int formatIndex, bandIndex, transcode, channel, index;
+    for (formatIndex = 0; formatIndex < 4; formatIndex++)
+        for (bandIndex = 0; bandIndex < 3; bandIndex++)
+            for (transcode = 0; transcode < 2; transcode++) {
+                CWMImageStrCodec codec;
+                CWMITile tile;
+                CWMIQuantizer dc[3], lp[3], hp[3];
+                PixelI source[3][256], destination[3][256];
+                const int channelCount = formatIndex == 0 ? 1 : 3;
+                memset(&codec, 0, sizeof(codec));
+                memset(&tile, 0, sizeof(tile));
+                memset(source, 0, sizeof(source));
+                memset(destination, 0, sizeof(destination));
+                codec.pTile = &tile;
+                codec.m_param.cfColorFormat = formats[formatIndex];
+                codec.m_param.cNumChannels = channelCount;
+                codec.m_param.bTranscode = transcode ? TRUE : FALSE;
+                codec.WMISCP.sbSubband = bands[bandIndex];
+                for (channel = 0; channel < channelCount; channel++) {
+                    const int chroma = channel > 0;
+                    const int shift = chroma ? SHIFTZERO - 1 : SHIFTZERO;
+                    const int length = chroma && formats[formatIndex] == YUV_420 ? 64 :
+                        chroma && formats[formatIndex] == YUV_422 ? 128 : 256;
+                    memset(&dc[channel], 0, sizeof(CWMIQuantizer));
+                    memset(&lp[channel], 0, sizeof(CWMIQuantizer));
+                    memset(&hp[channel], 0, sizeof(CWMIQuantizer));
+                    dc[channel].iIndex = (U8)(6 + channel);
+                    lp[channel].iIndex = (U8)(23 + channel);
+                    hp[channel].iIndex = (U8)(37 + channel);
+                    remapQP(&dc[channel], shift, TRUE);
+                    remapQP(&lp[channel], shift, TRUE);
+                    remapQP(&hp[channel], SHIFTZERO, TRUE);
+                    dc[channel].iOffset = dc[channel].iQP >> 1;
+                    tile.pQuantizerDC[channel] = &dc[channel];
+                    tile.pQuantizerLP[channel] = &lp[channel];
+                    tile.pQuantizerHP[channel] = &hp[channel];
+                    codec.pPlane[channel] = source[channel];
+                    codec.p1MBbuffer[channel] = destination[channel];
+                    for (index = 0; index < length; index++)
+                        source[channel][index] = (index % 19 - 9) * 7 + channel * 3;
+                }
+                JxrEncoderQuantizationPipelineQuantize(&codec);
+                for (channel = 0; channel < channelCount; channel++) {
+                    const int chroma = channel > 0;
+                    const int length = chroma && formats[formatIndex] == YUV_420 ? 64 :
+                        chroma && formats[formatIndex] == YUV_422 ? 128 : 256;
+                    for (index = 0; index < length; index++)
+                        hash = quantization_hash_value(hash, source[channel][index]);
+                    for (index = 0; index < 16; index++)
+                        hash = quantization_hash_value(hash,
+                            codec.MBInfo.iBlockDC[channel][index]);
+                }
+                JxrDecoderDequantizerDequantizeMacroblock(&codec);
+                for (channel = 0; channel < channelCount; channel++) {
+                    const int chroma = channel > 0;
+                    const int length = chroma && formats[formatIndex] == YUV_420 ? 64 :
+                        chroma && formats[formatIndex] == YUV_422 ? 128 : 256;
+                    for (index = 0; index < length; index++)
+                        hash = quantization_hash_value(hash, destination[channel][index]);
+                }
+            }
+    if (hash != (U64)0xde5bd4b43499b328ULL) {
+        printf("native macroblock quantization signature: %016llx\n",
+            (unsigned long long)hash);
+        return 0;
+    }
+    {
+        CWMImageStrCodec transcodeCodec;
+        PixelI passthrough[256] = { 0 };
+        memset(&transcodeCodec, 0, sizeof(transcodeCodec));
+        transcodeCodec.m_param.cfColorFormat = Y_ONLY;
+        transcodeCodec.m_param.cNumChannels = 1;
+        transcodeCodec.m_param.bTranscode = TRUE;
+        transcodeCodec.pPlane[0] = passthrough;
+        passthrough[0] = 7;
+        passthrough[128] = -3;
+        JxrEncoderQuantizationPipelineQuantize(&transcodeCodec);
+        return transcodeCodec.MBInfo.iBlockDC[0][0] == 7 &&
+            transcodeCodec.MBInfo.iBlockDC[0][1] == -3;
+    }
+}
+
+static int test_quantization_channel_modes(void)
+{
+    U64 hash = (U64)14695981039346656037ULL;
+    int mode, shifted, channel;
+    for (mode = 0; mode < 4; mode++)
+        for (shifted = 0; shifted < 2; shifted++) {
+            CWMIQuantizer storage[3];
+            CWMIQuantizer* quantizers[MAX_CHANNELS] = { 0 };
+            memset(storage, 0, sizeof(storage));
+            storage[0].iIndex = 8;
+            storage[1].iIndex = 20;
+            storage[2].iIndex = 40;
+            for (channel = 0; channel < 3; channel++)
+                quantizers[channel] = storage + channel;
+            formatQuantizer(quantizers, (U8)mode, 3, 0,
+                shifted ? TRUE : FALSE, TRUE);
+            for (channel = 0; channel < 3; channel++) {
+                hash = quantization_hash_value(hash, storage[channel].iIndex);
+                hash = quantization_hash_value(hash, storage[channel].iQP);
+                hash = quantization_hash_value(hash, storage[channel].iOffset);
+                hash = quantization_hash_value(hash, storage[channel].iMan);
+                hash = quantization_hash_value(hash, storage[channel].iExp);
+            }
+        }
+    if (hash != (U64)0x053a7d101da6569bULL) {
+        printf("native channel quantization signature: %016llx\n",
+            (unsigned long long)hash);
+        return 0;
+    }
+    return 1;
+}
+
 static int test_decoder_nchannel_output_writer_vectors(void)
 {
     CWMImageStrCodec codec;
@@ -6392,6 +6558,9 @@ int main(int argc, char** argv)
         { "decoder_coefficient_predictor_vectors", test_decoder_coefficient_predictor_vectors },
         { "decoder_uv_interpolator_vectors", test_decoder_uv_interpolator_vectors },
         { "decoder_dequantizer_vectors", test_decoder_dequantizer_vectors },
+        { "quantization_reference_vectors", test_quantization_reference_vectors },
+        { "quantization_macroblock_vectors", test_quantization_macroblock_vectors },
+        { "quantization_channel_modes", test_quantization_channel_modes },
         { "decoder_nchannel_output_writer_vectors", test_decoder_nchannel_output_writer_vectors },
         { "decoder_thumbnail_nchannel_output_writer_vectors", test_decoder_thumbnail_nchannel_output_writer_vectors },
         { "decoder_thumbnail_color_output_writer_vectors", test_decoder_thumbnail_color_output_writer_vectors },

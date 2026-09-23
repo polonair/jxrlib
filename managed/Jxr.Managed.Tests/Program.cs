@@ -25,6 +25,9 @@ namespace Jxr.Managed.Tests
             new TestCase("explicit_entropy_context", TestExplicitEntropyContext),
             new TestCase("minimal_entropy_codec_fixture", TestMinimalEntropyCodecFixture),
             new TestCase("color_entropy_codec_fixture", TestColorEntropyCodecFixture),
+            new TestCase("quantization_reference_vectors", TestQuantizationReferenceVectors),
+            new TestCase("quantization_macroblock_vectors", TestQuantizationMacroblockVectors),
+            new TestCase("quantization_channel_modes", TestQuantizationChannelModes),
             new TestCase("coefficient_buffer_vectors", TestCoefficientBufferVectors),
             new TestCase("coefficient_plane_state_vectors", TestCoefficientPlaneStateVectors),
             new TestCase("macroblock_state_vectors", TestMacroblockStateVectors),
@@ -102,7 +105,17 @@ namespace Jxr.Managed.Tests
             if (state.Macroblock.LoadFrom(snapshot) != JxrError.None) return false;
             int[] values;
             if (state.CoefficientPlanes.GetPlane(0, out values) != JxrError.None) return false;
-            Array.Copy(dequantized, values, values.Length);
+            JxrQuantizer lossless = JxrQuantization.Remap(0, false, false);
+            JxrQuantizerSet quantizers = new JxrQuantizerSet(
+                new JxrQuantizer[] { lossless.WithDcOffset() },
+                new JxrQuantizer[][] { new JxrQuantizer[] { lossless } },
+                new JxrQuantizer[][] { new JxrQuantizer[] { lossless } });
+            if (JxrQuantization.DequantizeMacroblock(state.CoefficientPlanes,
+                state.Macroblock, quantizers, JxrCodecColorFormat.YOnly,
+                1, false) != JxrError.None) return false;
+            for (int coefficient = 0; coefficient < 256; coefficient++)
+                if (values[coefficient] != dequantized[coefficient])
+                { Console.WriteLine("Dequant coefficient " + coefficient); return false; }
             if (JxrHpCodec.Decode(state) != JxrError.None || reader.BitPosition != 3502)
             { Console.WriteLine("HP bit position: " + reader.BitPosition); return false; }
             int cbp, differential;
@@ -133,6 +146,169 @@ namespace Jxr.Managed.Tests
                 values[index] = Int32.Parse(fields[index].Trim(),
                     System.Globalization.CultureInfo.InvariantCulture);
             return values;
+        }
+
+        private static ulong QuantizationHashValue(ulong hash, int value)
+        {
+            return unchecked((hash ^ (uint)value) * 1099511628211UL);
+        }
+
+        // Matches native remapQP + coefficient quantizer + dequantizer over
+        // every QP index in scaled/unscaled and luma/chroma modes.
+        private static bool TestQuantizationReferenceVectors()
+        {
+            int[] samples = { -1000000, -257, -17, -1, 0,
+                1, 17, 257, 1000000 };
+            ulong hash = 14695981039346656037UL;
+            for (int scaled = 0; scaled < 2; scaled++)
+                for (int chroma = 0; chroma < 2; chroma++)
+                    for (int index = 0; index < 256; index++)
+                    {
+                        JxrQuantizer quantizer = JxrQuantization.Remap(
+                            (byte)index, scaled != 0, chroma != 0);
+                        hash = QuantizationHashValue(hash, quantizer.Parameter);
+                        hash = QuantizationHashValue(hash, quantizer.Offset);
+                        hash = QuantizationHashValue(hash,
+                            unchecked((int)quantizer.Multiplier));
+                        hash = QuantizationHashValue(hash, quantizer.Exponent);
+                        for (int sample = 0; sample < samples.Length; sample++)
+                        {
+                            int quantized = JxrQuantization.QuantizeCoefficient(
+                                samples[sample], quantizer);
+                            hash = QuantizationHashValue(hash, quantized);
+                            hash = QuantizationHashValue(hash,
+                                JxrQuantization.DequantizeCoefficient(quantized, quantizer));
+                        }
+                        hash = QuantizationHashValue(hash,
+                            JxrQuantization.QuantizeCoefficient(257,
+                                quantizer.WithDcOffset()));
+                    }
+            if (hash != 0x1fa6c38918dde471UL)
+            { Console.WriteLine("Managed quantization signature: " + hash.ToString("x16"));
+              return false; }
+            return true;
+        }
+
+        private static bool TestQuantizationMacroblockVectors()
+        {
+            JxrCodecColorFormat[] formats = {
+                JxrCodecColorFormat.YOnly, JxrCodecColorFormat.Yuv444,
+                JxrCodecColorFormat.Yuv422, JxrCodecColorFormat.Yuv420
+            };
+            ulong hash = 14695981039346656037UL;
+            for (int formatIndex = 0; formatIndex < formats.Length; formatIndex++)
+                for (int band = 0; band < 3; band++)
+                    for (int transcode = 0; transcode < 2; transcode++)
+                    {
+                        int channelCount = formatIndex == 0 ? 1 : 3;
+                        int[][] source = new int[channelCount][];
+                        int[][] destination = new int[channelCount][];
+                        JxrQuantizer[] dc = new JxrQuantizer[channelCount];
+                        JxrQuantizer[][] lp = new JxrQuantizer[channelCount][];
+                        JxrQuantizer[][] hp = new JxrQuantizer[channelCount][];
+                        JxrCoefficientColorFormat planeFormat =
+                            formats[formatIndex] == JxrCodecColorFormat.Yuv420 ?
+                                JxrCoefficientColorFormat.Yuv420 :
+                            formats[formatIndex] == JxrCodecColorFormat.Yuv422 ?
+                                JxrCoefficientColorFormat.Yuv422 :
+                            formats[formatIndex] == JxrCodecColorFormat.Yuv444 ?
+                                JxrCoefficientColorFormat.Yuv444 :
+                                JxrCoefficientColorFormat.Other;
+                        for (int channel = 0; channel < channelCount; channel++)
+                        {
+                            int length = channel > 0 && formatIndex == 3 ? 64 :
+                                channel > 0 && formatIndex == 2 ? 128 : 256;
+                            source[channel] = new int[256];
+                            destination[channel] = new int[256];
+                            dc[channel] = JxrQuantization.Remap((byte)(6 + channel),
+                                true, channel > 0).WithDcOffset();
+                            lp[channel] = new JxrQuantizer[] {
+                                JxrQuantization.Remap((byte)(23 + channel),
+                                    true, channel > 0) };
+                            hp[channel] = new JxrQuantizer[] {
+                                JxrQuantization.Remap((byte)(37 + channel),
+                                    true, false) };
+                            for (int index = 0; index < length; index++)
+                                source[channel][index] = (index % 19 - 9) * 7 + channel * 3;
+                        }
+                        JxrMacroblockState macroblock = new JxrMacroblockState(16);
+                        JxrQuantizerSet quantizers = new JxrQuantizerSet(dc, lp, hp);
+                        JxrCoefficientPlaneState sourcePlanes = new JxrCoefficientPlaneState(
+                            source, planeFormat, channelCount);
+                        JxrCoefficientPlaneState destinationPlanes = new JxrCoefficientPlaneState(
+                            destination, planeFormat, channelCount);
+                        if (JxrQuantization.QuantizeMacroblock(sourcePlanes, macroblock,
+                            quantizers, formats[formatIndex], channelCount,
+                            band == 2, band == 1, transcode != 0) != JxrError.None)
+                            return false;
+                        for (int channel = 0; channel < channelCount; channel++)
+                        {
+                            int length = channel > 0 && formatIndex == 3 ? 64 :
+                                channel > 0 && formatIndex == 2 ? 128 : 256;
+                            for (int index = 0; index < length; index++)
+                                hash = QuantizationHashValue(hash, source[channel][index]);
+                            for (int index = 0; index < 16; index++)
+                            {
+                                int coefficient;
+                                if (macroblock.GetDcCoefficient(channel, index,
+                                    out coefficient) != JxrError.None) return false;
+                                hash = QuantizationHashValue(hash, coefficient);
+                            }
+                        }
+                        if (JxrQuantization.DequantizeMacroblock(destinationPlanes,
+                            macroblock, quantizers, formats[formatIndex], channelCount,
+                            band == 2) != JxrError.None) return false;
+                        for (int channel = 0; channel < channelCount; channel++)
+                        {
+                            int length = channel > 0 && formatIndex == 3 ? 64 :
+                                channel > 0 && formatIndex == 2 ? 128 : 256;
+                            for (int index = 0; index < length; index++)
+                                hash = QuantizationHashValue(hash, destination[channel][index]);
+                        }
+                    }
+            if (hash != 0xde5bd4b43499b328UL)
+            { Console.WriteLine("Managed macroblock quantization signature: " +
+                hash.ToString("x16")); return false; }
+            int[][] passthrough = { new int[256] };
+            passthrough[0][0] = 7;
+            passthrough[0][128] = -3;
+            JxrMacroblockState withoutQuantizers = new JxrMacroblockState(1);
+            if (JxrQuantization.QuantizeMacroblock(
+                new JxrCoefficientPlaneState(passthrough,
+                    JxrCoefficientColorFormat.Other, 1),
+                withoutQuantizers, null, JxrCodecColorFormat.YOnly,
+                1, false, false, true) != JxrError.None) return false;
+            int dc0, dc1;
+            return withoutQuantizers.GetDcCoefficient(0, 0, out dc0) == JxrError.None &&
+                withoutQuantizers.GetDcCoefficient(0, 1, out dc1) == JxrError.None &&
+                dc0 == 7 && dc1 == -3;
+        }
+
+        private static bool TestQuantizationChannelModes()
+        {
+            ulong hash = 14695981039346656037UL;
+            byte[] indices = { 8, 20, 40 };
+            for (int mode = 0; mode < 4; mode++)
+                for (int shifted = 0; shifted < 2; shifted++)
+                {
+                    JxrQuantizer[] quantizers;
+                    if (JxrQuantization.RemapChannels(indices, mode, true,
+                        shifted != 0, false, out quantizers) != JxrError.None)
+                        return false;
+                    for (int channel = 0; channel < 3; channel++)
+                    {
+                        hash = QuantizationHashValue(hash, quantizers[channel].Index);
+                        hash = QuantizationHashValue(hash, quantizers[channel].Parameter);
+                        hash = QuantizationHashValue(hash, quantizers[channel].Offset);
+                        hash = QuantizationHashValue(hash,
+                            unchecked((int)quantizers[channel].Multiplier));
+                        hash = QuantizationHashValue(hash, quantizers[channel].Exponent);
+                    }
+                }
+            if (hash != 0x053a7d101da6569bUL)
+            { Console.WriteLine("Managed channel quantization signature: " +
+                hash.ToString("x16")); return false; }
+            return true;
         }
 
         // First YUV444 macroblock of the native real-image trace.  Native

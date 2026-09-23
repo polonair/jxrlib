@@ -27,6 +27,16 @@ static I32 JxrEncoderQuantizationPipelineQuantizeValue(PixelI value,
         (value ^ signMask) - signMask + offset, multiplier, exponent) ^ signMask) - signMask;
 }
 
+I32 JxrEncoderQuantizationPipelineQuantizeCoefficient(PixelI value,
+    const CWMIQuantizer* quantizer)
+{
+    if (quantizer->iMan == 0)
+        return JxrEncoderQuantizationPipelineQuantizeMulless(value,
+            quantizer->iOffset, quantizer->iExp);
+    return JxrEncoderQuantizationPipelineQuantizeValue(value,
+        quantizer->iOffset, quantizer->iMan, quantizer->iExp);
+}
+
 Void JxrEncoderQuantizationPipelineQuantize(CWMImageStrCodec* codec)
 {
     CWMITile* tile = codec->pTile + codec->cTileColumn;
@@ -54,30 +64,20 @@ Void JxrEncoderQuantizationPipelineQuantize(CWMImageStrCodec* codec)
                 PixelI* coefficients = codec->pPlane[channelIndex] + blockOffsets[blockIndex];
 
                 if (blockIndex == 0) {
-                    coefficients[0] = dcQuantizer->iMan == 0 ?
-                        JxrEncoderQuantizationPipelineQuantizeMulless(coefficients[0],
-                            dcQuantizer->iOffset, dcQuantizer->iExp) :
-                        JxrEncoderQuantizationPipelineQuantizeValue(coefficients[0],
-                            dcQuantizer->iOffset, dcQuantizer->iMan, dcQuantizer->iExp);
+                    coefficients[0] = JxrEncoderQuantizationPipelineQuantizeCoefficient(
+                        coefficients[0], dcQuantizer);
                 }
                 else if (codec->WMISCP.sbSubband != SB_DC_ONLY) {
-                    coefficients[0] = lpQuantizer->iMan == 0 ?
-                        JxrEncoderQuantizationPipelineQuantizeMulless(coefficients[0],
-                            lpQuantizer->iOffset, lpQuantizer->iExp) :
-                        JxrEncoderQuantizationPipelineQuantizeValue(coefficients[0],
-                            lpQuantizer->iOffset, lpQuantizer->iMan, lpQuantizer->iExp);
+                    coefficients[0] = JxrEncoderQuantizationPipelineQuantizeCoefficient(
+                        coefficients[0], lpQuantizer);
                 }
 
                 if (codec->WMISCP.sbSubband != SB_DC_ONLY &&
                     codec->WMISCP.sbSubband != SB_NO_HIGHPASS) {
                     for (coefficientIndex = 1; coefficientIndex < 16; ++coefficientIndex) {
-                        coefficients[coefficientIndex] = hpQuantizer->iMan == 0 ?
-                            JxrEncoderQuantizationPipelineQuantizeMulless(
-                                coefficients[coefficientIndex], hpQuantizer->iOffset,
-                                hpQuantizer->iExp) :
-                            JxrEncoderQuantizationPipelineQuantizeValue(
-                                coefficients[coefficientIndex], hpQuantizer->iOffset,
-                                hpQuantizer->iMan, hpQuantizer->iExp);
+                        coefficients[coefficientIndex] =
+                            JxrEncoderQuantizationPipelineQuantizeCoefficient(
+                                coefficients[coefficientIndex], hpQuantizer);
                     }
                 }
             }
