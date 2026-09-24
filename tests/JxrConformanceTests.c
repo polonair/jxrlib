@@ -5644,6 +5644,113 @@ static int test_encoder_coefficient_predictor_vectors(void)
         coefficients[offset + 5] == 8;
 }
 
+/* Shared deterministic native/managed oracle: mode selection, saved PredInfo,
+   encoder DC/LP and AC for every supported plane geometry. */
+static int test_coefficient_prediction_reference_vectors(void)
+{
+    static const COLORFORMAT formats[] =
+        { Y_ONLY, YUV_420, YUV_422, YUV_444, NCOMPONENT };
+    U64 hash = (U64)14695981039346656037ULL;
+    int formatIndex, scenario, channel, position, index;
+    for (formatIndex = 0; formatIndex < 5; ++formatIndex)
+        for (scenario = 0; scenario < 6; ++scenario) {
+            CWMImageStrCodec codec;
+            CWMIPredInfo current[MAX_CHANNELS][2];
+            CWMIPredInfo previous[MAX_CHANNELS][2];
+            PixelI planes[MAX_CHANNELS][256];
+            PixelI originalPlanes[MAX_CHANNELS][256];
+            PixelI originalDc[MAX_CHANNELS][16];
+            COLORFORMAT format = formats[formatIndex];
+            int channels = format == Y_ONLY ? 1 : (format == NCOMPONENT ? 4 : 3);
+            int column = scenario == 0 || scenario == 2 ? 0 : 1;
+            int mode;
+            memset(&codec, 0, sizeof(codec));
+            memset(current, 0, sizeof(current));
+            memset(previous, 0, sizeof(previous));
+            memset(planes, 0, sizeof(planes));
+            memset(originalPlanes, 0, sizeof(originalPlanes));
+            memset(originalDc, 0, sizeof(originalDc));
+            codec.m_param.cfColorFormat = format;
+            codec.m_param.cNumChannels = channels;
+            codec.cColumn = column + 1;
+            codec.m_bCtxLeft = scenario == 0 || scenario == 2;
+            codec.m_bCtxTop = scenario == 0 || scenario == 1;
+            codec.MBInfo.iQIndexLP = (U8)(scenario & 1);
+            for (channel = 0; channel < channels; ++channel) {
+                int length = channel == 0 || (format != YUV_420 && format != YUV_422) ?
+                    256 : (format == YUV_420 ? 64 : 128);
+                codec.PredInfo[channel] = current[channel];
+                codec.PredInfoPrevRow[channel] = previous[channel];
+                codec.pPlane[channel] = planes[channel];
+                for (position = 0; position < 2; ++position) {
+                    current[channel][position].piAD = current[channel][position].iAD;
+                    previous[channel][position].piAD = previous[channel][position].iAD;
+                    current[channel][position].iDC = 15 + scenario * 11 + channel * 7 + position * 3;
+                    previous[channel][position].iDC = 31 - scenario * 5 + channel * 9 - position * 4;
+                    current[channel][position].iQPIndex = scenario & 1;
+                    previous[channel][position].iQPIndex =
+                        (scenario == 2 || scenario == 4) ? (scenario & 1) : ((scenario + 1) & 1);
+                    for (index = 0; index < 6; ++index) {
+                        current[channel][position].iAD[index] = 2 + index * 3 + channel;
+                        previous[channel][position].iAD[index] = -4 + index * 2 - channel;
+                    }
+                }
+                if (scenario == 4 || scenario == 5) {
+                    int topLeft = previous[channel][0].iDC;
+                    current[channel][0].iDC = topLeft + (scenario == 4 ? 2 : 20);
+                    previous[channel][1].iDC = topLeft + (scenario == 4 ? 80 : 20);
+                }
+                for (index = 0; index < 16; ++index) {
+                    int value = 100 + scenario * 13 + channel * 17 + index * 2;
+                    if (index == 1 || index == 2 || index == 3)
+                        value = scenario % 3 == 0 ? 40 : 2;
+                    if (index == 4 || index == 8 || index == 12)
+                        value = scenario % 3 == 1 ? 40 : 2;
+                    codec.MBInfo.iBlockDC[channel][index] = value;
+                    originalDc[channel][index] = value;
+                }
+                for (index = 0; index < length; ++index) {
+                    planes[channel][index] = ((index * 7 + scenario * 11 + channel * 13) % 47) - 23;
+                    originalPlanes[channel][index] = planes[channel][index];
+                }
+            }
+            mode = getDCACPredMode(&codec, column);
+            hash = quantization_hash_value(hash, mode);
+            JxrEncoderCoefficientPredictorApply(&codec);
+            hash = quantization_hash_value(hash, codec.MBInfo.iOrientation);
+            for (channel = 0; channel < channels; ++channel) {
+                CWMIPredInfo* saved = &current[channel][column];
+                int length = channel == 0 || (format != YUV_420 && format != YUV_422) ?
+                    256 : (format == YUV_420 ? 64 : 128);
+                hash = quantization_hash_value(hash, saved->iDC);
+                hash = quantization_hash_value(hash, saved->iQPIndex);
+                for (index = 0; index < 6; ++index)
+                    hash = quantization_hash_value(hash, saved->iAD[index]);
+                for (index = 0; index < 16; ++index)
+                    hash = quantization_hash_value(hash, codec.MBInfo.iBlockDC[channel][index]);
+                for (index = 0; index < length; ++index)
+                    hash = quantization_hash_value(hash, planes[channel][index]);
+            }
+            codec.cColumn = column;
+            for (channel = 0; channel < channels; ++channel)
+                codec.p1MBbuffer[channel] = planes[channel];
+            JxrDecoderCoefficientPredictorApplyDcAc(&codec);
+            JxrDecoderCoefficientPredictorApplyAc(&codec);
+            for (channel = 0; channel < channels; ++channel) {
+                int length = channel == 0 || (format != YUV_420 && format != YUV_422) ?
+                    256 : (format == YUV_420 ? 64 : 128);
+                for (index = 0; index < 16; ++index)
+                    if (codec.MBInfo.iBlockDC[channel][index] != originalDc[channel][index])
+                        return 0;
+                for (index = 0; index < length; ++index)
+                    if (planes[channel][index] != originalPlanes[channel][index])
+                        return 0;
+            }
+        }
+    printf("Coefficient prediction native signature: %016llX\n", (unsigned long long)hash);
+    return hash == (U64)0x0392D4AF067B8926ULL;
+}
+
 static int test_decoder_memory_layout_plan_vectors(void)
 {
     JxrDecoderMemoryLayoutPlan plan;
@@ -6617,6 +6724,7 @@ int main(int argc, char** argv)
         { "encoder_cbp_predictor_vectors", test_encoder_cbp_predictor_vectors },
         { "encoder_cbp_explicit_vectors", test_encoder_cbp_explicit_vectors },
         { "encoder_coefficient_predictor_vectors", test_encoder_coefficient_predictor_vectors },
+        { "coefficient_prediction_reference_vectors", test_coefficient_prediction_reference_vectors },
         { "decoder_memory_layout_plan_vectors", test_decoder_memory_layout_plan_vectors },
         { "decoder_buffer_region_layout_vectors", test_decoder_buffer_region_layout_vectors },
         { "decoder_primary_plane_factory_vectors", test_decoder_primary_plane_factory_vectors },

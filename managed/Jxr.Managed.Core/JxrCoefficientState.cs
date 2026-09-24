@@ -244,6 +244,12 @@ namespace Jxr.Managed.Core
 
         public void SetLowpassQuantizerIndex(byte value) { lowpassQuantizerIndex = value; }
         public void SetHighpassQuantizerIndex(byte value) { highpassQuantizerIndex = value; }
+        public JxrError SetOrientation(int value)
+        {
+            if (value < 0 || value > 2) return JxrError.InvalidArgument;
+            orientation = value;
+            return JxrError.None;
+        }
 
         private bool IsValid(int channel, int index)
         {

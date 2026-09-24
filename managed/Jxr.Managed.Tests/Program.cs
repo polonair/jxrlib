@@ -28,6 +28,7 @@ namespace Jxr.Managed.Tests
             new TestCase("quantization_reference_vectors", TestQuantizationReferenceVectors),
             new TestCase("quantization_macroblock_vectors", TestQuantizationMacroblockVectors),
             new TestCase("quantization_channel_modes", TestQuantizationChannelModes),
+            new TestCase("coefficient_prediction_vectors", TestCoefficientPredictionVectors),
             new TestCase("coefficient_buffer_vectors", TestCoefficientBufferVectors),
             new TestCase("coefficient_plane_state_vectors", TestCoefficientPlaneStateVectors),
             new TestCase("macroblock_state_vectors", TestMacroblockStateVectors),
@@ -99,10 +100,13 @@ namespace Jxr.Managed.Tests
                 { Console.WriteLine("DC/LP coefficient " + coefficient + ": " + actual);
                   return false; }
             }
-            JxrMacroblockSnapshot snapshot = new JxrMacroblockSnapshot(16);
-            if (state.Macroblock.CopyTo(snapshot) != JxrError.None) return false;
-            snapshot.Orientation = 1; // native getACPredMode: vertical for this MB
-            if (state.Macroblock.LoadFrom(snapshot) != JxrError.None) return false;
+            JxrCoefficientPredictionRows predictionRows =
+                new JxrCoefficientPredictionRows(1, 1);
+            if (JxrCoefficientPrediction.DecodeDcLp(state.Macroblock,
+                predictionRows, JxrCodecColorFormat.YOnly, 0, true, true) != JxrError.None ||
+                state.Macroblock.Orientation != 1) return false;
+            if (JxrCoefficientPrediction.StoreCurrent(state.Macroblock,
+                predictionRows, JxrCodecColorFormat.YOnly, 0) != JxrError.None) return false;
             int[] values;
             if (state.CoefficientPlanes.GetPlane(0, out values) != JxrError.None) return false;
             JxrQuantizer lossless = JxrQuantization.Remap(0, false, false);
@@ -129,6 +133,16 @@ namespace Jxr.Managed.Tests
                 if (values[coefficient] != expected[coefficient])
                 { Console.WriteLine("HP coefficient " + coefficient + ": " +
                     values[coefficient] + " != " + expected[coefficient]); return false; }
+            if (JxrCoefficientPrediction.DecodeAc(state.Macroblock,
+                state.CoefficientPlanes, JxrCodecColorFormat.YOnly) != JxrError.None)
+                return false;
+            expected = ReadTraceValues(Path.Combine(directory.FullName,
+                "minimal-profile\\trace\\decoder-mb-000-000-after_ac_prediction.json"));
+            if (expected == null || expected.Length != 256) return false;
+            for (int coefficient = 0; coefficient < 256; coefficient++)
+                if (values[coefficient] != expected[coefficient])
+                { Console.WriteLine("AC coefficient " + coefficient + ": " +
+                    values[coefficient] + " != " + expected[coefficient]); return false; }
             return cbp == 65535 && differential == 0;
         }
 
@@ -151,6 +165,126 @@ namespace Jxr.Managed.Tests
         private static ulong QuantizationHashValue(ulong hash, int value)
         {
             return unchecked((hash ^ (uint)value) * 1099511628211UL);
+        }
+
+        private static bool TestCoefficientPredictionVectors()
+        {
+            JxrCodecColorFormat[] formats = { JxrCodecColorFormat.YOnly,
+                JxrCodecColorFormat.Yuv420, JxrCodecColorFormat.Yuv422,
+                JxrCodecColorFormat.Yuv444, JxrCodecColorFormat.NComponent };
+            ulong hash = 14695981039346656037UL;
+            for (int formatIndex = 0; formatIndex < formats.Length; formatIndex++)
+                for (int scenario = 0; scenario < 6; scenario++)
+                {
+                    JxrCodecColorFormat format = formats[formatIndex];
+                    int channels = format == JxrCodecColorFormat.YOnly ? 1 :
+                        (format == JxrCodecColorFormat.NComponent ? 4 : 3);
+                    int column = scenario == 0 || scenario == 2 ? 0 : 1;
+                    bool leftBoundary = scenario == 0 || scenario == 2;
+                    bool topBoundary = scenario == 0 || scenario == 1;
+                    JxrCoefficientPredictionRows rows =
+                        new JxrCoefficientPredictionRows(2, channels);
+                    for (int channel = 0; channel < channels; channel++)
+                        for (int position = 0; position < 2; position++)
+                        {
+                            JxrPredictionInfo left = rows.Current(channel, position);
+                            JxrPredictionInfo top = rows.Previous(channel, position);
+                            left.Dc = 15 + scenario * 11 + channel * 7 + position * 3;
+                            top.Dc = 31 - scenario * 5 + channel * 9 - position * 4;
+                            left.QuantizerIndex = (byte)(scenario & 1);
+                            top.QuantizerIndex = (byte)((scenario == 2 || scenario == 4) ?
+                                (scenario & 1) : ((scenario + 1) & 1));
+                            for (int index = 0; index < 6; index++)
+                            {
+                                left.SetAd(index, 2 + index * 3 + channel);
+                                top.SetAd(index, -4 + index * 2 - channel);
+                            }
+                        }
+                    if (scenario == 4 || scenario == 5)
+                        for (int channel = 0; channel < channels; channel++)
+                        {
+                            int topLeft = rows.Previous(channel, 0).Dc;
+                            rows.Current(channel, 0).Dc = topLeft + (scenario == 4 ? 2 : 20);
+                            rows.Previous(channel, 1).Dc = topLeft + (scenario == 4 ? 80 : 20);
+                        }
+                    JxrMacroblockState mb = new JxrMacroblockState(channels);
+                    mb.SetLowpassQuantizerIndex((byte)(scenario & 1));
+                    int[][] planes = new int[channels][];
+                    int[][] originalPlanes = new int[channels][];
+                    int[][] originalDc = new int[channels][];
+                    for (int channel = 0; channel < channels; channel++)
+                    {
+                        int length = channel == 0 || (format != JxrCodecColorFormat.Yuv420 &&
+                            format != JxrCodecColorFormat.Yuv422) ? 256 :
+                            (format == JxrCodecColorFormat.Yuv420 ? 64 : 128);
+                        planes[channel] = new int[length];
+                        originalPlanes[channel] = new int[length];
+                        originalDc[channel] = new int[16];
+                        for (int index = 0; index < 16; index++)
+                        {
+                            int value = 100 + scenario * 13 + channel * 17 + index * 2;
+                            if (index == 1 || index == 2 || index == 3)
+                                value = scenario % 3 == 0 ? 40 : 2;
+                            if (index == 4 || index == 8 || index == 12)
+                                value = scenario % 3 == 1 ? 40 : 2;
+                            mb.SetDcCoefficient(channel, index, value);
+                            originalDc[channel][index] = value;
+                        }
+                        for (int index = 0; index < length; index++)
+                        {
+                            planes[channel][index] = ((index * 7 + scenario * 11 +
+                                channel * 13) % 47) - 23;
+                            originalPlanes[channel][index] = planes[channel][index];
+                        }
+                    }
+                    JxrCoefficientColorFormat planeFormat =
+                        format == JxrCodecColorFormat.Yuv420 ? JxrCoefficientColorFormat.Yuv420 :
+                        (format == JxrCodecColorFormat.Yuv422 ? JxrCoefficientColorFormat.Yuv422 :
+                        JxrCoefficientColorFormat.Other);
+                    JxrCoefficientPlaneState planeState =
+                        new JxrCoefficientPlaneState(planes, planeFormat, channels);
+                    int mode = JxrCoefficientPrediction.GetDcAdMode(rows, format,
+                        column, leftBoundary, topBoundary, mb.LowpassQuantizerIndex);
+                    hash = QuantizationHashValue(hash, mode);
+                    if (JxrCoefficientPrediction.Encode(mb, planeState, rows, format,
+                        column, leftBoundary, topBoundary) != JxrError.None) return false;
+                    hash = QuantizationHashValue(hash, mb.Orientation);
+                    for (int channel = 0; channel < channels; channel++)
+                    {
+                        JxrPredictionInfo saved = rows.Current(channel, column);
+                        hash = QuantizationHashValue(hash, saved.Dc);
+                        hash = QuantizationHashValue(hash, saved.QuantizerIndex);
+                        for (int index = 0; index < 6; index++)
+                            hash = QuantizationHashValue(hash, saved.GetAd(index));
+                        for (int index = 0; index < 16; index++)
+                        {
+                            int value;
+                            mb.GetDcCoefficient(channel, index, out value);
+                            hash = QuantizationHashValue(hash, value);
+                        }
+                        for (int index = 0; index < planes[channel].Length; index++)
+                            hash = QuantizationHashValue(hash, planes[channel][index]);
+                    }
+                    if (JxrCoefficientPrediction.DecodeDcLp(mb, rows, format,
+                        column, leftBoundary, topBoundary) != JxrError.None ||
+                        JxrCoefficientPrediction.DecodeAc(mb, planeState, format) != JxrError.None)
+                        return false;
+                    for (int channel = 0; channel < channels; channel++)
+                    {
+                        for (int index = 0; index < 16; index++)
+                        {
+                            int value;
+                            mb.GetDcCoefficient(channel, index, out value);
+                            if (value != originalDc[channel][index])
+                            { Console.WriteLine("Prediction DC mismatch " + format + " " + scenario + " " + channel + " " + index); return false; }
+                        }
+                        for (int index = 0; index < planes[channel].Length; index++)
+                            if (planes[channel][index] != originalPlanes[channel][index])
+                            { Console.WriteLine("Prediction AC mismatch " + format + " " + scenario + " " + channel + " " + index); return false; }
+                    }
+                }
+            Console.WriteLine("Coefficient prediction signature: " + hash.ToString("X16"));
+            return hash == 0x0392D4AF067B8926UL;
         }
 
         // Matches native remapQP + coefficient quantizer + dequantizer over
