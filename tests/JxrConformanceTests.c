@@ -4631,6 +4631,48 @@ static int test_transform_math_dct2x2_vectors(void)
     return first == 0 && second == 0 && third == 1 && fourth == 0;
 }
 
+/* Independent reference signature for the complete shared TransformMath
+   surface: both rounding modes and both four-butterfly offset tables. */
+static int test_transform_math_reference_vectors(void)
+{
+    U64 hash = (U64)14695981039346656037ULL;
+    PixelI values[4], firstStage[16], secondStage[256];
+    int first, second, third, fourth, index, seed;
+    for (first = -4; first <= 4; first++)
+        for (second = -4; second <= 4; second++)
+            for (third = -4; third <= 4; third++)
+                for (fourth = -4; fourth <= 4; fourth++) {
+                    values[0] = first; values[1] = second;
+                    values[2] = third; values[3] = fourth;
+                    JxrTransformMathApplyDct2x2Down(&values[0], &values[1],
+                        &values[2], &values[3]);
+                    for (index = 0; index < 4; index++)
+                        hash = quantization_hash_value(hash, values[index]);
+                    values[0] = first; values[1] = second;
+                    values[2] = third; values[3] = fourth;
+                    JxrTransformMathApplyDct2x2Up(&values[0], &values[1],
+                        &values[2], &values[3]);
+                    for (index = 0; index < 4; index++)
+                        hash = quantization_hash_value(hash, values[index]);
+                }
+    for (seed = 0; seed < 32; seed++) {
+        for (index = 0; index < 16; index++)
+            firstStage[index] = ((index * 17 + seed * 11) % 51) - 25;
+        for (index = 0; index < 256; index++)
+            secondStage[index] = ((index * 7 + seed * 19) % 97) - 48;
+        JxrTransformMathApplyFourButterfly(firstStage,
+            JxrTransformFirstStageFourButterflyOffsets);
+        JxrTransformMathApplyFourButterfly(secondStage,
+            JxrTransformSecondStageFourButterflyOffsets);
+        for (index = 0; index < 16; index++)
+            hash = quantization_hash_value(hash, firstStage[index]);
+        for (index = 0; index < 256; index++)
+            hash = quantization_hash_value(hash, secondStage[index]);
+    }
+    printf("Transform math native signature: %016llX\n", (unsigned long long)hash);
+    return hash == (U64)0xC0E5BCDC572F04F7ULL;
+}
+
 static int test_forward_transform_math_vectors(void)
 {
     PixelI first, second;
@@ -6687,6 +6729,7 @@ int main(int argc, char** argv)
         { "inverse_transform_normalization_vectors", test_inverse_transform_normalization_vectors },
         { "inverse_transform_math_vectors", test_inverse_transform_math_vectors },
         { "transform_math_dct2x2_vectors", test_transform_math_dct2x2_vectors },
+        { "transform_math_reference_vectors", test_transform_math_reference_vectors },
         { "forward_transform_math_vectors", test_forward_transform_math_vectors },
         { "forward_transform_stage_vectors", test_forward_transform_stage_vectors },
         { "forward_transform_prestage_vectors", test_forward_transform_prestage_vectors },

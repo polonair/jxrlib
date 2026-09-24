@@ -29,6 +29,7 @@ namespace Jxr.Managed.Tests
             new TestCase("quantization_macroblock_vectors", TestQuantizationMacroblockVectors),
             new TestCase("quantization_channel_modes", TestQuantizationChannelModes),
             new TestCase("coefficient_prediction_vectors", TestCoefficientPredictionVectors),
+            new TestCase("transform_math_reference_vectors", TestTransformMathReferenceVectors),
             new TestCase("coefficient_buffer_vectors", TestCoefficientBufferVectors),
             new TestCase("coefficient_plane_state_vectors", TestCoefficientPlaneStateVectors),
             new TestCase("macroblock_state_vectors", TestMacroblockStateVectors),
@@ -165,6 +166,55 @@ namespace Jxr.Managed.Tests
         private static ulong QuantizationHashValue(ulong hash, int value)
         {
             return unchecked((hash ^ (uint)value) * 1099511628211UL);
+        }
+
+        private static bool TestTransformMathReferenceVectors()
+        {
+            ulong hash = 14695981039346656037UL;
+            int[] values = new int[4];
+            for (int first = -4; first <= 4; first++)
+                for (int second = -4; second <= 4; second++)
+                    for (int third = -4; third <= 4; third++)
+                        for (int fourth = -4; fourth <= 4; fourth++)
+                        {
+                            values[0] = first; values[1] = second;
+                            values[2] = third; values[3] = fourth;
+                            if (JxrTransformMath.ApplyDct2x2Down(values, 0, 1, 2, 3) != JxrError.None)
+                                return false;
+                            for (int index = 0; index < 4; index++)
+                                hash = QuantizationHashValue(hash, values[index]);
+                            values[0] = first; values[1] = second;
+                            values[2] = third; values[3] = fourth;
+                            if (JxrTransformMath.ApplyDct2x2Up(values, 0, 1, 2, 3) != JxrError.None)
+                                return false;
+                            for (int index = 0; index < 4; index++)
+                                hash = QuantizationHashValue(hash, values[index]);
+                        }
+            for (int seed = 0; seed < 32; seed++)
+            {
+                int[] firstStage = new int[16];
+                int[] secondStage = new int[256];
+                for (int index = 0; index < 16; index++)
+                    firstStage[index] = ((index * 17 + seed * 11) % 51) - 25;
+                for (int index = 0; index < 256; index++)
+                    secondStage[index] = ((index * 7 + seed * 19) % 97) - 48;
+                if (JxrTransformMath.ApplyFirstStageFourButterfly(firstStage) != JxrError.None ||
+                    JxrTransformMath.ApplySecondStageFourButterfly(secondStage) != JxrError.None)
+                    return false;
+                for (int index = 0; index < 16; index++)
+                    hash = QuantizationHashValue(hash, firstStage[index]);
+                for (int index = 0; index < 256; index++)
+                    hash = QuantizationHashValue(hash, secondStage[index]);
+            }
+            if (JxrTransformMath.ApplyDct2x2Down(values, 0, 1, 2, 2) !=
+                    JxrError.InvalidArgument ||
+                JxrTransformMath.ApplyFourButterfly(new int[15], new int[16]) !=
+                    JxrError.InvalidArgument ||
+                JxrTransformMath.ApplyDct2x2Up(null, 0, 1, 2, 3) !=
+                    JxrError.InvalidArgument)
+                return false;
+            Console.WriteLine("Transform math signature: " + hash.ToString("X16"));
+            return hash == 0xC0E5BCDC572F04F7UL;
         }
 
         private static bool TestCoefficientPredictionVectors()
