@@ -4765,6 +4765,71 @@ static int test_forward_transform_math_vectors(void)
     return first == -2 && second == 7 && third == 10 && fourth == -4;
 }
 
+/* Shared native/managed oracle for every public forward-math primitive.
+   The small signed domain exhausts rounding parity and negative shifts. */
+static int test_forward_transform_math_reference_vectors(void)
+{
+    U64 hash = (U64)14695981039346656037ULL;
+    PixelI values[4], samples[64];
+    int operation, first, second, third, fourth, index, seed, stride, chroma;
+    for (operation = 0; operation < 11; operation++)
+        for (first = -4; first <= 4; first++)
+            for (second = -4; second <= 4; second++)
+                for (third = -4; third <= 4; third++)
+                    for (fourth = -4; fourth <= 4; fourth++) {
+                        values[0] = first; values[1] = second;
+                        values[2] = third; values[3] = fourth;
+                        switch (operation) {
+                        case 0: JxrForwardTransformMathRotateHalf(&values[0], &values[1]); break;
+                        case 1: JxrForwardTransformMathRotateThreeEighths(&values[0], &values[1]); break;
+                        case 2: JxrForwardTransformMathApplyDct2x2Down(&values[0], &values[1], &values[2], &values[3]); break;
+                        case 3: JxrForwardTransformMathApplyPre2(&values[0], &values[1]); break;
+                        case 4: JxrForwardTransformMathApplyPre2x2(&values[0], &values[1], &values[2], &values[3]); break;
+                        case 5: JxrForwardTransformMathApplyPre4(&values[0], &values[1], &values[2], &values[3]); break;
+                        case 6: JxrForwardTransformMathApplyHst4(&values[0], &values[1], &values[2], &values[3]); break;
+                        case 7: JxrForwardTransformMathApplyHst1(&values[0], &values[3]); break;
+                        case 8: JxrForwardTransformMathApplyOddOdd(&values[0], &values[1], &values[2], &values[3]); break;
+                        case 9: JxrForwardTransformMathApplyOddOddPre(&values[0], &values[1], &values[2], &values[3]); break;
+                        case 10: JxrForwardTransformMathApplyOdd(&values[0], &values[1], &values[2], &values[3]); break;
+                        }
+                        for (index = 0; index < 4; index++)
+                            hash = quantization_hash_value(hash, values[index]);
+                    }
+    for (operation = 0; operation < 11; operation++)
+        for (seed = 0; seed < 512; seed++) {
+            values[0] = ((seed * 137 + 1009) % 200001) - 100000;
+            values[1] = ((seed * 311 + 2701) % 200001) - 100000;
+            values[2] = ((seed * 509 + 4003) % 200001) - 100000;
+            values[3] = ((seed * 733 + 6011) % 200001) - 100000;
+            switch (operation) {
+            case 0: JxrForwardTransformMathRotateHalf(&values[0], &values[1]); break;
+            case 1: JxrForwardTransformMathRotateThreeEighths(&values[0], &values[1]); break;
+            case 2: JxrForwardTransformMathApplyDct2x2Down(&values[0], &values[1], &values[2], &values[3]); break;
+            case 3: JxrForwardTransformMathApplyPre2(&values[0], &values[1]); break;
+            case 4: JxrForwardTransformMathApplyPre2x2(&values[0], &values[1], &values[2], &values[3]); break;
+            case 5: JxrForwardTransformMathApplyPre4(&values[0], &values[1], &values[2], &values[3]); break;
+            case 6: JxrForwardTransformMathApplyHst4(&values[0], &values[1], &values[2], &values[3]); break;
+            case 7: JxrForwardTransformMathApplyHst1(&values[0], &values[3]); break;
+            case 8: JxrForwardTransformMathApplyOddOdd(&values[0], &values[1], &values[2], &values[3]); break;
+            case 9: JxrForwardTransformMathApplyOddOddPre(&values[0], &values[1], &values[2], &values[3]); break;
+            case 10: JxrForwardTransformMathApplyOdd(&values[0], &values[1], &values[2], &values[3]); break;
+            }
+            for (index = 0; index < 4; index++)
+                hash = quantization_hash_value(hash, values[index]);
+        }
+    for (chroma = 0; chroma < 2; chroma++)
+        for (stride = 1; stride <= 16; stride *= 4)
+            for (seed = 0; seed < 10; seed++) {
+                for (index = 0; index < 64; index++)
+                    samples[index] = ((index * 13 + seed * 17) % 101) - 50;
+                JxrForwardTransformMathNormalizeBlock(samples, chroma, 64, stride);
+                for (index = 0; index < 64; index++)
+                    hash = quantization_hash_value(hash, samples[index]);
+            }
+    printf("Forward transform math native signature: %016llX\n", (unsigned long long)hash);
+    return hash == (U64)0xB4F5A8D8EC5F85A4ULL;
+}
+
 static int test_forward_transform_stage_vectors(void)
 {
     static const PixelI stage1Expected[16] = {
@@ -6731,6 +6796,7 @@ int main(int argc, char** argv)
         { "transform_math_dct2x2_vectors", test_transform_math_dct2x2_vectors },
         { "transform_math_reference_vectors", test_transform_math_reference_vectors },
         { "forward_transform_math_vectors", test_forward_transform_math_vectors },
+        { "forward_transform_math_reference_vectors", test_forward_transform_math_reference_vectors },
         { "forward_transform_stage_vectors", test_forward_transform_stage_vectors },
         { "forward_transform_prestage_vectors", test_forward_transform_prestage_vectors },
         { "forward_transform_prestage2_vectors", test_forward_transform_prestage2_vectors },

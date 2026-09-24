@@ -30,6 +30,7 @@ namespace Jxr.Managed.Tests
             new TestCase("quantization_channel_modes", TestQuantizationChannelModes),
             new TestCase("coefficient_prediction_vectors", TestCoefficientPredictionVectors),
             new TestCase("transform_math_reference_vectors", TestTransformMathReferenceVectors),
+            new TestCase("forward_transform_math_reference_vectors", TestForwardTransformMathReferenceVectors),
             new TestCase("coefficient_buffer_vectors", TestCoefficientBufferVectors),
             new TestCase("coefficient_plane_state_vectors", TestCoefficientPlaneStateVectors),
             new TestCase("macroblock_state_vectors", TestMacroblockStateVectors),
@@ -215,6 +216,82 @@ namespace Jxr.Managed.Tests
                 return false;
             Console.WriteLine("Transform math signature: " + hash.ToString("X16"));
             return hash == 0xC0E5BCDC572F04F7UL;
+        }
+
+        private static bool TestForwardTransformMathReferenceVectors()
+        {
+            ulong hash = 14695981039346656037UL;
+            int[] values = new int[4];
+            for (int operation = 0; operation < 11; operation++)
+                for (int first = -4; first <= 4; first++)
+                    for (int second = -4; second <= 4; second++)
+                        for (int third = -4; third <= 4; third++)
+                            for (int fourth = -4; fourth <= 4; fourth++)
+                            {
+                                values[0] = first; values[1] = second;
+                                values[2] = third; values[3] = fourth;
+                                switch (operation)
+                                {
+                                    case 0: JxrForwardTransformMath.RotateHalf(ref values[0], ref values[1]); break;
+                                    case 1: JxrForwardTransformMath.RotateThreeEighths(ref values[0], ref values[1]); break;
+                                    case 2: JxrForwardTransformMath.ApplyDct2x2Down(ref values[0], ref values[1], ref values[2], ref values[3]); break;
+                                    case 3: JxrForwardTransformMath.ApplyPre2(ref values[0], ref values[1]); break;
+                                    case 4: JxrForwardTransformMath.ApplyPre2x2(ref values[0], ref values[1], ref values[2], ref values[3]); break;
+                                    case 5: JxrForwardTransformMath.ApplyPre4(ref values[0], ref values[1], ref values[2], ref values[3]); break;
+                                    case 6: JxrForwardTransformMath.ApplyHst4(ref values[0], ref values[1], ref values[2], ref values[3]); break;
+                                    case 7: JxrForwardTransformMath.ApplyHst1(ref values[0], ref values[3]); break;
+                                    case 8: JxrForwardTransformMath.ApplyOddOdd(ref values[0], ref values[1], ref values[2], ref values[3]); break;
+                                    case 9: JxrForwardTransformMath.ApplyOddOddPre(ref values[0], ref values[1], ref values[2], ref values[3]); break;
+                                    case 10: JxrForwardTransformMath.ApplyOdd(ref values[0], ref values[1], ref values[2], ref values[3]); break;
+                                }
+                                for (int index = 0; index < 4; index++)
+                                    hash = QuantizationHashValue(hash, values[index]);
+                            }
+            for (int operation = 0; operation < 11; operation++)
+                for (int seed = 0; seed < 512; seed++)
+                {
+                    values[0] = ((seed * 137 + 1009) % 200001) - 100000;
+                    values[1] = ((seed * 311 + 2701) % 200001) - 100000;
+                    values[2] = ((seed * 509 + 4003) % 200001) - 100000;
+                    values[3] = ((seed * 733 + 6011) % 200001) - 100000;
+                    switch (operation)
+                    {
+                        case 0: JxrForwardTransformMath.RotateHalf(ref values[0], ref values[1]); break;
+                        case 1: JxrForwardTransformMath.RotateThreeEighths(ref values[0], ref values[1]); break;
+                        case 2: JxrForwardTransformMath.ApplyDct2x2Down(ref values[0], ref values[1], ref values[2], ref values[3]); break;
+                        case 3: JxrForwardTransformMath.ApplyPre2(ref values[0], ref values[1]); break;
+                        case 4: JxrForwardTransformMath.ApplyPre2x2(ref values[0], ref values[1], ref values[2], ref values[3]); break;
+                        case 5: JxrForwardTransformMath.ApplyPre4(ref values[0], ref values[1], ref values[2], ref values[3]); break;
+                        case 6: JxrForwardTransformMath.ApplyHst4(ref values[0], ref values[1], ref values[2], ref values[3]); break;
+                        case 7: JxrForwardTransformMath.ApplyHst1(ref values[0], ref values[3]); break;
+                        case 8: JxrForwardTransformMath.ApplyOddOdd(ref values[0], ref values[1], ref values[2], ref values[3]); break;
+                        case 9: JxrForwardTransformMath.ApplyOddOddPre(ref values[0], ref values[1], ref values[2], ref values[3]); break;
+                        case 10: JxrForwardTransformMath.ApplyOdd(ref values[0], ref values[1], ref values[2], ref values[3]); break;
+                    }
+                    for (int index = 0; index < 4; index++)
+                        hash = QuantizationHashValue(hash, values[index]);
+                }
+            for (int chroma = 0; chroma < 2; chroma++)
+                for (int stride = 1; stride <= 16; stride *= 4)
+                    for (int seed = 0; seed < 10; seed++)
+                    {
+                        int[] samples = new int[64];
+                        for (int index = 0; index < 64; index++)
+                            samples[index] = ((index * 13 + seed * 17) % 101) - 50;
+                        if (JxrForwardTransformMath.NormalizeBlock(samples,
+                            chroma != 0, 64, stride) != JxrError.None) return false;
+                        for (int index = 0; index < 64; index++)
+                            hash = QuantizationHashValue(hash, samples[index]);
+                    }
+            if (JxrForwardTransformMath.NormalizeBlock(null, true, 1, 1) !=
+                    JxrError.InvalidArgument ||
+                JxrForwardTransformMath.NormalizeBlock(new int[64], true, 64, 0) !=
+                    JxrError.InvalidArgument ||
+                JxrForwardTransformMath.NormalizeBlock(new int[64], true, 65, 1) !=
+                    JxrError.InvalidArgument)
+                return false;
+            Console.WriteLine("Forward transform math signature: " + hash.ToString("X16"));
+            return hash == 0xB4F5A8D8EC5F85A4UL;
         }
 
         private static bool TestCoefficientPredictionVectors()
