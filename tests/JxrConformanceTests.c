@@ -4614,6 +4614,97 @@ static int test_inverse_transform_math_vectors(void)
     return topLeft == 26 && topRight == 37 && bottomLeft == 47 && bottomRight == 57;
 }
 
+static void inverse_transform_math_apply_operation(int operation, PixelI values[4])
+{
+    switch (operation) {
+    case 0: JxrInverseTransformMathRotateHalf(&values[0], &values[1]); break;
+    case 1: JxrInverseTransformMathRotateThreeEighths(&values[0], &values[1]); break;
+    case 2: JxrInverseTransformMathApplyPost4(&values[0], &values[1], &values[2], &values[3]); break;
+    case 3: JxrInverseTransformMathApplyAlternatePost4(&values[0], &values[1], &values[2], &values[3]); break;
+    case 4: JxrInverseTransformMathApplyHadamardScale4(&values[0], &values[1], &values[2], &values[3]); break;
+    case 5: JxrInverseTransformMathApplyHadamardScale2(&values[0], &values[1]); break;
+    case 6: JxrInverseTransformMathApplyAlternateHadamardScale2(&values[0], &values[1]); break;
+    case 7: JxrInverseTransformMathApplyOddOdd(&values[0], &values[1], &values[2], &values[3]); break;
+    case 8: JxrInverseTransformMathApplyOddOddPost(&values[0], &values[1], &values[2], &values[3]); break;
+    case 9: JxrInverseTransformMathApplyOdd(&values[0], &values[1], &values[2], &values[3]); break;
+    case 10: JxrInverseTransformMathApplyScaledDct2x2Down(&values[0], &values[1], &values[2], &values[3]); break;
+    case 11: JxrInverseTransformMathApplyPost2(&values[0], &values[1]); break;
+    case 12: JxrInverseTransformMathApplyAlternatePost2(&values[0], &values[1]); break;
+    case 13: JxrInverseTransformMathApplyPost2x2(&values[0], &values[1], &values[2], &values[3]); break;
+    case 14: JxrInverseTransformMathApplyAlternatePost2x2(&values[0], &values[1], &values[2], &values[3]); break;
+    }
+}
+
+static int test_inverse_transform_math_reference_vectors(void)
+{
+    U64 hash = (U64)14695981039346656037ULL;
+    PixelI values[4], samples[64];
+    int operation, first, second, third, fourth, seed, index;
+    int direct, quantizer, absent, alternate;
+    for (operation = 0; operation < 15; operation++)
+        for (first = -3; first <= 3; first++)
+            for (second = -3; second <= 3; second++)
+                for (third = -3; third <= 3; third++)
+                    for (fourth = -3; fourth <= 3; fourth++) {
+                        values[0] = first; values[1] = second;
+                        values[2] = third; values[3] = fourth;
+                        inverse_transform_math_apply_operation(operation, values);
+                        for (index = 0; index < 4; index++)
+                            hash = quantization_hash_value(hash, values[index]);
+                    }
+    for (operation = 0; operation < 15; operation++)
+        for (seed = 0; seed < 512; seed++) {
+            values[0] = ((seed * 137 + 1009) % 200001) - 100000;
+            values[1] = ((seed * 311 + 2701) % 200001) - 100000;
+            values[2] = ((seed * 509 + 4003) % 200001) - 100000;
+            values[3] = ((seed * 733 + 6011) % 200001) - 100000;
+            inverse_transform_math_apply_operation(operation, values);
+            for (index = 0; index < 4; index++)
+                hash = quantization_hash_value(hash, values[index]);
+        }
+    for (direct = -40; direct <= 40; direct++)
+        for (quantizer = 0; quantizer <= 48; quantizer++)
+            for (absent = 0; absent < 2; absent++) {
+                int result;
+                values[0] = 10 + (direct & 7);
+                values[1] = 20 - (quantizer & 7);
+                values[2] = 30 + absent;
+                values[3] = 40 - (direct & 3);
+                hash = quantization_hash_value(hash,
+                    JxrInverseTransformMathShouldCompensateDc(direct, quantizer, absent));
+                result = JxrInverseTransformMathApplyConditionalDcCompensation(
+                    &values[0], &values[1], &values[2], &values[3],
+                    direct, quantizer, absent);
+                hash = quantization_hash_value(hash, result);
+                for (index = 0; index < 4; index++)
+                    hash = quantization_hash_value(hash, values[index]);
+            }
+    for (direct = -40; direct <= 40; direct++)
+        for (alternate = -40; alternate <= 40; alternate++)
+            hash = quantization_hash_value(hash,
+                JxrInverseTransformMathClipDcWithAlternate(direct, alternate));
+    for (direct = -41; direct <= 41; direct++) {
+        values[0] = 10; values[1] = 20; values[2] = 30; values[3] = 40;
+        JxrInverseTransformMathApplyDcCompensation(&values[0], &values[1],
+            &values[2], &values[3], direct);
+        for (index = 0; index < 4; index++)
+            hash = quantization_hash_value(hash, values[index]);
+    }
+    for (absent = 0; absent < 2; absent++)
+        for (quantizer = 1; quantizer <= 16; quantizer *= 4)
+            for (seed = 0; seed < 10; seed++) {
+                for (index = 0; index < 64; index++)
+                    samples[index] = ((index * 13 + seed * 17) % 101) - 50;
+                JxrInverseTransformMathNormalizeBlock(samples, absent, 64, quantizer);
+                JxrInverseTransformMathAddCornerPredictionAt(samples, 7, seed);
+                JxrInverseTransformMathSubtractCornerPredictionAt(samples, 35, -seed);
+                for (index = 0; index < 64; index++)
+                    hash = quantization_hash_value(hash, samples[index]);
+            }
+    printf("Inverse transform math native signature: %016llX\n", (unsigned long long)hash);
+    return hash == (U64)0xED777FEF36FFE720ULL;
+}
+
 static int test_transform_math_dct2x2_vectors(void)
 {
     PixelI first, second, third, fourth;
@@ -6793,6 +6884,7 @@ int main(int argc, char** argv)
         { "inverse_transform_plane_stage2_vectors", test_inverse_transform_plane_stage2_vectors },
         { "inverse_transform_normalization_vectors", test_inverse_transform_normalization_vectors },
         { "inverse_transform_math_vectors", test_inverse_transform_math_vectors },
+        { "inverse_transform_math_reference_vectors", test_inverse_transform_math_reference_vectors },
         { "transform_math_dct2x2_vectors", test_transform_math_dct2x2_vectors },
         { "transform_math_reference_vectors", test_transform_math_reference_vectors },
         { "forward_transform_math_vectors", test_forward_transform_math_vectors },

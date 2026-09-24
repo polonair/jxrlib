@@ -31,6 +31,7 @@ namespace Jxr.Managed.Tests
             new TestCase("coefficient_prediction_vectors", TestCoefficientPredictionVectors),
             new TestCase("transform_math_reference_vectors", TestTransformMathReferenceVectors),
             new TestCase("forward_transform_math_reference_vectors", TestForwardTransformMathReferenceVectors),
+            new TestCase("inverse_transform_math_reference_vectors", TestInverseTransformMathReferenceVectors),
             new TestCase("coefficient_buffer_vectors", TestCoefficientBufferVectors),
             new TestCase("coefficient_plane_state_vectors", TestCoefficientPlaneStateVectors),
             new TestCase("macroblock_state_vectors", TestMacroblockStateVectors),
@@ -292,6 +293,111 @@ namespace Jxr.Managed.Tests
                 return false;
             Console.WriteLine("Forward transform math signature: " + hash.ToString("X16"));
             return hash == 0xB4F5A8D8EC5F85A4UL;
+        }
+
+        private static void ApplyInverseTransformMathOperation(int operation, int[] values)
+        {
+            switch (operation)
+            {
+                case 0: JxrInverseTransformMath.RotateHalf(ref values[0], ref values[1]); break;
+                case 1: JxrInverseTransformMath.RotateThreeEighths(ref values[0], ref values[1]); break;
+                case 2: JxrInverseTransformMath.ApplyPost4(ref values[0], ref values[1], ref values[2], ref values[3]); break;
+                case 3: JxrInverseTransformMath.ApplyAlternatePost4(ref values[0], ref values[1], ref values[2], ref values[3]); break;
+                case 4: JxrInverseTransformMath.ApplyHadamardScale4(ref values[0], ref values[1], ref values[2], ref values[3]); break;
+                case 5: JxrInverseTransformMath.ApplyHadamardScale2(ref values[0], ref values[1]); break;
+                case 6: JxrInverseTransformMath.ApplyAlternateHadamardScale2(ref values[0], ref values[1]); break;
+                case 7: JxrInverseTransformMath.ApplyOddOdd(ref values[0], ref values[1], ref values[2], ref values[3]); break;
+                case 8: JxrInverseTransformMath.ApplyOddOddPost(ref values[0], ref values[1], ref values[2], ref values[3]); break;
+                case 9: JxrInverseTransformMath.ApplyOdd(ref values[0], ref values[1], ref values[2], ref values[3]); break;
+                case 10: JxrInverseTransformMath.ApplyScaledDct2x2Down(ref values[0], ref values[1], ref values[2], ref values[3]); break;
+                case 11: JxrInverseTransformMath.ApplyPost2(ref values[0], ref values[1]); break;
+                case 12: JxrInverseTransformMath.ApplyAlternatePost2(ref values[0], ref values[1]); break;
+                case 13: JxrInverseTransformMath.ApplyPost2x2(ref values[0], ref values[1], ref values[2], ref values[3]); break;
+                case 14: JxrInverseTransformMath.ApplyAlternatePost2x2(ref values[0], ref values[1], ref values[2], ref values[3]); break;
+            }
+        }
+
+        private static bool TestInverseTransformMathReferenceVectors()
+        {
+            ulong hash = 14695981039346656037UL;
+            int[] values = new int[4];
+            for (int operation = 0; operation < 15; operation++)
+                for (int first = -3; first <= 3; first++)
+                    for (int second = -3; second <= 3; second++)
+                        for (int third = -3; third <= 3; third++)
+                            for (int fourth = -3; fourth <= 3; fourth++)
+                            {
+                                values[0] = first; values[1] = second;
+                                values[2] = third; values[3] = fourth;
+                                ApplyInverseTransformMathOperation(operation, values);
+                                for (int index = 0; index < 4; index++)
+                                    hash = QuantizationHashValue(hash, values[index]);
+                            }
+            for (int operation = 0; operation < 15; operation++)
+                for (int seed = 0; seed < 512; seed++)
+                {
+                    values[0] = ((seed * 137 + 1009) % 200001) - 100000;
+                    values[1] = ((seed * 311 + 2701) % 200001) - 100000;
+                    values[2] = ((seed * 509 + 4003) % 200001) - 100000;
+                    values[3] = ((seed * 733 + 6011) % 200001) - 100000;
+                    ApplyInverseTransformMathOperation(operation, values);
+                    for (int index = 0; index < 4; index++)
+                        hash = QuantizationHashValue(hash, values[index]);
+                }
+            for (int direct = -40; direct <= 40; direct++)
+                for (int quantizer = 0; quantizer <= 48; quantizer++)
+                    for (int absent = 0; absent < 2; absent++)
+                    {
+                        values[0] = 10 + (direct & 7);
+                        values[1] = 20 - (quantizer & 7);
+                        values[2] = 30 + absent;
+                        values[3] = 40 - (direct & 3);
+                        hash = QuantizationHashValue(hash,
+                            JxrInverseTransformMath.ShouldCompensateDc(direct,
+                                quantizer, absent != 0) ? 1 : 0);
+                        int result = JxrInverseTransformMath.ApplyConditionalDcCompensation(
+                            ref values[0], ref values[1], ref values[2], ref values[3],
+                            direct, quantizer, absent != 0);
+                        hash = QuantizationHashValue(hash, result);
+                        for (int index = 0; index < 4; index++)
+                            hash = QuantizationHashValue(hash, values[index]);
+                    }
+            for (int direct = -40; direct <= 40; direct++)
+                for (int alternate = -40; alternate <= 40; alternate++)
+                    hash = QuantizationHashValue(hash,
+                        JxrInverseTransformMath.ClipDcWithAlternate(direct, alternate));
+            for (int direct = -41; direct <= 41; direct++)
+            {
+                values[0] = 10; values[1] = 20; values[2] = 30; values[3] = 40;
+                JxrInverseTransformMath.ApplyDcCompensation(ref values[0], ref values[1],
+                    ref values[2], ref values[3], direct);
+                for (int index = 0; index < 4; index++)
+                    hash = QuantizationHashValue(hash, values[index]);
+            }
+            for (int absent = 0; absent < 2; absent++)
+                for (int stride = 1; stride <= 16; stride *= 4)
+                    for (int seed = 0; seed < 10; seed++)
+                    {
+                        int[] samples = new int[64];
+                        for (int index = 0; index < 64; index++)
+                            samples[index] = ((index * 13 + seed * 17) % 101) - 50;
+                        if (JxrInverseTransformMath.NormalizeBlock(samples, absent != 0,
+                            64, stride) != JxrError.None ||
+                            JxrInverseTransformMath.AddCornerPredictionAt(samples, 7, seed) != JxrError.None ||
+                            JxrInverseTransformMath.SubtractCornerPredictionAt(samples, 35, -seed) != JxrError.None)
+                            return false;
+                        for (int index = 0; index < 64; index++)
+                            hash = QuantizationHashValue(hash, samples[index]);
+                    }
+            if (JxrInverseTransformMath.NormalizeBlock(null, true, 64, 1) !=
+                    JxrError.InvalidArgument ||
+                JxrInverseTransformMath.AddCornerPredictionAt(new int[4], 4, 1) !=
+                    JxrError.InvalidArgument ||
+                JxrInverseTransformMath.SubtractCornerPredictionAt(new int[4], -1, 1) !=
+                    JxrError.InvalidArgument)
+                return false;
+            Console.WriteLine("Inverse transform math signature: " + hash.ToString("X16"));
+            return hash == 0xED777FEF36FFE720UL;
         }
 
         private static bool TestCoefficientPredictionVectors()
