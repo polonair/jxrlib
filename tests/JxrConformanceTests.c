@@ -6108,6 +6108,59 @@ static int test_decoder_memory_layout_plan_vectors(void)
     return !plan.allocationIsSafe;
 }
 
+static int test_session_memory_reference_vectors(void)
+{
+    static const size_t widths[] = { 1, 16, 17, 605, 65536, 1048576 };
+    static const COLORFORMAT formats[] = {
+        Y_ONLY, YUV_420, YUV_422, YUV_444, CMYK, NCOMPONENT
+    };
+    static const size_t channels[] = { 1, 3, 3, 3, 4, 5 };
+    U64 hash = (U64)14695981039346656037ULL;
+    size_t width, format, depth;
+    int thirtyTwo;
+    for (width = 0; width < sizeof(widths) / sizeof(widths[0]); width++)
+        for (format = 0; format < sizeof(formats) / sizeof(formats[0]); format++)
+            for (depth = 0; depth < 2; depth++)
+                for (thirtyTwo = 0; thirtyTwo < 2; thirtyTwo++) {
+                    JxrDecoderMemoryLayoutPlan decoder;
+                    JxrEncoderMemoryLayoutPlan encoder;
+                    size_t channelBytes = depth ? 4 : 2;
+                    JxrDecoderMemoryLayoutPlanInitialize(&decoder,
+                        depth ? BD_LONG : BD_SHORT, formats[format],
+                        channels[format], widths[width], 100, 20, 30, thirtyTwo);
+                    JxrEncoderMemoryLayoutPlanInitialize(&encoder,
+                        channelBytes, cblkChromas[formats[format]],
+                        channels[format], widths[width], 100, 30, thirtyTwo);
+                    hash = quantization_hash_value(hash, decoder.allocationIsSafe);
+                    hash = quantization_hash_value(hash, (I32)decoder.channelBytes);
+                    hash = quantization_hash_value(hash, (I32)decoder.chromaBlockCount);
+                    hash = quantization_hash_value(hash, (I32)decoder.macroblockCount);
+                    hash = quantization_hash_value(hash,
+                        (I32)decoder.fullResolutionMacroblockBytes);
+                    hash = quantization_hash_value(hash, (I32)decoder.chromaMacroblockBytes);
+                    hash = quantization_hash_value(hash, (I32)decoder.primaryMacroblockRowBytes);
+                    hash = quantization_hash_value(hash,
+                        (I32)decoder.primaryMacroblockBufferBytes);
+                    hash = quantization_hash_value(hash, (I32)decoder.allocationBytes);
+                    hash = quantization_hash_value(hash, encoder.allocationIsSafe);
+                    hash = quantization_hash_value(hash, (I32)encoder.macroblockCount);
+                    hash = quantization_hash_value(hash,
+                        (I32)encoder.fullResolutionMacroblockBytes);
+                    hash = quantization_hash_value(hash, (I32)encoder.chromaMacroblockBytes);
+                    hash = quantization_hash_value(hash, (I32)encoder.primaryMacroblockRowBytes);
+                    hash = quantization_hash_value(hash,
+                        (I32)encoder.primaryMacroblockBufferBytes);
+                    hash = quantization_hash_value(hash,
+                        (I32)encoder.primaryAllocationBytes);
+                    hash = quantization_hash_value(hash,
+                        (I32)encoder.secondaryMacroblockBufferBytes);
+                    hash = quantization_hash_value(hash,
+                        (I32)encoder.secondaryAllocationBytes);
+                }
+    printf("Session memory native signature: %016llX\n", (unsigned long long)hash);
+    return hash == (U64)0x45A6AAFA34554155ULL;
+}
+
 static int test_decoder_buffer_region_layout_vectors(void)
 {
     JxrDecoderMemoryLayoutPlan memoryLayout;
@@ -7064,6 +7117,7 @@ int main(int argc, char** argv)
         { "encoder_coefficient_predictor_vectors", test_encoder_coefficient_predictor_vectors },
         { "coefficient_prediction_reference_vectors", test_coefficient_prediction_reference_vectors },
         { "decoder_memory_layout_plan_vectors", test_decoder_memory_layout_plan_vectors },
+        { "session_memory_reference_vectors", test_session_memory_reference_vectors },
         { "decoder_buffer_region_layout_vectors", test_decoder_buffer_region_layout_vectors },
         { "decoder_primary_plane_factory_vectors", test_decoder_primary_plane_factory_vectors },
         { "decoder_request_validator_normalization_vectors", test_decoder_request_validator_normalization_vectors },

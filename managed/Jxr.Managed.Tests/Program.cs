@@ -36,6 +36,8 @@ namespace Jxr.Managed.Tests
             new TestCase("headers_syntax_vectors", TestHeadersSyntaxVectors),
             new TestCase("image_pipeline_reference_vectors", TestImagePipelineReferenceVectors),
             new TestCase("image_pipeline_bitmap_fixtures", TestImagePipelineBitmapFixtures),
+            new TestCase("session_memory_reference_vectors", TestSessionMemoryReferenceVectors),
+            new TestCase("session_lifecycle_vectors", TestSessionLifecycleVectors),
             new TestCase("coefficient_buffer_vectors", TestCoefficientBufferVectors),
             new TestCase("coefficient_plane_state_vectors", TestCoefficientPlaneStateVectors),
             new TestCase("macroblock_state_vectors", TestMacroblockStateVectors),
@@ -505,6 +507,117 @@ namespace Jxr.Managed.Tests
                             if (pixels[row * stride + column] !=
                                 restored[row * stride + column]) return false;
                 }
+            }
+            return true;
+        }
+
+        private static bool TestSessionMemoryReferenceVectors()
+        {
+            int[] widths = { 1, 16, 17, 605, 65536, 1048576 };
+            int[] formats = { 0, 1, 2, 3, 4, 6 };
+            int[] channels = { 1, 3, 3, 3, 4, 5 };
+            ulong hash = 14695981039346656037UL;
+            for (int width = 0; width < widths.Length; width++)
+                for (int format = 0; format < formats.Length; format++)
+                    for (int depth = 0; depth < 2; depth++)
+                        for (int thirtyTwo = 0; thirtyTwo < 2; thirtyTwo++)
+                        {
+                            JxrSessionConfiguration config = new JxrSessionConfiguration(
+                                widths[width], 16, formats[format], channels[format],
+                                depth == 0 ? 2 : 4, false);
+                            JxrSessionMemoryPlan decoder = JxrSessionPlanner.Decoder(
+                                config, 100, 20, 30, thirtyTwo != 0);
+                            JxrSessionMemoryPlan encoder = JxrSessionPlanner.Encoder(
+                                config, 100, 30, thirtyTwo != 0);
+                            hash = QuantizationHashValue(hash, decoder.AllocationIsSafe ? 1 : 0);
+                            hash = QuantizationHashValue(hash, (int)decoder.ChannelBytes);
+                            hash = QuantizationHashValue(hash, (int)decoder.ChromaBlockCount);
+                            hash = QuantizationHashValue(hash, (int)decoder.MacroblockCount);
+                            hash = QuantizationHashValue(hash,
+                                (int)decoder.FullResolutionMacroblockBytes);
+                            hash = QuantizationHashValue(hash, (int)decoder.ChromaMacroblockBytes);
+                            hash = QuantizationHashValue(hash, (int)decoder.PrimaryMacroblockRowBytes);
+                            hash = QuantizationHashValue(hash,
+                                unchecked((int)decoder.PrimaryMacroblockBufferBytes));
+                            hash = QuantizationHashValue(hash,
+                                unchecked((int)decoder.PrimaryAllocationBytes));
+                            hash = QuantizationHashValue(hash, encoder.AllocationIsSafe ? 1 : 0);
+                            hash = QuantizationHashValue(hash, (int)encoder.MacroblockCount);
+                            hash = QuantizationHashValue(hash,
+                                (int)encoder.FullResolutionMacroblockBytes);
+                            hash = QuantizationHashValue(hash, (int)encoder.ChromaMacroblockBytes);
+                            hash = QuantizationHashValue(hash,
+                                (int)encoder.PrimaryMacroblockRowBytes);
+                            hash = QuantizationHashValue(hash,
+                                unchecked((int)encoder.PrimaryMacroblockBufferBytes));
+                            hash = QuantizationHashValue(hash,
+                                unchecked((int)encoder.PrimaryAllocationBytes));
+                            hash = QuantizationHashValue(hash,
+                                unchecked((int)encoder.SecondaryMacroblockBufferBytes));
+                            hash = QuantizationHashValue(hash,
+                                unchecked((int)encoder.SecondaryAllocationBytes));
+                        }
+            Console.WriteLine("Session memory signature: " + hash.ToString("X16"));
+            return hash == 0x45A6AAFA34554155UL;
+        }
+
+        private static bool TestSessionLifecycleVectors()
+        {
+            JxrSessionConfiguration gray = new JxrSessionConfiguration(
+                16, 16, 0, 1, 4, false);
+            JxrDecoderSession decoder = JxrDecoderSession.Create(gray, 100, 20, 30);
+            JxrEncoderSession encoder = JxrEncoderSession.Create(gray, 100, 30);
+            if (decoder.MemoryPlan.MacroblockCount != 1 ||
+                encoder.MemoryPlan.MacroblockCount != 1 ||
+                decoder.GetPrimaryRow(0, 0).Length != 256 ||
+                encoder.GetPrimaryRow(1, 0).Length != 256 ||
+                Object.ReferenceEquals(decoder.GetPrimaryRow(0, 0),
+                    decoder.GetPrimaryRow(1, 0))) return false;
+            decoder.GetPrimaryRow(0, 0)[0] = 73;
+            if (decoder.GetPrimaryRow(1, 0)[0] != 0) return false;
+            decoder.Dispose(); decoder.Dispose(); encoder.Dispose(); encoder.Dispose();
+            if (!decoder.IsClosed || !encoder.IsClosed) return false;
+            try { decoder.GetPrimaryRow(0, 0); return false; }
+            catch (ObjectDisposedException) { }
+
+            JxrSessionConfiguration color = new JxrSessionConfiguration(
+                605, 478, 1, 3, 4, true);
+            decoder = JxrDecoderSession.Create(color, 100, 20, 30);
+            encoder = JxrEncoderSession.Create(color, 100, 30);
+            if (decoder.MemoryPlan.MacroblockCount != 38 ||
+                decoder.GetPrimaryRow(0, 0).Length != 38 * 256 ||
+                decoder.GetPrimaryRow(0, 1).Length != 38 * 64 ||
+                encoder.GetPrimaryRow(1, 2).Length != 38 * 64 ||
+                decoder.GetAlphaRow(0).Length != 38 * 256 ||
+                encoder.GetAlphaRow(1).Length != 38 * 256)
+                return false;
+            decoder.Dispose(); encoder.Dispose();
+            try { new JxrSessionConfiguration(0, 16, 0, 1, 4, false); return false; }
+            catch (ArgumentException) { }
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "minimal-profile\\minimal-gray-16x16.jxr"))) directory = directory.Parent;
+            if (directory == null) return false;
+            string[] paths = {
+                "minimal-profile\\minimal-gray-16x16.jxr",
+                "real-image-profile\\test-sign-334x330.jxr",
+                "default-profile\\city-park-605x478.jxr"
+            };
+            for (int index = 0; index < paths.Length; index++)
+            {
+                JxrHeaders headers;
+                JxrSessionConfiguration fromHeader;
+                if (JxrHeaders.Read(File.ReadAllBytes(Path.Combine(directory.FullName,
+                    paths[index])), out headers) != JxrError.None ||
+                    JxrSessionPlanner.FromHeaders(headers, out fromHeader) != JxrError.None)
+                    return false;
+                decoder = JxrDecoderSession.Create(fromHeader, 100, 20, 30);
+                encoder = JxrEncoderSession.Create(fromHeader, 100, 30);
+                if (decoder.MemoryPlan.MacroblockCount !=
+                    ((long)fromHeader.Width + 15) / 16 ||
+                    encoder.MemoryPlan.MacroblockCount !=
+                    decoder.MemoryPlan.MacroblockCount) return false;
+                decoder.Dispose(); encoder.Dispose();
             }
             return true;
         }

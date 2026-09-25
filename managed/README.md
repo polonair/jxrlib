@@ -36,3 +36,11 @@ unscaled RGB/Gray output, clipping, and explicit row strides. Its native and
 managed reference vectors share a frozen signature. It does not yet compose
 headers, entropy coding, transforms, tiles, alpha, or BMP container I/O into a
 complete image encoder/decoder.
+
+`JxrDecoderSession` and `JxrEncoderSession` now own separate two-row
+coefficient buffers for each channel and optional alpha plane. Their memory
+plans reproduce the native decoder/encoder layout formulas, including the
+32-bit safety decisions, while actual managed allocations are `int[]` rather
+than a native struct-and-pointer slab. Sessions can be configured from parsed
+JXR headers and release their buffers through `Dispose`. Session execution,
+packet I/O, and final encoder flushing are not wired up yet.
