@@ -5585,6 +5585,59 @@ static int test_encoder_color_transform_vectors(void)
     return cyan == 1 && magenta == 5 && yellow == 8 && black == 5;
 }
 
+/* Pixel boundary oracle for the managed full-resolution BD_8 image pipeline. */
+static int test_image_pipeline_reference_vectors(void)
+{
+    U64 hash = (U64)14695981039346656037ULL;
+    int shift, order, row, column;
+    for (shift = 0; shift <= 3; shift += 3)
+        for (order = 0; order < 2; order++)
+            for (row = 0; row < 3; row++)
+                for (column = 0; column < 17; column++) {
+                    PixelI sourceRed = (row * 41 + column * 17) & 255;
+                    PixelI sourceGreen = (row * 83 + column * 29 + 127) & 255;
+                    PixelI sourceBlue = (row * 13 + column * 47 + 255) & 255;
+                    PixelI red = sourceRed << shift, green = sourceGreen << shift;
+                    PixelI blue = sourceBlue << shift;
+                    PixelI y, u, v, bias = (128 << shift) + (shift == 0 ? 0 : 3);
+                    PixelI gray = (sourceGreen - 128) << shift;
+                    JxrEncoderColorTransformApplyRgb(&red, &green, &blue);
+                    y = green - (128 << shift); u = -red; v = blue;
+                    hash = quantization_hash_value(hash, y);
+                    hash = quantization_hash_value(hash, u);
+                    hash = quantization_hash_value(hash, v);
+                    red = -u; green = y + bias; blue = v;
+                    JxrInverseColorTransformApplyRgb(&red, &green, &blue);
+                    hash = quantization_hash_value(hash,
+                        JxrSampleClippingToByte((order ? blue : red) >> shift));
+                    hash = quantization_hash_value(hash,
+                        JxrSampleClippingToByte(green >> shift));
+                    hash = quantization_hash_value(hash,
+                        JxrSampleClippingToByte((order ? red : blue) >> shift));
+                    hash = quantization_hash_value(hash, gray);
+                    hash = quantization_hash_value(hash,
+                        JxrSampleClippingToByte((gray + bias) >> shift));
+                    if ((red >> shift) != sourceRed ||
+                        (green >> shift) != sourceGreen ||
+                        (blue >> shift) != sourceBlue) return 0;
+                }
+    for (column = -257; column <= 257; column += 17) {
+        PixelI c = column, m = column + 13, y = column - 31, k = column + 7;
+        JxrEncoderColorTransformApplyCmyk(&c, &m, &y, &k);
+        hash = quantization_hash_value(hash, c);
+        hash = quantization_hash_value(hash, m);
+        hash = quantization_hash_value(hash, y);
+        hash = quantization_hash_value(hash, k);
+        JxrInverseColorTransformApplyCmyk(&c, &m, &y, &k);
+        if (c != column || m != column + 13 || y != column - 31 ||
+            k != column + 7) return 0;
+    }
+    for (column = -512; column <= 768; column += 17)
+        hash = quantization_hash_value(hash, JxrSampleClippingToByte(column));
+    printf("Image pipeline native signature: %016llX\n", (unsigned long long)hash);
+    return hash == (U64)0xCC4DA223E707A8DBULL;
+}
+
 static int test_encoder_alpha_plane_input_plan_vectors(void)
 {
     JxrEncoderAlphaPlaneInputPlan plan;
@@ -6998,6 +7051,7 @@ int main(int argc, char** argv)
         { "encoder_output_plan_vectors", test_encoder_output_plan_vectors },
         { "encoder_sample_conversion_vectors", test_encoder_sample_conversion_vectors },
         { "encoder_color_transform_vectors", test_encoder_color_transform_vectors },
+        { "image_pipeline_reference_vectors", test_image_pipeline_reference_vectors },
         { "encoder_alpha_plane_input_plan_vectors", test_encoder_alpha_plane_input_plan_vectors },
         { "encoder_input_padding_plan_vectors", test_encoder_input_padding_plan_vectors },
         { "encoder_chroma_downsampling_vectors", test_encoder_chroma_downsampling_vectors },

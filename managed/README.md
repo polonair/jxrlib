@@ -29,3 +29,10 @@ Build and run on this machine:
 
 The native `JxrConformanceTests` remains the reference oracle and must stay
 green alongside the managed runner.
+
+`JxrImagePipeline` currently covers the full-resolution 8-bit pixel boundary:
+Gray/RGB input centering, reversible RGB/CMYK color transforms, scaled and
+unscaled RGB/Gray output, clipping, and explicit row strides. Its native and
+managed reference vectors share a frozen signature. It does not yet compose
+headers, entropy coding, transforms, tiles, alpha, or BMP container I/O into a
+complete image encoder/decoder.

@@ -34,6 +34,8 @@ namespace Jxr.Managed.Tests
             new TestCase("inverse_transform_math_reference_vectors", TestInverseTransformMathReferenceVectors),
             new TestCase("headers_reference_fixtures", TestHeadersReferenceFixtures),
             new TestCase("headers_syntax_vectors", TestHeadersSyntaxVectors),
+            new TestCase("image_pipeline_reference_vectors", TestImagePipelineReferenceVectors),
+            new TestCase("image_pipeline_bitmap_fixtures", TestImagePipelineBitmapFixtures),
             new TestCase("coefficient_buffer_vectors", TestCoefficientBufferVectors),
             new TestCase("coefficient_plane_state_vectors", TestCoefficientPlaneStateVectors),
             new TestCase("macroblock_state_vectors", TestMacroblockStateVectors),
@@ -358,6 +360,153 @@ namespace Jxr.Managed.Tests
         private static ulong QuantizationHashValue(ulong hash, int value)
         {
             return unchecked((hash ^ (uint)value) * 1099511628211UL);
+        }
+
+        private static bool TestImagePipelineReferenceVectors()
+        {
+            const int width = 17, height = 3, rgbStride = 53, outputStride = 55;
+            ulong hash = 14695981039346656037UL;
+            for (int shift = 0; shift <= 3; shift += 3)
+                for (int order = 0; order < 2; order++)
+                {
+                    byte[] source = new byte[rgbStride * height];
+                    byte[] graySource = new byte[(width + 2) * height];
+                    byte[] output = new byte[outputStride * height];
+                    byte[] grayOutput = new byte[(width + 2) * height];
+                    for (int row = 0; row < height; row++)
+                        for (int column = 0; column < width; column++)
+                        {
+                            byte red = (byte)((row * 41 + column * 17) & 255);
+                            byte green = (byte)((row * 83 + column * 29 + 127) & 255);
+                            byte blue = (byte)((row * 13 + column * 47 + 255) & 255);
+                            int offset = row * rgbStride + column * 3;
+                            source[offset + (order == 0 ? 0 : 2)] = red;
+                            source[offset + 1] = green;
+                            source[offset + (order == 0 ? 2 : 0)] = blue;
+                            graySource[row * (width + 2) + column] = green;
+                        }
+                    int[] y, u, v, gray;
+                    if (JxrImagePipeline.EncodeRgb8(source, rgbStride, width, height,
+                        order == 0, shift, out y, out u, out v) != JxrError.None ||
+                        JxrImagePipeline.DecodeRgb8(y, u, v, width, height,
+                        order == 0, shift, output, outputStride) != JxrError.None ||
+                        JxrImagePipeline.EncodeGray8(graySource, width + 2, width,
+                        height, shift, out gray) != JxrError.None ||
+                        JxrImagePipeline.DecodeGray8(gray, width, height, shift,
+                        grayOutput, width + 2) != JxrError.None) return false;
+                    for (int row = 0; row < height; row++)
+                        for (int column = 0; column < width; column++)
+                        {
+                            int index = row * width + column;
+                            int inputIndex = row * rgbStride + column * 3;
+                            int outputIndex = row * outputStride + column * 3;
+                            hash = QuantizationHashValue(hash, y[index]);
+                            hash = QuantizationHashValue(hash, u[index]);
+                            hash = QuantizationHashValue(hash, v[index]);
+                            for (int channel = 0; channel < 3; channel++)
+                            {
+                                byte sample = output[outputIndex + channel];
+                                hash = QuantizationHashValue(hash, sample);
+                                if (sample != source[inputIndex + channel]) return false;
+                            }
+                            hash = QuantizationHashValue(hash, gray[index]);
+                            byte graySample = grayOutput[row * (width + 2) + column];
+                            hash = QuantizationHashValue(hash, graySample);
+                            if (graySample != graySource[row * (width + 2) + column])
+                                return false;
+                        }
+                    for (int row = 0; row < height; row++)
+                    {
+                        if (output[row * outputStride + width * 3] != 0 ||
+                            grayOutput[row * (width + 2) + width] != 0)
+                            return false;
+                    }
+                }
+            for (int value = -257; value <= 257; value += 17)
+            {
+                int c = value, m = value + 13, y = value - 31, k = value + 7;
+                JxrImagePipeline.ForwardCmyk(ref c, ref m, ref y, ref k);
+                hash = QuantizationHashValue(hash, c);
+                hash = QuantizationHashValue(hash, m);
+                hash = QuantizationHashValue(hash, y);
+                hash = QuantizationHashValue(hash, k);
+                JxrImagePipeline.InverseCmyk(ref c, ref m, ref y, ref k);
+                if (c != value || m != value + 13 || y != value - 31 ||
+                    k != value + 7) return false;
+            }
+            for (int value = -512; value <= 768; value += 17)
+                hash = QuantizationHashValue(hash, JxrImagePipeline.ClipByte(value));
+            int[] invalid;
+            int[] iy, iu, iv;
+            if (JxrImagePipeline.EncodeGray8(new byte[4], 1, 2, 2, 0,
+                out invalid) != JxrError.InvalidArgument || invalid != null ||
+                JxrImagePipeline.EncodeRgb8(new byte[3], 3, 1, 1, true, 1,
+                out iy, out iu, out iv) != JxrError.InvalidArgument ||
+                iy != null || iu != null || iv != null)
+                return false;
+            Console.WriteLine("Image pipeline signature: " + hash.ToString("X16"));
+            return hash == 0xCC4DA223E707A8DBUL;
+        }
+
+        private static bool TestImagePipelineBitmapFixtures()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "minimal-profile\\minimal-gray-16x16.bmp"))) directory = directory.Parent;
+            if (directory == null) return false;
+            string[] paths = {
+                "minimal-profile\\minimal-gray-16x16.bmp",
+                "real-image-profile\\test-sign-334x330.bmp",
+                "default-profile\\city-park-605x478.bmp"
+            };
+            for (int fixture = 0; fixture < paths.Length; fixture++)
+            {
+                byte[] bitmap = File.ReadAllBytes(Path.Combine(directory.FullName,
+                    paths[fixture]));
+                if (bitmap.Length < 54 || bitmap[0] != 'B' || bitmap[1] != 'M' ||
+                    BitConverter.ToInt32(bitmap, 30) != 0) return false;
+                int offset = BitConverter.ToInt32(bitmap, 10);
+                int width = BitConverter.ToInt32(bitmap, 18);
+                int height = BitConverter.ToInt32(bitmap, 22);
+                int bitsPerPixel = BitConverter.ToInt16(bitmap, 28);
+                int channels = bitsPerPixel == 8 ? 1 : bitsPerPixel == 24 ? 3 : 0;
+                if (channels == 0 || width <= 0 || height <= 0) return false;
+                long strideLong = (((long)width * channels + 3) / 4) * 4;
+                if (strideLong > Int32.MaxValue || offset < 0 ||
+                    (long)offset + strideLong * height > bitmap.Length) return false;
+                int stride = (int)strideLong;
+                byte[] pixels = new byte[stride * height];
+                byte[] restored = new byte[pixels.Length];
+                Array.Copy(bitmap, offset, pixels, 0, pixels.Length);
+                for (int shift = 0; shift <= 3; shift += 3)
+                {
+                    JxrError error;
+                    if (channels == 1)
+                    {
+                        int[] y;
+                        error = JxrImagePipeline.EncodeGray8(pixels, stride,
+                            width, height, shift, out y);
+                        if (error != JxrError.None) return false;
+                        error = JxrImagePipeline.DecodeGray8(y, width, height,
+                            shift, restored, stride);
+                    }
+                    else
+                    {
+                        int[] y, u, v;
+                        error = JxrImagePipeline.EncodeRgb8(pixels, stride,
+                            width, height, false, shift, out y, out u, out v);
+                        if (error != JxrError.None) return false;
+                        error = JxrImagePipeline.DecodeRgb8(y, u, v,
+                            width, height, false, shift, restored, stride);
+                    }
+                    if (error != JxrError.None) return false;
+                    for (int row = 0; row < height; row++)
+                        for (int column = 0; column < width * channels; column++)
+                            if (pixels[row * stride + column] !=
+                                restored[row * stride + column]) return false;
+                }
+            }
+            return true;
         }
 
         private static bool TestTransformMathReferenceVectors()
