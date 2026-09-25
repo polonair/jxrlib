@@ -1800,6 +1800,88 @@ static int test_header_decode_pipeline_vectors(void)
         !JxrHeaderDecodePipelineReadImagePlane(NULL, NULL, NULL, NULL);
 }
 
+static U64 quantization_hash_value(U64 hash, I32 value);
+
+static int test_headers_reference_fixtures(void)
+{
+    static const char* paths[] = {
+        "minimal-profile/minimal-gray-16x16.jxr",
+        "real-image-profile/test-sign-334x330.jxr",
+        "default-profile/city-park-605x478.jxr"
+    };
+    U64 hash = (U64)14695981039346656037ULL;
+    size_t fixture;
+    for (fixture = 0; fixture < 3; fixture++) {
+        FILE* file = fopen(paths[fixture], "rb");
+        long length;
+        U8* bytes;
+        struct WMPStream* stream = NULL;
+        CWMImageInfo image;
+        CWMIStrCodecParam codec;
+        CCoreParameters core;
+        size_t channel;
+        int success;
+        if (file == NULL || fseek(file, 0, SEEK_END) != 0 ||
+            (length = ftell(file)) <= 0 || fseek(file, 0, SEEK_SET) != 0) {
+            if (file != NULL) fclose(file);
+            return 0;
+        }
+        bytes = (U8*)malloc((size_t)length);
+        if (bytes == NULL) { fclose(file); return 0; }
+        success = fread(bytes, 1, (size_t)length, file) == (size_t)length;
+        fclose(file);
+        if (!success || length <= 142 ||
+            memcmp(bytes + 134, "WMPHOTO", 7) != 0 ||
+            CreateWS_Memory(&stream, bytes + 134, (size_t)length - 134) != WMP_errSuccess) {
+            free(bytes); return 0;
+        }
+        memset(&image, 0, sizeof(image));
+        memset(&codec, 0, sizeof(codec));
+        memset(&core, 0, sizeof(core));
+        codec.pWStream = stream;
+        success = JxrHeaderDecodePipelineRead(&image, &codec, &core);
+        if (!success) { CloseWS_Memory(&stream); free(bytes); return 0; }
+        hash = quantization_hash_value(hash, (I32)image.cWidth);
+        hash = quantization_hash_value(hash, (I32)image.cHeight);
+        hash = quantization_hash_value(hash, image.cfColorFormat);
+        hash = quantization_hash_value(hash, image.bdBitDepth);
+        hash = quantization_hash_value(hash, image.oOrientation);
+        hash = quantization_hash_value(hash, codec.bfBitstreamFormat);
+        hash = quantization_hash_value(hash, codec.olOverlap);
+        hash = quantization_hash_value(hash, codec.sbSubband);
+        hash = quantization_hash_value(hash, codec.cfColorFormat);
+        hash = quantization_hash_value(hash, (I32)codec.cNumOfSliceMinus1V);
+        hash = quantization_hash_value(hash, (I32)codec.cNumOfSliceMinus1H);
+        hash = quantization_hash_value(hash, codec.nLenMantissaOrShift);
+        hash = quantization_hash_value(hash, codec.nExpBias);
+        hash = quantization_hash_value(hash, codec.bBlackWhite);
+        hash = quantization_hash_value(hash, (I32)core.cVersion);
+        hash = quantization_hash_value(hash, (I32)core.cSubVersion);
+        hash = quantization_hash_value(hash, core.bUseHardTileBoundaries);
+        hash = quantization_hash_value(hash, core.bIndexTable);
+        hash = quantization_hash_value(hash, core.bTrimFlexbitsFlag);
+        hash = quantization_hash_value(hash, core.bRBSwapped);
+        hash = quantization_hash_value(hash, core.bAlphaChannel);
+        hash = quantization_hash_value(hash, (I32)core.cExtraPixelsTop);
+        hash = quantization_hash_value(hash, (I32)core.cExtraPixelsLeft);
+        hash = quantization_hash_value(hash, (I32)core.cExtraPixelsBottom);
+        hash = quantization_hash_value(hash, (I32)core.cExtraPixelsRight);
+        hash = quantization_hash_value(hash, (I32)core.cNumChannels);
+        hash = quantization_hash_value(hash, core.bScaledArith);
+        hash = quantization_hash_value(hash, core.uQPMode);
+        hash = quantization_hash_value(hash, (I32)((U32)0 - (U32)codec.cbStream));
+        for (channel = 0; channel < core.cNumChannels; channel++) {
+            hash = quantization_hash_value(hash, core.uiQPIndexDC[channel]);
+            hash = quantization_hash_value(hash, core.uiQPIndexLP[channel]);
+            hash = quantization_hash_value(hash, core.uiQPIndexHP[channel]);
+        }
+        CloseWS_Memory(&stream);
+        free(bytes);
+    }
+    printf("Headers native signature: %016llX\n", (unsigned long long)hash);
+    return hash == (U64)0xE5CFDDD005A012B9ULL;
+}
+
 static int test_decoder_initialization_pipeline_vectors(void)
 {
     CWMImageStrCodec primaryCodec, secondaryCodec;
@@ -6802,6 +6884,7 @@ int main(int argc, char** argv)
         { "stream_position_scope_vectors", test_stream_position_scope_vectors },
         { "header_metadata_finalizer_vectors", test_header_metadata_finalizer_vectors },
         { "header_decode_pipeline_vectors", test_header_decode_pipeline_vectors },
+        { "headers_reference_fixtures", test_headers_reference_fixtures },
         { "decoder_initialization_pipeline_vectors", test_decoder_initialization_pipeline_vectors },
         { "decoder_output_pipeline_plan_vectors", test_decoder_output_pipeline_plan_vectors },
         { "decoder_optimization_policy_vectors", test_decoder_optimization_policy_vectors },

@@ -32,6 +32,8 @@ namespace Jxr.Managed.Tests
             new TestCase("transform_math_reference_vectors", TestTransformMathReferenceVectors),
             new TestCase("forward_transform_math_reference_vectors", TestForwardTransformMathReferenceVectors),
             new TestCase("inverse_transform_math_reference_vectors", TestInverseTransformMathReferenceVectors),
+            new TestCase("headers_reference_fixtures", TestHeadersReferenceFixtures),
+            new TestCase("headers_syntax_vectors", TestHeadersSyntaxVectors),
             new TestCase("coefficient_buffer_vectors", TestCoefficientBufferVectors),
             new TestCase("coefficient_plane_state_vectors", TestCoefficientPlaneStateVectors),
             new TestCase("macroblock_state_vectors", TestMacroblockStateVectors),
@@ -163,6 +165,194 @@ namespace Jxr.Managed.Tests
                 values[index] = Int32.Parse(fields[index].Trim(),
                     System.Globalization.CultureInfo.InvariantCulture);
             return values;
+        }
+
+        private static bool TestHeadersReferenceFixtures()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "minimal-profile\\minimal-gray-16x16.jxr"))) directory = directory.Parent;
+            if (directory == null) return false;
+            string[] paths = {
+                "minimal-profile\\minimal-gray-16x16.jxr",
+                "real-image-profile\\test-sign-334x330.jxr",
+                "default-profile\\city-park-605x478.jxr"
+            };
+            ulong hash = 14695981039346656037UL;
+            for (int fixture = 0; fixture < paths.Length; fixture++)
+            {
+                byte[] bytes = File.ReadAllBytes(Path.Combine(directory.FullName, paths[fixture]));
+                JxrHeaders headers;
+                JxrError error = JxrHeaders.Read(bytes, out headers);
+                if (error != JxrError.None || headers == null)
+                { Console.WriteLine("Header read " + paths[fixture] + ": " + error); return false; }
+                JxrMainHeader main = headers.Main;
+                JxrImagePlaneHeader plane = headers.Plane;
+                JxrImagePlaneQuantizerHeader q = headers.Quantizers;
+                if (headers.CodestreamOffset <= 0 || headers.ByteCount <= 8)
+                    return false;
+                byte[] rawCodestream = new byte[bytes.Length - headers.CodestreamOffset];
+                Array.Copy(bytes, headers.CodestreamOffset, rawCodestream, 0,
+                    rawCodestream.Length);
+                JxrHeaders rawHeaders;
+                if (JxrHeaders.Read(rawCodestream, out rawHeaders) != JxrError.None ||
+                    rawHeaders.CodestreamOffset != 0 ||
+                    rawHeaders.ByteCount != headers.ByteCount ||
+                    rawHeaders.Main.Width != main.Width ||
+                    rawHeaders.Main.Height != main.Height ||
+                    rawHeaders.Quantizers.Mode != q.Mode) return false;
+                hash = QuantizationHashValue(hash, unchecked((int)main.Width));
+                hash = QuantizationHashValue(hash, unchecked((int)main.Height));
+                hash = QuantizationHashValue(hash, main.SourceColorFormat);
+                hash = QuantizationHashValue(hash, main.SourceBitDepth);
+                hash = QuantizationHashValue(hash, main.Orientation);
+                hash = QuantizationHashValue(hash, main.BitstreamFormat);
+                hash = QuantizationHashValue(hash, main.Overlap);
+                hash = QuantizationHashValue(hash, plane.Subband);
+                hash = QuantizationHashValue(hash, plane.ColorFormat);
+                hash = QuantizationHashValue(hash, main.VerticalSliceCountMinusOne);
+                hash = QuantizationHashValue(hash, main.HorizontalSliceCountMinusOne);
+                hash = QuantizationHashValue(hash, plane.MantissaOrShift);
+                hash = QuantizationHashValue(hash, plane.ExponentBias);
+                hash = QuantizationHashValue(hash, main.BlackWhite ? 1 : 0);
+                hash = QuantizationHashValue(hash, main.Version);
+                hash = QuantizationHashValue(hash, main.Subversion);
+                hash = QuantizationHashValue(hash, main.HasHardTileBoundaries ? 1 : 0);
+                hash = QuantizationHashValue(hash, main.HasIndexTable ? 1 : 0);
+                hash = QuantizationHashValue(hash, main.TrimFlexbits ? 1 : 0);
+                hash = QuantizationHashValue(hash, main.RedBlueSwapped ? 1 : 0);
+                hash = QuantizationHashValue(hash, main.HasAlpha ? 1 : 0);
+                hash = QuantizationHashValue(hash, main.ExtraTop);
+                hash = QuantizationHashValue(hash, main.ExtraLeft);
+                hash = QuantizationHashValue(hash, main.ExtraBottom);
+                hash = QuantizationHashValue(hash, main.ExtraRight);
+                hash = QuantizationHashValue(hash, plane.ChannelCount);
+                hash = QuantizationHashValue(hash, plane.ScaledArithmetic ? 1 : 0);
+                hash = QuantizationHashValue(hash, q.Mode);
+                hash = QuantizationHashValue(hash, headers.ByteCount - 8);
+                for (int channel = 0; channel < plane.ChannelCount; channel++)
+                {
+                    hash = QuantizationHashValue(hash, q.GetDcIndex(channel));
+                    hash = QuantizationHashValue(hash, q.GetLowpassIndex(channel));
+                    hash = QuantizationHashValue(hash, q.GetHighpassIndex(channel));
+                }
+                if (fixture == 0)
+                {
+                    int codestreamOffset = headers.CodestreamOffset;
+                    byte[] invalid = (byte[])bytes.Clone();
+                    invalid[0] = 0;
+                    if (JxrHeaders.Read(invalid, out headers) != JxrError.InvalidBitstream ||
+                        headers != null || JxrHeaders.Read(null, out headers) !=
+                        JxrError.InvalidArgument || headers != null)
+                        return false;
+                    invalid = (byte[])bytes.Clone();
+                    invalid[codestreamOffset + 8] =
+                        (byte)(invalid[codestreamOffset + 8] & 15);
+                    if (JxrHeaders.Read(invalid, out headers) != JxrError.InvalidBitstream)
+                        return false;
+                    if (JxrHeaders.Read(new byte[] { (byte)'W', (byte)'M',
+                        (byte)'P', (byte)'H', (byte)'O', (byte)'T', (byte)'O' }, out headers) !=
+                        JxrError.UnexpectedEndOfStream) return false;
+                }
+            }
+            Console.WriteLine("Headers signature: " + hash.ToString("X16"));
+            return hash == 0xE5CFDDD005A012B9UL;
+        }
+
+        private static byte[] PackHeaderFields(int[] values, int[] widths)
+        {
+            if (values.Length != widths.Length) return null;
+            int bitCount = 0;
+            for (int field = 0; field < widths.Length; field++) bitCount += widths[field];
+            byte[] bytes = new byte[(bitCount + 7) / 8];
+            int bitPosition = 0;
+            for (int field = 0; field < widths.Length; field++)
+                for (int bit = widths[field] - 1; bit >= 0; bit--)
+                {
+                    if ((((uint)values[field] >> bit) & 1U) != 0)
+                        bytes[bitPosition >> 3] |= (byte)(1 << (7 - (bitPosition & 7)));
+                    bitPosition++;
+                }
+            return bytes;
+        }
+
+        // Translations of native main_header_reader_vectors,
+        // image_plane_descriptor_reader_vectors and
+        // image_plane_quantizer_header_reader_vectors.
+        private static bool TestHeadersSyntaxVectors()
+        {
+            int[] mainValues = { 1,9,1,1,4,1,2,1,1,1,1,1,1,0,1,7,7,
+                31,15,1,1,3,5,0,0,0,0,0,0,0,0 };
+            int[] mainWidths = { 4,4,1,1,3,1,2,1,1,1,1,1,1,1,1,4,4,
+                16,16,12,12,8,8,8,8,8,8,6,6,6,6 };
+            JxrMainHeader main;
+            JxrBitReader reader = new JxrBitReader(PackHeaderFields(mainValues, mainWidths));
+            if (JxrHeaders.ReadMainHeader(reader, out main) != JxrError.None ||
+                main.Version != 1 || main.Subversion != 9 || !main.HasHardTileBoundaries ||
+                main.BitstreamFormat != 1 || main.Orientation != 4 ||
+                !main.HasIndexTable || main.Overlap != 2 ||
+                main.SourceColorFormat != 7 || main.SourceBitDepth != 7 ||
+                main.Width != 32 || main.Height != 16 ||
+                main.VerticalSliceCountMinusOne != 1 ||
+                main.HorizontalSliceCountMinusOne != 1 ||
+                main.GetTileX(1) != 3 || main.GetTileY(1) != 5 ||
+                reader.BitPosition != 160)
+                return false;
+
+            int[][] planeValues = {
+                new int[] { 0,1,0 },
+                new int[] { 1,0,1,0,5,1,3,9 },
+                new int[] { 2,0,2,1,6,0,10 },
+                new int[] { 3,0,0,0,0 },
+                new int[] { 4,0,0 },
+                new int[] { 6,0,0,4,0,13,0x82 }
+            };
+            int[][] planeWidths = {
+                new int[] { 3,1,4 },
+                new int[] { 3,1,4,1,3,1,3,8 },
+                new int[] { 3,1,4,1,3,4,8 },
+                new int[] { 3,1,4,4,4 },
+                new int[] { 3,1,4 },
+                new int[] { 3,1,4,4,4,8,8 }
+            };
+            int[] depths = { 1,2,6,1,1,7 };
+            int[] channels = { 1,3,3,3,4,5 };
+            for (int format = 0; format < planeValues.Length; format++)
+            {
+                JxrImagePlaneHeader plane;
+                reader = new JxrBitReader(PackHeaderFields(
+                    planeValues[format], planeWidths[format]));
+                if (JxrHeaders.ReadImagePlaneHeader(reader, depths[format], out plane) !=
+                    JxrError.None || plane.ColorFormat != planeValues[format][0] ||
+                    plane.ChannelCount != channels[format]) return false;
+                if (format == 1 && (!plane.HasChromaCenteringX ||
+                    !plane.HasChromaCenteringY || plane.ChromaCenteringX != 5 ||
+                    plane.ChromaCenteringY != 3 || plane.MantissaOrShift != 9)) return false;
+                if (format == 2 && (!plane.HasChromaCenteringX ||
+                    plane.HasChromaCenteringY || plane.ChromaCenteringX != 6 ||
+                    plane.MantissaOrShift != 10)) return false;
+                if (format == 5 && (plane.MantissaOrShift != 13 ||
+                    plane.ExponentBias != -126)) return false;
+            }
+            reader = new JxrBitReader(PackHeaderFields(
+                new int[] { 5 }, new int[] { 3 }));
+            JxrImagePlaneHeader invalidPlane;
+            if (JxrHeaders.ReadImagePlaneHeader(reader, 1, out invalidPlane) !=
+                JxrError.InvalidBitstream) return false;
+
+            int[] quantizerValues = { 1,0,7,0,1,1,8,9,0,1,2,10,11,12 };
+            int[] quantizerWidths = { 1,2,8,1,1,2,8,8,1,1,2,8,8,8 };
+            reader = new JxrBitReader(PackHeaderFields(quantizerValues, quantizerWidths));
+            JxrImagePlaneQuantizerHeader q;
+            if (JxrHeaders.ReadImagePlaneQuantizerHeader(reader, 3, 0, out q) !=
+                JxrError.None || q.Mode != 0x720 || !q.HasDc || !q.HasLowpass ||
+                !q.HasHighpass || q.DcMode != 0 || q.LowpassMode != 1 ||
+                q.HighpassMode != 2 || q.GetDcIndex(0) != 7 ||
+                q.GetLowpassIndex(1) != 9 || q.GetHighpassIndex(2) != 12)
+                return false;
+            return JxrHeaders.ReadMainHeader(null, out main) == JxrError.InvalidArgument &&
+                JxrHeaders.ReadImagePlaneQuantizerHeader(null, 3, 0, out q) ==
+                JxrError.InvalidArgument;
         }
 
         private static ulong QuantizationHashValue(ulong hash, int value)
