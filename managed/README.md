@@ -44,3 +44,11 @@ plans reproduce the native decoder/encoder layout formulas, including the
 than a native struct-and-pointer slab. Sessions can be configured from parsed
 JXR headers and release their buffers through `Dispose`. Session execution,
 packet I/O, and final encoder flushing are not wired up yet.
+
+`JxrTranscoder` ports the coefficient-domain core: all eight orientations,
+DC/AC sign and position changes for 4:4:4, 4:2:2 and 4:2:0, and ROI expansion
+to macroblock boundaries with overlap. The native and managed vector suites
+compare both mutated source and destination coefficients and all ROI fields.
+It is not yet a file-to-file transcoder: decoding packets, emitting tile
+headers and encoding the resulting coefficient stream still require the
+future integrated session executors.

@@ -768,6 +768,52 @@ static int test_transcode_coefficient_transform_420_vectors(void)
         !JxrTranscodeCoefficientTransformAc420(&source, &destination, &orientation);
 }
 
+static U64 transcode_reference_hash(U64 hash, I32 value)
+{ return (hash ^ (U32)value) * (U64)1099511628211ULL; }
+
+static int test_transcode_coefficient_reference_vectors(void)
+{
+    static const COLORFORMAT formats[] = { YUV_444, YUV_422, YUV_420 };
+    U64 hash = (U64)14695981039346656037ULL;
+    size_t format, orientationCode, operation, index;
+    for (format = 0; format < 3; format++)
+        for (orientationCode = 0; orientationCode < O_MAX; orientationCode++)
+            for (operation = 0; operation < 2; operation++) {
+                PixelI sourceValues[300], destinationValues[300];
+                JxrTranscodeCoefficientBuffer source, destination;
+                JxrTranscodeOrientationState orientation;
+                Bool success;
+                for (index = 0; index < 300; index++) {
+                    sourceValues[index] = (PixelI)((Int)index * 37 +
+                        (Int)format * 101 - 500);
+                    destinationValues[index] = -9;
+                }
+                JxrTranscodeCoefficientBufferInit(&source, sourceValues, 7, 300);
+                JxrTranscodeCoefficientBufferInit(&destination, destinationValues, 11, 300);
+                JxrTranscodeOrientationStateInit(&orientation, (ORIENTATION)orientationCode);
+                if (formats[format] == YUV_420)
+                    success = operation ?
+                        JxrTranscodeCoefficientTransformAc420(&source, &destination, &orientation) :
+                        JxrTranscodeCoefficientTransformDc420(&source, &destination, &orientation);
+                else if (formats[format] == YUV_422)
+                    success = operation ?
+                        JxrTranscodeCoefficientTransformAc422(&source, &destination, &orientation) :
+                        JxrTranscodeCoefficientTransformDc422(&source, &destination, &orientation);
+                else
+                    success = operation ?
+                        JxrTranscodeCoefficientTransformAc444(&source, &destination, &orientation) :
+                        JxrTranscodeCoefficientTransformDc444(&source, &destination, &orientation);
+                hash = transcode_reference_hash(hash, success);
+                for (index = 0; index < 300; index++) {
+                    hash = transcode_reference_hash(hash, sourceValues[index]);
+                    hash = transcode_reference_hash(hash, destinationValues[index]);
+                }
+            }
+    printf("Transcode coefficients native signature: %016llX\n",
+        (unsigned long long)hash);
+    return hash == (U64)0x44BE42DA9EB4250DULL;
+}
+
 static int test_transcode_macroblock_transform_vectors(void)
 {
     CWMIMBInfo sourceMacroblock;
@@ -1455,6 +1501,46 @@ static int test_transcode_roi_geometry_vectors(void)
     request.requestedLeft = 99;
     request.requestedWidth = 2;
     return !JxrTranscodeRoiGeometryCalculate(&request, &result);
+}
+
+static int test_transcode_roi_reference_vectors(void)
+{
+    static const size_t rectangles[][4] = {
+        { 0, 0, 5, 5 }, { 10, 10, 20, 20 },
+        { 90, 70, 10, 10 }, { 31, 15, 37, 29 }
+    };
+    U64 hash = (U64)14695981039346656037ULL;
+    size_t rectangle, overlap;
+    int ignore;
+    for (rectangle = 0; rectangle < 4; rectangle++)
+        for (overlap = OL_NONE; overlap <= OL_TWO; overlap++)
+            for (ignore = 0; ignore < 2; ignore++) {
+                JxrTranscodeRoiGeometryRequest request;
+                JxrTranscodeRoiGeometryResult result;
+                size_t fields[14], field;
+                memset(&request, 0, sizeof(request));
+                request.imageWidth = 100; request.imageHeight = 80;
+                request.extraLeft = 3; request.extraTop = 5;
+                request.extraRight = 1; request.extraBottom = 2;
+                request.requestedLeft = rectangles[rectangle][0];
+                request.requestedTop = rectangles[rectangle][1];
+                request.requestedWidth = rectangles[rectangle][2];
+                request.requestedHeight = rectangles[rectangle][3];
+                request.overlap = (OVERLAP)overlap;
+                request.ignoreOverlap = ignore;
+                if (!JxrTranscodeRoiGeometryCalculate(&request, &result)) return 0;
+                fields[0] = result.expandedLeft; fields[1] = result.expandedTop;
+                fields[2] = result.expandedWidth; fields[3] = result.expandedHeight;
+                fields[4] = result.macroblockLeft; fields[5] = result.macroblockTop;
+                fields[6] = result.macroblockRight; fields[7] = result.macroblockBottom;
+                fields[8] = result.extraLeft; fields[9] = result.extraTop;
+                fields[10] = result.extraRight; fields[11] = result.extraBottom;
+                fields[12] = result.imageWidth; fields[13] = result.imageHeight;
+                for (field = 0; field < 14; field++)
+                    hash = transcode_reference_hash(hash, (I32)fields[field]);
+            }
+    printf("Transcode ROI native signature: %016llX\n", (unsigned long long)hash);
+    return hash == (U64)0x44A3954B420AA640ULL;
 }
 
 static int test_transcode_roi_tile_layout_vectors(void)
@@ -6954,6 +7040,7 @@ int main(int argc, char** argv)
         { "transcode_coefficient_transform_vectors", test_transcode_coefficient_transform_vectors },
         { "transcode_coefficient_transform_422_vectors", test_transcode_coefficient_transform_422_vectors },
         { "transcode_coefficient_transform_420_vectors", test_transcode_coefficient_transform_420_vectors },
+        { "transcode_coefficient_reference_vectors", test_transcode_coefficient_reference_vectors },
         { "transcode_macroblock_transform_vectors", test_transcode_macroblock_transform_vectors },
         { "transcode_macroblock_decoder_contract_vectors", test_transcode_macroblock_decoder_contract_vectors },
         { "transcode_tile_context_resolver_vectors", test_transcode_tile_context_resolver_vectors },
@@ -6981,6 +7068,7 @@ int main(int argc, char** argv)
         { "transcode_session_runner_contract_vectors", test_transcode_session_runner_contract_vectors },
         { "transcode_tile_extraction_decision_vectors", test_transcode_tile_extraction_decision_vectors },
         { "transcode_roi_geometry_vectors", test_transcode_roi_geometry_vectors },
+        { "transcode_roi_reference_vectors", test_transcode_roi_reference_vectors },
         { "transcode_roi_tile_layout_vectors", test_transcode_roi_tile_layout_vectors },
         { "decoder_tile_quantizer_syntax_vectors", test_decoder_tile_quantizer_syntax_vectors },
         { "main_header_reader_vectors", test_main_header_reader_vectors },

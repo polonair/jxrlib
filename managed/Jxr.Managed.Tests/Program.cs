@@ -38,6 +38,10 @@ namespace Jxr.Managed.Tests
             new TestCase("image_pipeline_bitmap_fixtures", TestImagePipelineBitmapFixtures),
             new TestCase("session_memory_reference_vectors", TestSessionMemoryReferenceVectors),
             new TestCase("session_lifecycle_vectors", TestSessionLifecycleVectors),
+            new TestCase("transcode_coefficient_reference_vectors",
+                TestTranscodeCoefficientReferenceVectors),
+            new TestCase("transcode_roi_reference_vectors",
+                TestTranscodeRoiReferenceVectors),
             new TestCase("coefficient_buffer_vectors", TestCoefficientBufferVectors),
             new TestCase("coefficient_plane_state_vectors", TestCoefficientPlaneStateVectors),
             new TestCase("macroblock_state_vectors", TestMacroblockStateVectors),
@@ -620,6 +624,81 @@ namespace Jxr.Managed.Tests
                 decoder.Dispose(); encoder.Dispose();
             }
             return true;
+        }
+
+        private static bool TestTranscodeCoefficientReferenceVectors()
+        {
+            int[] formats = { 3, 2, 1 };
+            ulong hash = 14695981039346656037UL;
+            for (int format = 0; format < formats.Length; format++)
+                for (int orientationCode = 0; orientationCode < 8; orientationCode++)
+                    for (int operation = 0; operation < 2; operation++)
+                    {
+                        int[] source = new int[300];
+                        int[] destination = new int[300];
+                        for (int index = 0; index < 300; index++)
+                        {
+                            source[index] = index * 37 + format * 101 - 500;
+                            destination[index] = -9;
+                        }
+                        JxrTranscodeOrientation orientation =
+                            JxrTranscodeOrientation.FromCode(orientationCode);
+                        JxrError error = operation == 0 ?
+                            JxrTranscoder.TransformDc(formats[format], source, 7,
+                                destination, 11, orientation) :
+                            JxrTranscoder.TransformAc(formats[format], source, 7,
+                                destination, 11, orientation);
+                        int success = error == JxrError.None ? 1 : 0;
+                        if (error != JxrError.None &&
+                            (formats[format] != 2 || !orientation.Transpose ||
+                            error != JxrError.UnsupportedFeature)) return false;
+                        hash = QuantizationHashValue(hash, success);
+                        for (int index = 0; index < 300; index++)
+                        {
+                            hash = QuantizationHashValue(hash, source[index]);
+                            hash = QuantizationHashValue(hash, destination[index]);
+                        }
+                    }
+            if (JxrTranscoder.TransformDc(3, new int[15], 0,
+                new int[16], 0, JxrTranscodeOrientation.FromCode(0)) !=
+                JxrError.InvalidArgument) return false;
+            Console.WriteLine("Transcode coefficients signature: " + hash.ToString("X16"));
+            return hash == 0x44BE42DA9EB4250DUL;
+        }
+
+        private static bool TestTranscodeRoiReferenceVectors()
+        {
+            int[,] rectangles = {
+                { 0, 0, 5, 5 }, { 10, 10, 20, 20 },
+                { 90, 70, 10, 10 }, { 31, 15, 37, 29 }
+            };
+            ulong hash = 14695981039346656037UL;
+            for (int rectangle = 0; rectangle < 4; rectangle++)
+                for (int overlap = 0; overlap <= 2; overlap++)
+                    for (int ignore = 0; ignore < 2; ignore++)
+                    {
+                        JxrTranscodeRoi roi;
+                        JxrError error = JxrTranscoder.CalculateRoi(100, 80, 3, 5,
+                            1, 2, rectangles[rectangle, 0], rectangles[rectangle, 1],
+                            rectangles[rectangle, 2], rectangles[rectangle, 3],
+                            overlap, ignore != 0, out roi);
+                        if (error != JxrError.None || roi == null) return false;
+                        int[] fields = {
+                            roi.ExpandedLeft, roi.ExpandedTop, roi.ExpandedWidth,
+                            roi.ExpandedHeight, roi.MacroblockLeft, roi.MacroblockTop,
+                            roi.MacroblockRight, roi.MacroblockBottom, roi.ExtraLeft,
+                            roi.ExtraTop, roi.ExtraRight, roi.ExtraBottom,
+                            roi.ImageWidth, roi.ImageHeight
+                        };
+                        for (int field = 0; field < fields.Length; field++)
+                            hash = QuantizationHashValue(hash, fields[field]);
+                    }
+            JxrTranscodeRoi invalid;
+            if (JxrTranscoder.CalculateRoi(100, 80, 0, 0, 0, 0,
+                99, 0, 2, 1, 0, false, out invalid) !=
+                JxrError.InvalidArgument || invalid != null) return false;
+            Console.WriteLine("Transcode ROI signature: " + hash.ToString("X16"));
+            return hash == 0x44A3954B420AA640UL;
         }
 
         private static bool TestTransformMathReferenceVectors()
