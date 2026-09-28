@@ -40,6 +40,17 @@ both the source and native-decoded fixture. Unsupported JPEG XR profiles
 (including color, larger images, overlap and tiles) are explicitly rejected;
 this is not yet a general-purpose JPEG XR decoder.
 
+`JxrMinimalEncoder.EncodeGrayBmp` now connects the managed forward transform,
+quantization, coefficient prediction, adaptive entropy state and bit writer.
+It accepts a canonical 16x16 8-bit grayscale BMP (including the grayscale
+palette and 3779 px/m resolution), and writes the corresponding lossless
+Y-only JXR. The fixed profile's TIFF/JPEG XR header is serialized from a
+constant header template; the codestream length is updated for each image,
+while all coefficient and entropy data are computed from the input pixels.
+The fixture JXR is reproduced byte-for-byte, and eighteen additional sample
+patterns round-trip through the managed encoder and decoder. Arbitrary image
+sizes, color, tiles and other JPEG XR profiles are still unsupported.
+
 `JxrImagePipeline` currently covers the full-resolution 8-bit pixel boundary:
 Gray/RGB input centering, reversible RGB/CMYK color transforms, scaled and
 unscaled RGB/Gray output, clipping, and explicit row strides. Its native and

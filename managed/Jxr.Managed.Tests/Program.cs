@@ -18,6 +18,7 @@ namespace Jxr.Managed.Tests
         private static readonly TestCase[] Tests = {
             new TestCase("bit_math_vectors", TestBitMathVectors),
             new TestCase("bit_reader_vectors", TestBitReaderVectors),
+            new TestCase("bit_writer_vectors", TestBitWriterVectors),
             new TestCase("packet_header_syntax_reader_vectors", TestPacketHeaderSyntaxReaderVectors),
             new TestCase("adaptive_scan_vectors", TestAdaptiveScanVectors),
             new TestCase("adaptive_scan_state_vectors", TestAdaptiveScanStateVectors),
@@ -35,6 +36,8 @@ namespace Jxr.Managed.Tests
             new TestCase("headers_reference_fixtures", TestHeadersReferenceFixtures),
             new TestCase("headers_syntax_vectors", TestHeadersSyntaxVectors),
             new TestCase("minimal_decoder_end_to_end", TestMinimalDecoderEndToEnd),
+            new TestCase("minimal_entropy_encoder_fixture", TestMinimalEntropyEncoderFixture),
+            new TestCase("minimal_encoder_end_to_end", TestMinimalEncoderEndToEnd),
             new TestCase("image_pipeline_reference_vectors", TestImagePipelineReferenceVectors),
             new TestCase("image_pipeline_bitmap_fixtures", TestImagePipelineBitmapFixtures),
             new TestCase("session_memory_reference_vectors", TestSessionMemoryReferenceVectors),
@@ -324,6 +327,117 @@ namespace Jxr.Managed.Tests
                 "real-image-profile\\test-sign-334x330.jxr"));
             if (JxrMinimalDecoder.DecodeGrayBmp(color, out actual) !=
                 JxrError.UnsupportedFeature || actual != null) return false;
+            return true;
+        }
+
+        private static bool TestMinimalEntropyEncoderFixture()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "minimal-profile\\minimal-gray-16x16.jxr"))) directory = directory.Parent;
+            if (directory == null) return false;
+            int[] coefficients = ReadTraceValues(Path.Combine(directory.FullName,
+                "minimal-profile\\trace\\encoder-mb-000-000-predicted_coefficients.json"));
+            if (coefficients == null || coefficients.Length != 256) return false;
+            int[] dcOffsets = { 0,128,64,208,32,240,48,224,16,192,80,144,112,176,96,160 };
+            int[] dc = new int[16];
+            for (int index = 0; index < 16; index++) dc[index] = coefficients[dcOffsets[index]];
+            byte[] jxr = File.ReadAllBytes(Path.Combine(directory.FullName,
+                "minimal-profile\\minimal-gray-16x16.jxr"));
+            JxrBitWriter writer = new JxrBitWriter();
+            int dcEnd, lpEnd, hpEnd;
+            JxrError error = JxrMinimalEntropyEncoder.Encode(coefficients, dc,
+                1, writer, out dcEnd, out lpEnd, out hpEnd);
+            if (error != JxrError.None || dcEnd != 10 || lpEnd != 224 ||
+                hpEnd != 2182) return false;
+            byte[] data = writer.ToArray();
+            for (int bit = 0; bit < hpEnd; bit++)
+            {
+                int actual = (data[bit >> 3] >> (7 - (bit & 7))) & 1;
+                int expected = (jxr[165 + (bit >> 3)] >> (7 - (bit & 7))) & 1;
+                if (actual != expected)
+                { Console.WriteLine("Entropy first bit difference " + bit); return false; }
+            }
+            return true;
+        }
+
+        private static bool TestBitWriterVectors()
+        {
+            JxrBitWriter writer = new JxrBitWriter();
+            if (writer.Write(123, 0) != JxrError.None || writer.BitCount != 0 ||
+                writer.Write(10, 4) != JxrError.None ||
+                writer.Write(11, 4) != JxrError.None ||
+                writer.Write(0x1234, 16) != JxrError.None ||
+                writer.Write(0xdeadbeefU, 32) != JxrError.None ||
+                writer.Write(1, 33) != JxrError.InvalidArgument ||
+                writer.BitCount != 56) return false;
+            byte[] data = writer.ToArray();
+            byte[] expected = { 0xab, 0x12, 0x34, 0xde, 0xad, 0xbe, 0xef };
+            if (data.Length != expected.Length) return false;
+            for (int i = 0; i < data.Length; i++)
+                if (data[i] != expected[i]) return false;
+            JxrBitWriter partial = new JxrBitWriter();
+            if (partial.Write(5, 3) != JxrError.None || partial.BitCount != 3)
+                return false;
+            partial.AlignByte();
+            data = partial.ToArray();
+            return partial.BitCount == 8 && data.Length == 1 && data[0] == 0xa0;
+        }
+
+        private static bool TestMinimalEncoderEndToEnd()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "minimal-profile\\minimal-gray-16x16.bmp"))) directory = directory.Parent;
+            if (directory == null) return false;
+            byte[] bmp = File.ReadAllBytes(Path.Combine(directory.FullName,
+                "minimal-profile\\minimal-gray-16x16.bmp"));
+            byte[] native = File.ReadAllBytes(Path.Combine(directory.FullName,
+                "minimal-profile\\minimal-gray-16x16.jxr"));
+            byte[] encoded;
+            JxrError error = JxrMinimalEncoder.EncodeGrayBmp(bmp, out encoded);
+            if (error != JxrError.None || encoded == null)
+            { Console.WriteLine("Minimal encode error: " + error); return false; }
+            if (encoded.Length != native.Length)
+            { Console.WriteLine("JXR length: " + encoded.Length + " vs " + native.Length); return false; }
+            for (int index = 0; index < native.Length; index++)
+                if (encoded[index] != native[index])
+                { Console.WriteLine("JXR first difference: " + index + " " +
+                    encoded[index] + " vs " + native[index]); return false; }
+            byte[] restored;
+            if (JxrMinimalDecoder.DecodeGrayBmp(encoded, out restored) != JxrError.None ||
+                restored == null || restored.Length != bmp.Length) return false;
+            for (int index = 0; index < bmp.Length; index++)
+                if (restored[index] != bmp[index]) return false;
+            for (int variant = 0; variant < 18; variant++)
+            {
+                byte[] changed = (byte[])bmp.Clone();
+                for (int y = 0; y < 16; y++)
+                    for (int x = 0; x < 16; x++)
+                    {
+                        int value = variant == 0 ? 0 : variant == 1 ? 255 :
+                            variant == 2 ? 128 : variant == 3 ?
+                            ((x + y) & 1) * 255 : variant == 4 ?
+                            x * 17 : (x * (73 + variant * 11) +
+                            y * (131 + variant * 7) + x * y * (7 + variant)) & 255;
+                        changed[1078 + (15 - y) * 16 + x] = (byte)value;
+                    }
+                error = JxrMinimalEncoder.EncodeGrayBmp(changed, out encoded);
+                if (error != JxrError.None || encoded == null)
+                { Console.WriteLine("Variant encode " + variant + ": " + error); return false; }
+                error = JxrMinimalDecoder.DecodeGrayBmp(encoded, out restored);
+                if (error != JxrError.None || restored == null ||
+                    restored.Length != changed.Length)
+                { Console.WriteLine("Variant decode " + variant + ": " + error); return false; }
+                for (int index = 0; index < changed.Length; index++)
+                    if (restored[index] != changed[index])
+                    { Console.WriteLine("Variant " + variant + " BMP difference at " + index);
+                      return false; }
+            }
+            byte[] invalid = (byte[])bmp.Clone();
+            invalid[54] = 1;
+            if (JxrMinimalEncoder.EncodeGrayBmp(invalid, out encoded) !=
+                JxrError.UnsupportedFeature || encoded != null) return false;
             return true;
         }
 
