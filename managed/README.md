@@ -30,20 +30,30 @@ Build and run on this machine:
 The native `JxrConformanceTests` remains the reference oracle and must stay
 green alongside the managed runner.
 
+`JxrMinimalDecoder.DecodeGrayBmp` now connects the ported modules into a
+complete, fully managed decoder for the frozen 16x16 8-bit Y-only fixture.
+It accepts a JXR container or raw codestream, locates the single spatial
+packet from the header, decodes DC/LP/HP, applies prediction, dequantization
+and inverse transform, and emits an 8-bit grayscale BMP. The
+`minimal_decoder_end_to_end` test compares the entire BMP byte-for-byte with
+both the source and native-decoded fixture. Unsupported JPEG XR profiles
+(including color, larger images, overlap and tiles) are explicitly rejected;
+this is not yet a general-purpose JPEG XR decoder.
+
 `JxrImagePipeline` currently covers the full-resolution 8-bit pixel boundary:
 Gray/RGB input centering, reversible RGB/CMYK color transforms, scaled and
 unscaled RGB/Gray output, clipping, and explicit row strides. Its native and
-managed reference vectors share a frozen signature. It does not yet compose
-headers, entropy coding, transforms, tiles, alpha, or BMP container I/O into a
-complete image encoder/decoder.
+managed reference vectors share a frozen signature. General-purpose composition
+with tiles, alpha and arbitrary image sizes remains future work.
 
 `JxrDecoderSession` and `JxrEncoderSession` now own separate two-row
 coefficient buffers for each channel and optional alpha plane. Their memory
 plans reproduce the native decoder/encoder layout formulas, including the
 32-bit safety decisions, while actual managed allocations are `int[]` rather
 than a native struct-and-pointer slab. Sessions can be configured from parsed
-JXR headers and release their buffers through `Dispose`. Session execution,
-packet I/O, and final encoder flushing are not wired up yet.
+JXR headers and release their buffers through `Dispose`. The minimal decoder
+now executes one session and packet; general session execution and final
+encoder flushing are not wired up yet.
 
 `JxrTranscoder` ports the coefficient-domain core: all eight orientations,
 DC/AC sign and position changes for 4:4:4, 4:2:2 and 4:2:0, and ROI expansion

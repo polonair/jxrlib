@@ -34,6 +34,7 @@ namespace Jxr.Managed.Tests
             new TestCase("inverse_transform_math_reference_vectors", TestInverseTransformMathReferenceVectors),
             new TestCase("headers_reference_fixtures", TestHeadersReferenceFixtures),
             new TestCase("headers_syntax_vectors", TestHeadersSyntaxVectors),
+            new TestCase("minimal_decoder_end_to_end", TestMinimalDecoderEndToEnd),
             new TestCase("image_pipeline_reference_vectors", TestImagePipelineReferenceVectors),
             new TestCase("image_pipeline_bitmap_fixtures", TestImagePipelineBitmapFixtures),
             new TestCase("session_memory_reference_vectors", TestSessionMemoryReferenceVectors),
@@ -265,6 +266,65 @@ namespace Jxr.Managed.Tests
             }
             Console.WriteLine("Headers signature: " + hash.ToString("X16"));
             return hash == 0xE5CFDDD005A012B9UL;
+        }
+
+        private static bool TestMinimalDecoderEndToEnd()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "minimal-profile\\minimal-gray-16x16.jxr"))) directory = directory.Parent;
+            if (directory == null) return false;
+            byte[] jxr = File.ReadAllBytes(Path.Combine(directory.FullName,
+                "minimal-profile\\minimal-gray-16x16.jxr"));
+            byte[] expected = File.ReadAllBytes(Path.Combine(directory.FullName,
+                "minimal-profile\\minimal-gray-16x16-restored.bmp"));
+            byte[] original = File.ReadAllBytes(Path.Combine(directory.FullName,
+                "minimal-profile\\minimal-gray-16x16.bmp"));
+            byte[] actual;
+            JxrError error = JxrMinimalDecoder.DecodeGrayBmp(jxr, out actual);
+            if (error != JxrError.None || actual == null)
+            {
+                Console.WriteLine("Minimal decode error: " + error);
+                return false;
+            }
+            if (actual.Length != expected.Length || original.Length != expected.Length)
+            {
+                Console.WriteLine("BMP length: " + actual.Length + " vs " + expected.Length);
+                return false;
+            }
+            for (int index = 0; index < expected.Length; index++)
+                if (actual[index] != expected[index] ||
+                    actual[index] != original[index])
+                {
+                    Console.WriteLine("BMP first difference at " + index + ": " +
+                        actual[index] + " vs " + expected[index]);
+                    return false;
+                }
+            JxrHeaders headers;
+            if (JxrHeaders.Read(jxr, out headers) != JxrError.None) return false;
+            byte[] raw = new byte[jxr.Length - headers.CodestreamOffset];
+            Array.Copy(jxr, headers.CodestreamOffset, raw, 0, raw.Length);
+            byte[] rawBitmap;
+            if (JxrMinimalDecoder.DecodeGrayBmp(raw, out rawBitmap) != JxrError.None ||
+                rawBitmap.Length != expected.Length) return false;
+            for (int index = 0; index < expected.Length; index++)
+                if (rawBitmap[index] != expected[index]) return false;
+            int wordOffset = headers.CodestreamOffset + headers.ByteCount;
+            int skip = (jxr[wordOffset] << 8) | jxr[wordOffset + 1];
+            int packetOffset = wordOffset + 2 + skip;
+            byte[] invalid = (byte[])jxr.Clone();
+            invalid[packetOffset + 2] = 0;
+            if (JxrMinimalDecoder.DecodeGrayBmp(invalid, out actual) !=
+                JxrError.InvalidBitstream || actual != null) return false;
+            byte[] rotated = (byte[])jxr.Clone();
+            rotated[headers.CodestreamOffset + 9] |= 8;
+            if (JxrMinimalDecoder.DecodeGrayBmp(rotated, out actual) !=
+                JxrError.UnsupportedFeature || actual != null) return false;
+            byte[] color = File.ReadAllBytes(Path.Combine(directory.FullName,
+                "real-image-profile\\test-sign-334x330.jxr"));
+            if (JxrMinimalDecoder.DecodeGrayBmp(color, out actual) !=
+                JxrError.UnsupportedFeature || actual != null) return false;
+            return true;
         }
 
         private static byte[] PackHeaderFields(int[] values, int[] widths)
