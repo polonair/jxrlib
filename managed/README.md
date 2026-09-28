@@ -1,5 +1,9 @@
 # Managed JPEG XR port
 
+The [compatibility baseline](../analysis/managed-compatibility-matrix.md)
+separates complete file conversions from independently ported codec stages
+and maps both to the native reference fixtures.
+
 This directory contains the fully managed C# port, kept separate from the
 native reference implementation.  Every project targets .NET Framework 2.0
 and uses no P/Invoke, `unsafe` code or external test framework.
