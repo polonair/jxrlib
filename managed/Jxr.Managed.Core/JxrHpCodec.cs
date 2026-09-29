@@ -21,7 +21,7 @@ namespace Jxr.Managed.Core
             JxrCodecConfiguration format = state.Configuration;
             JxrError error;
             byte index;
-            if (format.ResetScan)
+            if (state.ResetScan)
             {
                 error = state.Entropy.HorizontalScan.ResetTotals(16);
                 if (error != JxrError.None) return error;
@@ -63,7 +63,7 @@ namespace Jxr.Managed.Core
                 }
             error = DecodeCoefficients(state);
             if (error != JxrError.None) return error;
-            if (format.ResetContext)
+            if (state.ResetContext)
             {
                 error = state.HighpassCbp.Adapt();
                 if (error != JxrError.None) return error;

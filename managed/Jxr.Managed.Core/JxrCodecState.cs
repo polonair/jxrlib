@@ -111,6 +111,8 @@ namespace Jxr.Managed.Core
         private readonly int[] currentLeftCbp;
         private bool atLeftBoundary = true;
         private bool atTopBoundary = true;
+        private bool resetScan;
+        private bool resetContext;
 
         public JxrCodecState(JxrCodecConfiguration configuration, JxrBitReader dcReader,
             JxrBitReader lpReader, JxrBitReader hpReader, JxrBitReader flexReader)
@@ -122,6 +124,8 @@ namespace Jxr.Managed.Core
                 hpReader == null || flexReader == null)
                 throw new ArgumentNullException("configuration/readers");
             this.configuration = configuration;
+            resetScan = configuration.ResetScan;
+            resetContext = configuration.ResetContext;
             this.dcReader = dcReader;
             this.lpReader = lpReader;
             this.hpReader = hpReader;
@@ -168,6 +172,18 @@ namespace Jxr.Managed.Core
         public JxrBitReader FlexReader { get { return flexReader; } }
         public bool AtLeftBoundary { get { return atLeftBoundary; } set { atLeftBoundary = value; } }
         public bool AtTopBoundary { get { return atTopBoundary; } set { atTopBoundary = value; } }
+        public bool ResetScan { get { return resetScan; } }
+        public bool ResetContext { get { return resetContext; } }
+
+        // Native getTilePos resets scan totals every 16 columns and adapts
+        // Huffman contexts at those columns and at the end of each row.
+        public void SetMacroblockPosition(int column, int row, int columns)
+        {
+            atLeftBoundary = column == 0;
+            atTopBoundary = row == 0;
+            resetScan = (column & 15) == 0;
+            resetContext = resetScan || column == columns - 1;
+        }
 
         public JxrError SetNeighborCbp(int channel, int top, int left)
         {

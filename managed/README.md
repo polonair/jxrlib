@@ -50,28 +50,28 @@ it is not incremental streaming. A failed destination write may leave a
 partial JXR in that stream and returns `IoFailure`.
 
 The current integrated options are lossless quality index 1, no overlap and
-spatial layout for exactly 16×16 `Gray8`. Invalid option values return
+spatial layout for positive-size `Gray8` images. Invalid option values return
 `InvalidArgument`; valid but unimplemented profiles return
-`UnsupportedFeature`. `JxrBmpAdapter` reads/writes the canonical 8bpp Gray
-fixture BMP and is optional: JPEG XR encoding and decoding no longer depend
+`UnsupportedFeature`. `JxrBmpAdapter` reads/writes canonical 8bpp Gray BMPs
+at arbitrary dimensions and is optional: JPEG XR encoding and decoding no longer depend
 on BMP. The original `JxrMinimalEncoder.EncodeGrayBmp` and
 `JxrMinimalDecoder.DecodeGrayBmp` methods remain compatibility wrappers.
 `public_pixel_api` and `public_stream_api` verify this boundary, including
 padded image stride and non-seekable streams.
 
-`JxrMinimalDecoder.DecodeGrayBmp` now connects the ported modules into a
-complete, fully managed decoder for the frozen 16x16 8-bit Y-only fixture.
+`JxrMinimalDecoder.DecodeGrayBmp` connects the ported modules into a
+fully managed decoder for the supported 8-bit Y-only profile.
 It accepts a JXR container or raw codestream, locates the single spatial
 packet from the header, decodes DC/LP/HP, applies prediction, dequantization
 and inverse transform, and emits an 8-bit grayscale BMP. The
 `minimal_decoder_end_to_end` test compares the entire BMP byte-for-byte with
 both the source and native-decoded fixture. Unsupported JPEG XR profiles
-(including color, larger images, overlap and tiles) are explicitly rejected;
+(including color, overlap and tiles) are explicitly rejected;
 this is not yet a general-purpose JPEG XR decoder.
 
 `JxrMinimalEncoder.EncodeGrayBmp` now connects the managed forward transform,
 quantization, coefficient prediction, adaptive entropy state and bit writer.
-It accepts a canonical 16x16 8-bit grayscale BMP (including the grayscale
+It accepts a canonical 8-bit grayscale BMP (including the grayscale
 palette and 3779 px/m resolution), and writes the corresponding lossless
 Y-only JXR. `JxrHeaderWriter`, `JxrPacketWriter` and
 `JxrContainerWriter` now serialize the JPEG XR header, null index-table
@@ -83,8 +83,15 @@ The single spatial packet has no separate length field: the null index-table
 record contains its own variable-length marker size, while the container's
 `ImageByteCount` gives the codestream length.
 The fixture JXR is reproduced byte-for-byte, and eighteen additional sample
-patterns round-trip through the managed encoder and decoder. Arbitrary image
-sizes, color, tiles and other JPEG XR profiles are still unsupported.
+patterns round-trip through the managed encoder and decoder. Image dimensions
+need not be multiples of 16: border samples are replicated for encoding and
+cropped after decoding. Consecutive macroblocks share entropy state, DC/LP
+prediction rows and HP CBP neighbours. Color, tiles and other JPEG XR profiles
+are still unsupported.
+`gray_sizes_native_fixtures` compares native and managed output for eight
+dimensions, including a 17-macroblock-wide image that crosses an adaptive
+scan reset boundary. The [fixture generator](fixtures/README.md) documents the
+reference BMP/JXR pairs.
 `header_writer_fixture` compares the generated header, codestream and full
 container to the C fixture. `header_writer_fields` verifies changed dimensions,
 quantizer indices, packet fields and lengths by parsing the generated output.

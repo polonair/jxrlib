@@ -40,6 +40,7 @@ namespace Jxr.Managed.Tests
             new TestCase("minimal_decoder_end_to_end", TestMinimalDecoderEndToEnd),
             new TestCase("minimal_entropy_encoder_fixture", TestMinimalEntropyEncoderFixture),
             new TestCase("minimal_encoder_end_to_end", TestMinimalEncoderEndToEnd),
+            new TestCase("gray_sizes_native_fixtures", TestGraySizesNativeFixtures),
             new TestCase("public_pixel_api", TestPublicPixelApi),
             new TestCase("public_stream_api", TestPublicStreamApi),
             new TestCase("image_pipeline_reference_vectors", TestImagePipelineReferenceVectors),
@@ -442,6 +443,55 @@ namespace Jxr.Managed.Tests
             invalid[54] = 1;
             if (JxrMinimalEncoder.EncodeGrayBmp(invalid, out encoded) !=
                 JxrError.UnsupportedFeature || encoded != null) return false;
+            return true;
+        }
+
+        private static bool TestGraySizesNativeFixtures()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "managed\\fixtures\\gray-1x1.jxr"))) directory = directory.Parent;
+            if (directory == null) return false;
+            int[,] sizes = { { 1, 1 }, { 15, 17 }, { 16, 16 },
+                { 32, 32 }, { 31, 19 }, { 17, 1 }, { 33, 18 },
+                { 257, 17 } };
+            for (int item = 0; item < sizes.GetLength(0); item++)
+            {
+                int width = sizes[item, 0], height = sizes[item, 1];
+                string prefix = Path.Combine(directory.FullName, "managed\\fixtures\\gray-" +
+                    width + "x" + height);
+                byte[] bmp = File.ReadAllBytes(prefix + ".bmp");
+                byte[] native = File.ReadAllBytes(prefix + ".jxr");
+                JxrImage image, decoded;
+                if (JxrBmpAdapter.ReadGray8(bmp, out image) != JxrError.None ||
+                    image.Width != width || image.Height != height)
+                { Console.WriteLine("BMP read: " + width + "x" + height); return false; }
+                byte[] rewrittenBmp;
+                if (JxrBmpAdapter.WriteGray8(image, out rewrittenBmp) != JxrError.None ||
+                    !EqualBytes(rewrittenBmp, bmp))
+                { Console.WriteLine("BMP write: " + width + "x" + height); return false; }
+                JxrError error = JxrCodec.Decode(native, new JxrDecoderOptions(), out decoded);
+                if (error != JxrError.None || !EqualBytes(decoded.Pixels, image.Pixels))
+                { Console.WriteLine("Native decode: " + width + "x" + height + " " + error);
+                  return false; }
+                byte[] encoded;
+                error = JxrCodec.Encode(image, new JxrEncoderOptions(), out encoded);
+                if (error != JxrError.None || !EqualBytes(encoded, native))
+                {
+                    int difference = 0;
+                    if (encoded != null)
+                        while (difference < encoded.Length && difference < native.Length &&
+                            encoded[difference] == native[difference]) difference++;
+                    Console.WriteLine("Native encode: " + width + "x" + height +
+                        " " + error + " first difference " + difference +
+                        " sizes " + (encoded == null ? 0 : encoded.Length) + "/" + native.Length);
+                    return false;
+                }
+                error = JxrCodec.Decode(encoded, new JxrDecoderOptions(), out decoded);
+                if (error != JxrError.None || !EqualBytes(decoded.Pixels, image.Pixels))
+                { Console.WriteLine("Round-trip: " + width + "x" + height + " " + error);
+                  return false; }
+            }
             return true;
         }
 

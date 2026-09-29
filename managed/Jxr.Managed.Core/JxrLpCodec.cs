@@ -29,7 +29,7 @@ namespace Jxr.Managed.Core
                 if (error != JxrError.None) return error;
                 macroblock.SetLowpassQuantizerIndex(index);
             }
-            if (format.ResetScan)
+            if (state.ResetScan)
             {
                 error = scan.ResetTotals(16);
                 if (error != JxrError.None) return error;
@@ -188,7 +188,7 @@ namespace Jxr.Managed.Core
             error = state.Entropy.LpModel.UpdateForMacroblock(color,
                 format.ChannelCount, means);
             if (error != JxrError.None) return error;
-            if (format.ResetContext)
+            if (state.ResetContext)
                 for (int k = 0; k < 13; k++)
                 {
                     error = state.Huffman.Adapt(k);

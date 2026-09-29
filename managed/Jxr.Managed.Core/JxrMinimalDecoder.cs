@@ -2,8 +2,9 @@ using System;
 
 namespace Jxr.Managed.Core
 {
-    // Managed pixel decode for the intentionally narrow 16x16 Y_ONLY,
-    // QP=1, spatial, one-tile, OL_NONE fixture. Unsupported JPEG XR variants
+    // Managed pixel decode for Y_ONLY, QP=1, spatial, one-tile, OL_NONE.
+    // Macroblocks share one entropy context and two prediction rows.
+    // Unsupported JPEG XR variants
     // are rejected instead of silently following the minimal path.
     public static class JxrMinimalDecoder
     {
@@ -22,16 +23,22 @@ namespace Jxr.Managed.Core
             return JxrBmpAdapter.WriteGray8(image, out bitmap);
         }
 
-        internal static JxrError DecodeGrayPixels(byte[] source, out byte[] pixels)
+        internal static JxrError DecodeGrayPixels(byte[] source, out byte[] pixels,
+            out int width, out int height)
         {
             pixels = null;
+            width = height = 0;
             JxrHeaders headers;
             JxrError error = JxrHeaders.Read(source, out headers);
             if (error != JxrError.None) return error;
             JxrMainHeader main = headers.Main;
             JxrImagePlaneHeader plane = headers.Plane;
             JxrImagePlaneQuantizerHeader q = headers.Quantizers;
-            if (main.Width != 16 || main.Height != 16 || main.Overlap != 0 ||
+            if (main.Width < 1 || main.Height < 1 ||
+                main.Width > Int32.MaxValue - 15 ||
+                main.Height > Int32.MaxValue - 15 ||
+                (long)main.Width * main.Height > Int32.MaxValue ||
+                main.Overlap != 0 ||
                 main.BitstreamFormat != 0 || main.Orientation != 0 ||
                 main.CodedBitDepth != 1 || main.SourceColorFormat != 0 ||
                 main.HasAlpha || main.BlackWhite ||
@@ -39,7 +46,8 @@ namespace Jxr.Managed.Core
                 main.HorizontalSliceCountMinusOne != 0 ||
                 main.HasIndexTable || main.TrimFlexbits ||
                 main.ExtraTop != 0 || main.ExtraLeft != 0 ||
-                main.ExtraBottom != 0 || main.ExtraRight != 0 ||
+                main.ExtraBottom != ((16 - ((int)main.Height & 15)) & 15) ||
+                main.ExtraRight != ((16 - ((int)main.Width & 15)) & 15) ||
                 plane.ColorFormat != 0 || plane.ChannelCount != 1 ||
                 plane.Subband != 0 || plane.ScaledArithmetic ||
                 main.SourceBitDepth != 1 || q.Mode != 0x600 ||
@@ -79,48 +87,70 @@ namespace Jxr.Managed.Core
                     new int[][] { new int[] { 1 } });
                 JxrCodecState state = new JxrCodecState(format,
                     reader, reader, reader, reader);
-                error = JxrDcCodec.Decode(state);
-                if (error != JxrError.None) return error;
-                error = JxrLpCodec.Decode(state);
-                if (error != JxrError.None) return error;
+                int imageWidth = (int)main.Width, imageHeight = (int)main.Height;
+                int columns = (imageWidth + 15) / 16;
+                int rowsCount = (imageHeight + 15) / 16;
                 JxrCoefficientPredictionRows rows =
-                    new JxrCoefficientPredictionRows(1, 1);
-                error = JxrCoefficientPrediction.DecodeDcLp(state.Macroblock,
-                    rows, JxrCodecColorFormat.YOnly, 0, true, true);
-                if (error != JxrError.None) return error;
-                error = JxrCoefficientPrediction.StoreCurrent(state.Macroblock,
-                    rows, JxrCodecColorFormat.YOnly, 0);
-                if (error != JxrError.None) return error;
+                    new JxrCoefficientPredictionRows(columns, 1);
+                int[] topCbp = new int[columns];
+                byte[] gray = new byte[imageWidth * imageHeight];
                 JxrQuantizer lossless = JxrQuantization.Remap(0, false, false);
                 JxrQuantizerSet quantizers = new JxrQuantizerSet(
                     new JxrQuantizer[] { lossless.WithDcOffset() },
                     new JxrQuantizer[][] { new JxrQuantizer[] { lossless } },
                     new JxrQuantizer[][] { new JxrQuantizer[] { lossless } });
-                error = JxrQuantization.DequantizeMacroblock(state.CoefficientPlanes,
-                    state.Macroblock, quantizers, JxrCodecColorFormat.YOnly,
-                    1, false);
-                if (error != JxrError.None) return error;
-                error = JxrHpCodec.Decode(state);
-                if (error != JxrError.None) return error;
-                error = JxrCoefficientPrediction.DecodeAc(state.Macroblock,
-                    state.CoefficientPlanes, JxrCodecColorFormat.YOnly);
-                if (error != JxrError.None) return error;
-                int[] coefficients;
-                error = state.CoefficientPlanes.GetPlane(0, out coefficients);
-                if (error != JxrError.None) return error;
-                int[] samples = session.GetPrimaryRow(0, 0);
-                Array.Copy(coefficients, samples, 256);
-                InverseMacroblock(samples);
-                byte[] gray = new byte[256];
-                for (int y = 0; y < 16; y++)
-                    for (int x = 0; x < 16; x++)
+                for (int mbY = 0; mbY < rowsCount; mbY++)
+                {
+                    if (mbY != 0) rows.AdvanceRow();
+                    int leftCbp = 0;
+                    for (int mbX = 0; mbX < columns; mbX++)
                     {
-                        int block = (x >> 2) * 64 + (y >> 2) * 16;
-                        int local = LocalSampleOrder[(y & 3) * 4 + (x & 3)];
-                        gray[y * 16 + x] =
-                            JxrImagePipeline.ClipByte(unchecked(samples[block + local] + 128));
+                        state.SetMacroblockPosition(mbX, mbY, columns);
+                        state.SetNeighborCbp(0, topCbp[mbX], leftCbp);
+                        int[] coefficients;
+                        error = state.CoefficientPlanes.GetPlane(0, out coefficients);
+                        if (error != JxrError.None) return error;
+                        Array.Clear(coefficients, 0, coefficients.Length);
+                        error = JxrDcCodec.Decode(state);
+                        if (error != JxrError.None) return error;
+                        error = JxrLpCodec.Decode(state);
+                        if (error != JxrError.None) return error;
+                        error = JxrCoefficientPrediction.DecodeDcLp(state.Macroblock,
+                            rows, JxrCodecColorFormat.YOnly, mbX, mbX == 0, mbY == 0);
+                        if (error != JxrError.None) return error;
+                        error = JxrCoefficientPrediction.StoreCurrent(state.Macroblock,
+                            rows, JxrCodecColorFormat.YOnly, mbX);
+                        if (error != JxrError.None) return error;
+                        error = JxrQuantization.DequantizeMacroblock(state.CoefficientPlanes,
+                            state.Macroblock, quantizers, JxrCodecColorFormat.YOnly,
+                            1, false);
+                        if (error != JxrError.None) return error;
+                        error = JxrHpCodec.Decode(state);
+                        if (error != JxrError.None) return error;
+                        int cbp;
+                        error = state.MacroblockCbp.GetCbp(0, out cbp);
+                        if (error != JxrError.None) return error;
+                        leftCbp = topCbp[mbX] = cbp;
+                        error = JxrCoefficientPrediction.DecodeAc(state.Macroblock,
+                            state.CoefficientPlanes, JxrCodecColorFormat.YOnly);
+                        if (error != JxrError.None) return error;
+                        int[] samples = new int[256];
+                        Array.Copy(coefficients, samples, 256);
+                        InverseMacroblock(samples);
+                        for (int y = 0; y < 16; y++)
+                            for (int x = 0; x < 16; x++)
+                            {
+                                int pixelX = mbX * 16 + x, pixelY = mbY * 16 + y;
+                                if (pixelX >= imageWidth || pixelY >= imageHeight) continue;
+                                int block = (x >> 2) * 64 + (y >> 2) * 16;
+                                int local = LocalSampleOrder[(y & 3) * 4 + (x & 3)];
+                                gray[pixelY * imageWidth + pixelX] =
+                                    JxrImagePipeline.ClipByte(unchecked(samples[block + local] + 128));
+                            }
                     }
+                }
                 pixels = gray;
+                width = imageWidth; height = imageHeight;
                 return JxrError.None;
             }
         }

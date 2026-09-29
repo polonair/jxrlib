@@ -16,12 +16,12 @@ namespace Jxr.Managed.Core
                 (options.Layout != JxrBitstreamLayout.Spatial &&
                  options.Layout != JxrBitstreamLayout.Frequency))
                 return JxrError.InvalidArgument;
-            if (image.Format != JxrPixelFormat.Gray8 || image.Width != 16 ||
-                image.Height != 16 || options.QualityIndex != 1 ||
+            if (image.Format != JxrPixelFormat.Gray8 ||
+                options.QualityIndex != 1 ||
                 options.Overlap != 0 || options.Layout != JxrBitstreamLayout.Spatial)
                 return JxrError.UnsupportedFeature;
             return JxrMinimalEncoder.EncodeGrayPixels(image.Pixels,
-                image.Stride, out jxr);
+                image.Stride, image.Width, image.Height, out jxr);
         }
 
         public static JxrError Decode(byte[] jxr, JxrDecoderOptions options,
@@ -35,9 +35,11 @@ namespace Jxr.Managed.Core
             if (options.OutputFormat != JxrPixelFormat.Gray8)
                 return JxrError.UnsupportedFeature;
             byte[] pixels;
-            JxrError error = JxrMinimalDecoder.DecodeGrayPixels(jxr, out pixels);
+            int width, height;
+            JxrError error = JxrMinimalDecoder.DecodeGrayPixels(jxr, out pixels,
+                out width, out height);
             if (error != JxrError.None) return error;
-            image = new JxrImage(16, 16, JxrPixelFormat.Gray8, pixels, 16);
+            image = new JxrImage(width, height, JxrPixelFormat.Gray8, pixels, width);
             return JxrError.None;
         }
 

@@ -11,8 +11,12 @@ namespace Jxr.Managed.Core
             if (bitmap == null) return JxrError.InvalidArgument;
             if (bitmap.Length < 54 || bitmap[0] != 'B' || bitmap[1] != 'M')
                 return JxrError.InvalidBitstream;
-            if (bitmap.Length != 1334 || Read32(bitmap, 14) != 40 ||
-                Read32(bitmap, 18) != 16 || Read32(bitmap, 22) != 16 ||
+            int width = Read32(bitmap, 18), height = Read32(bitmap, 22);
+            if (width < 1 || height < 1 ||
+                (long)width * height > Int32.MaxValue ||
+                (long)((width + 3L) & ~3L) * height > Int32.MaxValue - 1078 ||
+                bitmap.Length != 1078 + ((width + 3) & ~3) * height ||
+                Read32(bitmap, 14) != 40 ||
                 Read16(bitmap, 26) != 1 || Read16(bitmap, 28) != 8 ||
                 Read32(bitmap, 30) != 0 || Read32(bitmap, 38) != 3779 ||
                 Read32(bitmap, 42) != 3779 || Read32(bitmap, 10) != 1078)
@@ -24,11 +28,12 @@ namespace Jxr.Managed.Core
                     bitmap[palette + 2] != index || bitmap[palette + 3] != 0)
                     return JxrError.UnsupportedFeature;
             }
-            byte[] pixels = new byte[256];
-            for (int row = 0; row < 16; row++)
-                Array.Copy(bitmap, 1078 + (15 - row) * 16,
-                    pixels, row * 16, 16);
-            image = new JxrImage(16, 16, JxrPixelFormat.Gray8, pixels, 16);
+            byte[] pixels = new byte[width * height];
+            int bmpStride = (width + 3) & ~3;
+            for (int row = 0; row < height; row++)
+                Array.Copy(bitmap, 1078 + (height - 1 - row) * bmpStride,
+                    pixels, row * width, width);
+            image = new JxrImage(width, height, JxrPixelFormat.Gray8, pixels, width);
             return JxrError.None;
         }
 
@@ -36,18 +41,20 @@ namespace Jxr.Managed.Core
         {
             bitmap = null;
             if (image == null) return JxrError.InvalidArgument;
-            if (image.Format != JxrPixelFormat.Gray8 || image.Width != 16 ||
-                image.Height != 16) return JxrError.UnsupportedFeature;
-            byte[] bmp = new byte[1334];
+            if (image.Format != JxrPixelFormat.Gray8 ||
+                (long)((image.Width + 3L) & ~3L) * image.Height >
+                Int32.MaxValue - 1078) return JxrError.UnsupportedFeature;
+            int bmpStride = (image.Width + 3) & ~3;
+            byte[] bmp = new byte[1078 + bmpStride * image.Height];
             bmp[0] = (byte)'B'; bmp[1] = (byte)'M';
             Write32(bmp, 2, bmp.Length);
             Write32(bmp, 10, 1078);
             Write32(bmp, 14, 40);
-            Write32(bmp, 18, 16);
-            Write32(bmp, 22, 16);
+            Write32(bmp, 18, image.Width);
+            Write32(bmp, 22, image.Height);
             Write16(bmp, 26, 1);
             Write16(bmp, 28, 8);
-            Write32(bmp, 34, 256);
+            Write32(bmp, 34, bmpStride * image.Height);
             Write32(bmp, 38, 3779);
             Write32(bmp, 42, 3779);
             for (int index = 0; index < 256; index++)
@@ -55,9 +62,9 @@ namespace Jxr.Managed.Core
                 int entry = 54 + index * 4;
                 bmp[entry] = bmp[entry + 1] = bmp[entry + 2] = (byte)index;
             }
-            for (int row = 0; row < 16; row++)
+            for (int row = 0; row < image.Height; row++)
                 Array.Copy(image.Pixels, row * image.Stride,
-                    bmp, 1078 + (15 - row) * 16, 16);
+                    bmp, 1078 + (image.Height - 1 - row) * bmpStride, image.Width);
             bitmap = bmp;
             return JxrError.None;
         }

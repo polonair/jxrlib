@@ -123,7 +123,7 @@ namespace Jxr.Managed.Core
             error = state.Entropy.DcModel.UpdateForMacroblock(format.ColorFormat,
                 format.ChannelCount, laplacianMean);
             if (error != JxrError.None) return error;
-            if (format.AdaptDcHuffman && format.ResetContext)
+            if (format.AdaptDcHuffman && state.ResetContext)
             {
                 for (channel = 2; channel < 5; channel++)
                 {

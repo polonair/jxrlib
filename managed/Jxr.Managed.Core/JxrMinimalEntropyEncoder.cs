@@ -2,7 +2,7 @@ using System;
 
 namespace Jxr.Managed.Core
 {
-    // One-channel, one-macroblock counterpart of segenc.c. This accepts the
+    // One-channel, per-macroblock counterpart of segenc.c. This accepts the
     // already quantized and predicted coefficient layout used by JxrCodecState.
     public static class JxrMinimalEntropyEncoder
     {
@@ -47,6 +47,18 @@ namespace Jxr.Managed.Core
                 new int[][] { new int[] { 1 } });
             JxrBitReader unused = new JxrBitReader(new byte[0]);
             JxrCodecState state = new JxrCodecState(format, unused, unused, unused, unused);
+            return EncodeMacroblock(state, coefficients, dc, orientation,
+                writer, out dcEnd, out lpEnd, out hpEnd);
+        }
+
+        internal static JxrError EncodeMacroblock(JxrCodecState state,
+            int[] coefficients, int[] dc, int orientation, JxrBitWriter writer,
+            out int dcEnd, out int lpEnd, out int hpEnd)
+        {
+            dcEnd = lpEnd = hpEnd = 0;
+            if (state == null || coefficients == null || coefficients.Length != 256 ||
+                dc == null || dc.Length != 16 || writer == null ||
+                orientation < 0 || orientation > 2) return JxrError.InvalidArgument;
             JxrError error = EncodeDc(state, dc, writer);
             if (error != JxrError.None) return error;
             dcEnd = writer.BitCount;
@@ -244,7 +256,7 @@ namespace Jxr.Managed.Core
         private static JxrError EncodeLp(JxrCodecState state, int[] dc, JxrBitWriter writer)
         {
             JxrAdaptiveScan scan = state.Entropy.LowpassScan;
-            scan.ResetTotals(16);
+            if (state.ResetScan) scan.ResetTotals(16);
             int ignored, bits;
             state.Entropy.LpModel.Get(0, out ignored, out bits);
             int[] residuals = new int[16], pairs = new int[32];
@@ -261,7 +273,7 @@ namespace Jxr.Managed.Core
             JxrError update = state.Entropy.LpModel.UpdateForMacroblock(
                 JxrCodecColorFormat.YOnly, 1, new int[] { count, 0 });
             if (update != JxrError.None) return update;
-            for (int table = 0; table < 13; table++)
+            for (int table = 0; state.ResetContext && table < 13; table++)
             {
                 update = state.Huffman.Adapt(table);
                 if (update != JxrError.None) return update;
@@ -300,7 +312,11 @@ namespace Jxr.Managed.Core
         {
             int zero, one, mode;
             state.HighpassCbp.PredictionModel.Get(0, out zero, out one, out mode);
-            int prediction = 1;
+            int top, left;
+            state.GetNeighborCbp(0, out top, out left);
+            int prediction = state.AtLeftBoundary ?
+                (state.AtTopBoundary ? 1 : (top >> 10) & 1) :
+                (left >> 5) & 1;
             prediction |= (cbp & 0x3300) << 2;
             prediction |= (cbp & 0xcc) << 6;
             prediction |= (cbp & 0x33) << 2;
@@ -314,6 +330,7 @@ namespace Jxr.Managed.Core
             one = Math.Max(-16, Math.Min(15, one + 16 - ones - 3));
             mode = zero < 0 ? (zero < one ? 1 : 2) : one < 0 ? 2 : 0;
             state.HighpassCbp.PredictionModel.Set(0, zero, one, mode);
+            state.SetCurrentCbp(0, cbp);
             return differential;
         }
 
@@ -322,8 +339,11 @@ namespace Jxr.Managed.Core
         {
             JxrAdaptiveScan scan = orientation == 1 ?
                 state.Entropy.VerticalScan : state.Entropy.HorizontalScan;
-            state.Entropy.HorizontalScan.ResetTotals(16);
-            state.Entropy.VerticalScan.ResetTotals(16);
+            if (state.ResetScan)
+            {
+                state.Entropy.HorizontalScan.ResetTotals(16);
+                state.Entropy.VerticalScan.ResetTotals(16);
+            }
             int ignored, bits;
             state.Entropy.AcModel.Get(0, out ignored, out bits);
             int cbp = 0, threshold = (1 << bits) - 1;
@@ -364,12 +384,15 @@ namespace Jxr.Managed.Core
             error = state.Entropy.AcModel.UpdateForMacroblock(
                 JxrCodecColorFormat.YOnly, 1, new int[] { nonzero, 0 });
             if (error != JxrError.None) return error;
-            error = state.HighpassCbp.Adapt();
-            if (error != JxrError.None) return error;
-            for (int table = 13; table < 21; table++)
+            if (state.ResetContext)
             {
-                error = state.Huffman.Adapt(table);
+                error = state.HighpassCbp.Adapt();
                 if (error != JxrError.None) return error;
+                for (int table = 13; table < 21; table++)
+                {
+                    error = state.Huffman.Adapt(table);
+                    if (error != JxrError.None) return error;
+                }
             }
             return JxrError.None;
         }
