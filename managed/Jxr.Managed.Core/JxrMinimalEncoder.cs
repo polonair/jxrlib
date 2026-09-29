@@ -9,12 +9,6 @@ namespace Jxr.Managed.Core
         private static readonly int[] LocalSampleOrder =
             { 0,1,5,4,2,3,7,6,10,11,15,14,8,9,13,12 };
 
-        // Fixed TIFF/JPEG XR syntax through the single spatial packet header.
-        // Only the four-byte codestream length at offset 126 varies by image.
-        // This is container/header syntax, not fixture entropy or pixel data.
-        private static readonly byte[] Header = Convert.FromBase64String(
-            "SUm8ASAAAAAkw91vA07+S7GFPXd2jckIAAAAAAAAAAAIAAG8AQAQAAAACAAAAAK8BAABAAAAAAAAAIC8BAABAAAAEAAAAIG8BAABAAAAEAAAAIK8CwABAAAAJPm/QoO8CwABAAAAJPm/QsC8BAABAAAAhgAAAMG8BAABAAAAMAEAAAAAAABXTVBIT1RPABEAwAEADwAPAIAgCAAABG//AAEAAAEA");
-
         public static JxrError EncodeGrayBmp(byte[] bitmap, out byte[] jxr)
         {
             jxr = null;
@@ -79,14 +73,12 @@ namespace Jxr.Managed.Core
                 macroblock.Orientation, writer, out dcEnd, out lpEnd, out hpEnd);
             if (error != JxrError.None) return error;
             writer.AlignByte();
-            byte[] packet = writer.ToArray();
-            byte[] result = new byte[Header.Length + packet.Length];
-            Array.Copy(Header, result, Header.Length);
-            Array.Copy(packet, 0, result, Header.Length, packet.Length);
-            int codestreamLength = result.Length - 134;
-            Write32(result, 126, codestreamLength);
-            jxr = result;
-            return JxrError.None;
+            byte[] codestream;
+            error = JxrCodestreamWriter.WriteGraySpatial(writer.ToArray(),
+                16, 16, 0, out codestream);
+            if (error != JxrError.None) return error;
+            return JxrContainerWriter.WriteGray8(codestream, 16, 16,
+                95.9866f, 95.9866f, out jxr);
         }
 
         private static void ForwardMacroblock(int[] values)
@@ -116,12 +108,5 @@ namespace Jxr.Managed.Core
                 ref values[32], ref values[48], ref values[96], ref values[112]);
         }
 
-        private static void Write32(byte[] data, int offset, int value)
-        {
-            data[offset] = (byte)value;
-            data[offset + 1] = (byte)(value >> 8);
-            data[offset + 2] = (byte)(value >> 16);
-            data[offset + 3] = (byte)(value >> 24);
-        }
     }
 }

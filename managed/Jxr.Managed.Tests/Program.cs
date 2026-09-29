@@ -35,6 +35,8 @@ namespace Jxr.Managed.Tests
             new TestCase("inverse_transform_math_reference_vectors", TestInverseTransformMathReferenceVectors),
             new TestCase("headers_reference_fixtures", TestHeadersReferenceFixtures),
             new TestCase("headers_syntax_vectors", TestHeadersSyntaxVectors),
+            new TestCase("header_writer_fixture", TestHeaderWriterFixture),
+            new TestCase("header_writer_fields", TestHeaderWriterFields),
             new TestCase("minimal_decoder_end_to_end", TestMinimalDecoderEndToEnd),
             new TestCase("minimal_entropy_encoder_fixture", TestMinimalEntropyEncoderFixture),
             new TestCase("minimal_encoder_end_to_end", TestMinimalEncoderEndToEnd),
@@ -449,6 +451,101 @@ namespace Jxr.Managed.Tests
                 return false;
             for (int index = 0; index < left.Length; index++)
                 if (left[index] != right[index]) return false;
+            return true;
+        }
+
+        private static bool TestHeaderWriterFixture()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "minimal-profile\\minimal-gray-16x16.jxr"))) directory = directory.Parent;
+            if (directory == null) return false;
+            byte[] fixture = File.ReadAllBytes(Path.Combine(directory.FullName,
+                "minimal-profile\\minimal-gray-16x16.jxr"));
+            JxrBitWriter header = new JxrBitWriter();
+            if (JxrHeaderWriter.WriteGraySpatial(header, 16, 16, 0) !=
+                JxrError.None || header.BitCount != 21 * 8) return false;
+            byte[] headerBytes = header.ToArray();
+            for (int index = 0; index < headerBytes.Length; index++)
+                if (headerBytes[index] != fixture[134 + index]) return false;
+            byte[] entropy = new byte[fixture.Length - 165];
+            Array.Copy(fixture, 165, entropy, 0, entropy.Length);
+            byte[] codestream;
+            if (JxrCodestreamWriter.WriteGraySpatial(entropy, 16, 16, 0,
+                out codestream) != JxrError.None ||
+                codestream.Length != fixture.Length - 134) return false;
+            for (int index = 0; index < codestream.Length; index++)
+                if (codestream[index] != fixture[134 + index]) return false;
+            byte[] container;
+            if (JxrContainerWriter.WriteGray8(codestream, 16, 16,
+                95.9866f, 95.9866f, out container) != JxrError.None ||
+                !EqualBytes(container, fixture)) return false;
+            return true;
+        }
+
+        private static bool TestHeaderWriterFields()
+        {
+            byte[] entropy = { 0x12, 0x34, 0x56 };
+            byte[] codestream;
+            if (JxrCodestreamWriter.WriteGraySpatial(entropy, 32, 48, 17,
+                out codestream) != JxrError.None || codestream.Length != 34 ||
+                codestream[31] != 0x12 || codestream[33] != 0x56)
+            { Console.WriteLine("Codestream layout"); return false; }
+            JxrHeaders headers;
+            if (JxrHeaders.Read(codestream, out headers) != JxrError.None ||
+                headers.CodestreamOffset != 0 || headers.ByteCount != 21 ||
+                headers.Main.Width != 32 || headers.Main.Height != 48 ||
+                headers.Quantizers.GetDcIndex(0) != 17 ||
+                headers.Quantizers.GetLowpassIndex(0) != 17 ||
+                headers.Quantizers.GetHighpassIndex(0) != 17)
+            { Console.WriteLine("Header parse"); return false; }
+            JxrBitReader reader = new JxrBitReader(codestream);
+            int prefixBits = 27 * 8;
+            while (prefixBits > 0)
+            {
+                int count = Math.Min(prefixBits, 32);
+                if (reader.ConsumeBits(count) != JxrError.None) return false;
+                prefixBits -= count;
+            }
+            JxrPacketHeader packet;
+            if (JxrPacketReader.ReadHeader(reader, out packet) != JxrError.None ||
+                !packet.IsValid || packet.TileId != 0 || packet.PacketType != 0)
+            { Console.WriteLine("Packet parse"); return false; }
+            byte[] container;
+            if (JxrContainerWriter.WriteGray8(codestream, 32, 48,
+                72, 144, out container) != JxrError.None ||
+                container.Length != 134 + codestream.Length ||
+                BitConverter.ToInt32(container, 66) != 32 ||
+                BitConverter.ToInt32(container, 78) != 48 ||
+                BitConverter.ToInt32(container, 114) != 134 ||
+                BitConverter.ToInt32(container, 126) != codestream.Length)
+            { Console.WriteLine("Container layout"); return false; }
+            if (JxrHeaders.Read(container, out headers) != JxrError.None ||
+                headers.CodestreamOffset != 134 || headers.Main.Width != 32 ||
+                headers.Main.Height != 48)
+            { Console.WriteLine("Container parse"); return false; }
+            if (JxrCodestreamWriter.WriteGraySpatial(entropy, 4096, 16, 0,
+                out codestream) != JxrError.None ||
+                JxrHeaders.Read(codestream, out headers) != JxrError.None ||
+                headers.ByteCount != 25 || headers.Main.Width != 4096 ||
+                headers.Main.Height != 16)
+            { Console.WriteLine("Extended dimensions"); return false; }
+            JxrBitWriter writer = new JxrBitWriter();
+            if (JxrPacketWriter.WriteHeader(writer, 5, 3) != JxrError.None ||
+                !EqualBytes(writer.ToArray(), new byte[] { 0, 0, 1, 43 }) ||
+                JxrPacketWriter.WriteHeader(writer, 32, 0) !=
+                JxrError.InvalidArgument ||
+                JxrHeaderWriter.WriteGraySpatial(new JxrBitWriter(),
+                    0, 16, 0) != JxrError.InvalidArgument)
+            { Console.WriteLine("Writer validation"); return false; }
+            writer = new JxrBitWriter();
+            if (JxrVariableLengthWordWriter.Write(writer, 0xfaff) !=
+                JxrError.None || !EqualBytes(writer.ToArray(),
+                new byte[] { 0xfa, 0xff })) return false;
+            writer = new JxrBitWriter();
+            if (JxrVariableLengthWordWriter.Write(writer, 0xfb00) !=
+                JxrError.None || !EqualBytes(writer.ToArray(),
+                new byte[] { 0xfb, 0, 0, 0xfb, 0 })) return false;
             return true;
         }
 
