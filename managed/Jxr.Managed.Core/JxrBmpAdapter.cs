@@ -5,6 +5,40 @@ namespace Jxr.Managed.Core
     // Optional file-format boundary. The JPEG XR codec itself does not use BMP.
     public static class JxrBmpAdapter
     {
+        // Reads an uncompressed 24bpp BGR BMP and exposes top-down RGB pixels,
+        // matching JxrImage's documented channel order.
+        public static JxrError ReadRgb24(byte[] bitmap, out JxrImage image)
+        {
+            image = null;
+            if (bitmap == null) return JxrError.InvalidArgument;
+            if (bitmap.Length < 54 || bitmap[0] != 'B' || bitmap[1] != 'M')
+                return JxrError.InvalidBitstream;
+            int width = Read32(bitmap, 18), height = Read32(bitmap, 22);
+            long strideLong = width > 0 ? ((long)width * 3 + 3) & ~3L : 0;
+            int offset = Read32(bitmap, 10);
+            if (width < 1 || height < 1 || (long)width * height > Int32.MaxValue / 3 ||
+                strideLong <= 0 || strideLong > Int32.MaxValue ||
+                (long)offset + strideLong * height != bitmap.Length ||
+                Read32(bitmap, 14) != 40 || Read16(bitmap, 26) != 1 ||
+                Read16(bitmap, 28) != 24 || Read32(bitmap, 30) != 0 ||
+                offset != 54)
+                return JxrError.UnsupportedFeature;
+            int stride = (int)strideLong;
+            byte[] pixels = new byte[width * height * 3];
+            for (int row = 0; row < height; row++)
+                for (int column = 0; column < width; column++)
+                {
+                    int source = offset + (height - 1 - row) * stride + column * 3;
+                    int destination = (row * width + column) * 3;
+                    pixels[destination] = bitmap[source + 2];
+                    pixels[destination + 1] = bitmap[source + 1];
+                    pixels[destination + 2] = bitmap[source];
+                }
+            image = new JxrImage(width, height, JxrPixelFormat.Rgb24,
+                pixels, width * 3);
+            return JxrError.None;
+        }
+
         public static JxrError ReadGray8(byte[] bitmap, out JxrImage image)
         {
             image = null;

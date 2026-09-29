@@ -26,6 +26,7 @@ namespace Jxr.Managed.Tests
             new TestCase("explicit_entropy_context", TestExplicitEntropyContext),
             new TestCase("minimal_entropy_codec_fixture", TestMinimalEntropyCodecFixture),
             new TestCase("color_entropy_codec_fixture", TestColorEntropyCodecFixture),
+            new TestCase("real_rgb444_decode", TestRealRgb444Decode),
             new TestCase("quantization_reference_vectors", TestQuantizationReferenceVectors),
             new TestCase("quantization_macroblock_vectors", TestQuantizationMacroblockVectors),
             new TestCase("quantization_channel_modes", TestQuantizationChannelModes),
@@ -1875,6 +1876,39 @@ namespace Jxr.Managed.Tests
                 state.Macroblock.GetDcCoefficient(0, 0, out luminanceDc) != JxrError.None)
                 return false;
             return cbp == 0 && difference == 1 && luminanceDc == 176;
+        }
+
+        private static bool TestRealRgb444Decode()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "real-image-profile\\test-sign-334x330.jxr"))) directory = directory.Parent;
+            if (directory == null) return false;
+            string fixture = Path.Combine(directory.FullName, "real-image-profile");
+            JxrImage source;
+            if (JxrBmpAdapter.ReadRgb24(File.ReadAllBytes(Path.Combine(fixture,
+                "test-sign-334x330.bmp")), out source) != JxrError.None ||
+                source.Width != 334 || source.Height != 330) return false;
+            JxrImage decoded;
+            JxrDecoderOptions options = new JxrDecoderOptions();
+            options.OutputFormat = JxrPixelFormat.Rgb24;
+            JxrError error = JxrCodec.Decode(File.ReadAllBytes(Path.Combine(fixture,
+                "test-sign-334x330.jxr")), options, out decoded);
+            if (error != JxrError.None || decoded == null ||
+                decoded.Width != source.Width || decoded.Height != source.Height ||
+                decoded.Format != JxrPixelFormat.Rgb24 ||
+                !EqualBytes(decoded.Pixels, source.Pixels))
+            {
+                Console.WriteLine("RGB444 decode: " + error);
+                if (decoded != null)
+                    for (int index = 0; index < Math.Min(decoded.Pixels.Length,
+                        source.Pixels.Length); index++)
+                        if (decoded.Pixels[index] != source.Pixels[index])
+                        { Console.WriteLine("First RGB mismatch at byte " + index +
+                            ": " + decoded.Pixels[index] + " != " + source.Pixels[index]); break; }
+                return false;
+            }
+            return true;
         }
 
         // Direct counterpart of native bit_math_vectors, including count

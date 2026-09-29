@@ -42,8 +42,17 @@ namespace Jxr.Managed.Core
             if (options.OutputFormat != JxrPixelFormat.Gray8 &&
                 options.OutputFormat != JxrPixelFormat.Rgb24)
                 return JxrError.InvalidArgument;
-            if (options.OutputFormat != JxrPixelFormat.Gray8)
-                return JxrError.UnsupportedFeature;
+            if (options.OutputFormat == JxrPixelFormat.Rgb24)
+            {
+                byte[] rgb;
+                int rgbWidth, rgbHeight;
+                JxrError rgbError = JxrMinimalDecoder.DecodeRgbPixels(jxr,
+                    out rgb, out rgbWidth, out rgbHeight);
+                if (rgbError != JxrError.None) return rgbError;
+                image = new JxrImage(rgbWidth, rgbHeight,
+                    JxrPixelFormat.Rgb24, rgb, rgbWidth * 3);
+                return JxrError.None;
+            }
             byte[] pixels;
             int width, height;
             JxrError error = JxrMinimalDecoder.DecodeGrayPixels(jxr, out pixels,
