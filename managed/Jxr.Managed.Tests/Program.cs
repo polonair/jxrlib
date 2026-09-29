@@ -27,6 +27,7 @@ namespace Jxr.Managed.Tests
             new TestCase("minimal_entropy_codec_fixture", TestMinimalEntropyCodecFixture),
             new TestCase("color_entropy_codec_fixture", TestColorEntropyCodecFixture),
             new TestCase("real_rgb444_decode", TestRealRgb444Decode),
+            new TestCase("rgb444_quality_native_fixtures", TestRgb444QualityNativeFixtures),
             new TestCase("quantization_reference_vectors", TestQuantizationReferenceVectors),
             new TestCase("quantization_macroblock_vectors", TestQuantizationMacroblockVectors),
             new TestCase("quantization_channel_modes", TestQuantizationChannelModes),
@@ -1907,6 +1908,54 @@ namespace Jxr.Managed.Tests
                         { Console.WriteLine("First RGB mismatch at byte " + index +
                             ": " + decoded.Pixels[index] + " != " + source.Pixels[index]); break; }
                 return false;
+            }
+            options.OutputFormat = JxrPixelFormat.Bgr24;
+            error = JxrCodec.Decode(File.ReadAllBytes(Path.Combine(fixture,
+                "test-sign-334x330.jxr")), options, out decoded);
+            if (error != JxrError.None || decoded == null ||
+                decoded.Format != JxrPixelFormat.Bgr24 ||
+                decoded.Pixels.Length != source.Pixels.Length) return false;
+            for (int index = 0; index < source.Pixels.Length; index += 3)
+                if (decoded.Pixels[index] != source.Pixels[index + 2] ||
+                    decoded.Pixels[index + 1] != source.Pixels[index + 1] ||
+                    decoded.Pixels[index + 2] != source.Pixels[index]) return false;
+            return true;
+        }
+
+        private static bool TestRgb444QualityNativeFixtures()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "managed\\fixtures\\rgb444-q16-all.jxr"))) directory = directory.Parent;
+            if (directory == null) return false;
+            string fixtureRoot = Path.Combine(directory.FullName, "managed\\fixtures");
+            string[] names = { "rgb444-q16-dc-only", "rgb444-q16-no-hp",
+                "rgb444-q16-all", "rgb444-q16-no-flex", "rgb444-q16-trim3",
+                "rgb444-city-q16-all" };
+            JxrDecoderOptions options = new JxrDecoderOptions();
+            options.OutputFormat = JxrPixelFormat.Rgb24;
+            for (int item = 0; item < names.Length; item++)
+            {
+                JxrImage expected, actual;
+                if (JxrBmpAdapter.ReadRgb24(File.ReadAllBytes(Path.Combine(fixtureRoot,
+                    names[item] + "-restored.bmp")), out expected) != JxrError.None)
+                    return false;
+                JxrError error = JxrCodec.Decode(File.ReadAllBytes(Path.Combine(fixtureRoot,
+                    names[item] + ".jxr")), options, out actual);
+                if (error != JxrError.None || actual == null ||
+                    !EqualBytes(actual.Pixels, expected.Pixels))
+                {
+                    Console.WriteLine("RGB444 quality decode " + names[item] + ": " + error);
+                    if (actual != null)
+                        for (int index = 0; index < actual.Pixels.Length; index++)
+                            if (actual.Pixels[index] != expected.Pixels[index])
+                            {
+                                Console.WriteLine("First mismatch at " + index + ": " +
+                                    actual.Pixels[index] + "/" + expected.Pixels[index]);
+                                break;
+                            }
+                    return false;
+                }
             }
             return true;
         }

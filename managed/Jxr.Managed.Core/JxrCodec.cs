@@ -40,17 +40,20 @@ namespace Jxr.Managed.Core
             image = null;
             if (jxr == null || options == null) return JxrError.InvalidArgument;
             if (options.OutputFormat != JxrPixelFormat.Gray8 &&
-                options.OutputFormat != JxrPixelFormat.Rgb24)
+                options.OutputFormat != JxrPixelFormat.Rgb24 &&
+                options.OutputFormat != JxrPixelFormat.Bgr24)
                 return JxrError.InvalidArgument;
-            if (options.OutputFormat == JxrPixelFormat.Rgb24)
+            if (options.OutputFormat == JxrPixelFormat.Rgb24 ||
+                options.OutputFormat == JxrPixelFormat.Bgr24)
             {
                 byte[] rgb;
                 int rgbWidth, rgbHeight;
                 JxrError rgbError = JxrMinimalDecoder.DecodeRgbPixels(jxr,
+                    options.OutputFormat == JxrPixelFormat.Rgb24,
                     out rgb, out rgbWidth, out rgbHeight);
                 if (rgbError != JxrError.None) return rgbError;
                 image = new JxrImage(rgbWidth, rgbHeight,
-                    JxrPixelFormat.Rgb24, rgb, rgbWidth * 3);
+                    options.OutputFormat, rgb, rgbWidth * 3);
                 return JxrError.None;
             }
             byte[] pixels;

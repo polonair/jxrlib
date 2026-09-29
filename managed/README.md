@@ -37,8 +37,9 @@ green alongside the managed runner.
 ## Public pixel and stream API
 
 `JxrImage` describes top-down, row-major pixels with explicit width, height,
-format and byte stride. `Gray8` is integrated end-to-end. `Rgb24` channel
-order is R, G, B; decode supports spatial, no-overlap YUV 4:4:4, while encode
+format and byte stride. `Gray8` is integrated end-to-end. `Rgb24` and `Bgr24`
+select R-G-B and B-G-R byte order respectively; decode supports spatial,
+no-overlap YUV 4:4:4, while encode
 remains Gray-only and returns `UnsupportedFeature` for color images. The
 caller owns the image's `byte[]` buffer, which is not copied by the constructor.
 
@@ -82,7 +83,11 @@ handles spatial, no-overlap 8-bit YUV 4:4:4 streams with one packet, sharing
 DC/LP/HP entropy and prediction state across Y, U and V. It inverse-transforms
 each full-resolution plane and applies the reversible color transform.
 `real_rgb444_decode` checks the 334x330 real-image fixture against its source
-BGR BMP. Other color subsampling, overlap, tiles, alpha and non-spatial layouts
+BGR BMP. `rgb444_quality_native_fixtures` also compares native-restored RGB
+pixels for QP=16 and four subband/trim variants of the sign image plus the
+605x478 city image. The scaled-arithmetic chroma DC/LP values are doubled
+after inverse transform stage 2, as in the native decoder. Other color
+subsampling, overlap, tiles, alpha and non-spatial layouts
 remain unsupported; this is not yet a general-purpose JPEG XR decoder.
 
 `JxrMinimalEncoder.EncodeGrayBmp` now connects the managed forward transform,

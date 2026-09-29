@@ -192,7 +192,8 @@ namespace Jxr.Managed.Core
         // Full-resolution three-plane path used by RGB24 images encoded as
         // YUV444.  All three component planes share one spatial entropy
         // stream, prediction state and macroblock position.
-        internal static JxrError DecodeRgbPixels(byte[] source, out byte[] pixels,
+        internal static JxrError DecodeRgbPixels(byte[] source, bool rgbOrder,
+            out byte[] pixels,
             out int width, out int height)
         {
             pixels = null;
@@ -269,7 +270,7 @@ namespace Jxr.Managed.Core
                     lp[channel] = new JxrQuantizer[] {
                         JxrQuantization.Remap(lpIndex, scaledArithmetic, channel != 0) };
                     hp[channel] = new JxrQuantizer[] {
-                        JxrQuantization.Remap(hpIndex, scaledArithmetic, channel != 0) };
+                        JxrQuantization.Remap(hpIndex, scaledArithmetic, false) };
                     hpParameters[channel] = new int[] { hp[channel][0].Parameter };
                 }
                 JxrQuantizerSet quantizers = new JxrQuantizerSet(dc, lp, hp);
@@ -339,7 +340,7 @@ namespace Jxr.Managed.Core
                         {
                             int[] samples = new int[256];
                             Array.Copy(planes[channel], samples, 256);
-                            InverseMacroblock(samples);
+                            InverseMacroblock(samples, channel != 0 && scaledArithmetic);
                             for (int y = 0; y < 16; y++)
                                 for (int x = 0; x < 16; x++)
                                 {
@@ -355,7 +356,7 @@ namespace Jxr.Managed.Core
                 }
                 pixels = new byte[imageWidth * imageHeight * 3];
                 error = JxrImagePipeline.DecodeRgb8(yPlane, uPlane, vPlane,
-                    imageWidth, imageHeight, true, scaledArithmetic ? 3 : 0,
+                    imageWidth, imageHeight, rgbOrder, scaledArithmetic ? 3 : 0,
                     pixels, imageWidth * 3);
                 if (error != JxrError.None) { pixels = null; return error; }
                 width = imageWidth; height = imageHeight;
@@ -384,6 +385,11 @@ namespace Jxr.Managed.Core
 
         private static void InverseMacroblock(int[] values)
         {
+            InverseMacroblock(values, false);
+        }
+
+        private static void InverseMacroblock(int[] values, bool normalizeChroma)
+        {
             // Stage 2: the 16 DC/LP values are embedded at native offsets.
             JxrInverseTransformMath.ApplyOdd(
                 ref values[32], ref values[48], ref values[96], ref values[112]);
@@ -393,6 +399,12 @@ namespace Jxr.Managed.Core
                 ref values[160], ref values[224], ref values[176], ref values[240]);
             JxrTransformMath.ApplyDct2x2Up(values, 0, 64, 16, 80);
             JxrTransformMath.ApplySecondStageFourButterfly(values);
+            // Native JxrInverseTransformPlaneStage2Apply normalizes scaled
+            // full-resolution chroma here, after stage 2 but before stage 1.
+            // Doubling quantizers instead changes intermediate rounding.
+            if (normalizeChroma)
+                for (int offset = 0; offset < 256; offset += 16)
+                    values[offset] = unchecked(values[offset] + values[offset]);
 
             // Stage 1 is independent for each 4x4 coefficient block with no overlap.
             for (int block = 0; block < 16; block++)

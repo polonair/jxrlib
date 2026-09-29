@@ -5,7 +5,8 @@ namespace Jxr.Managed.Core
     public enum JxrPixelFormat
     {
         Gray8 = 0,
-        Rgb24 = 1
+        Rgb24 = 1,
+        Bgr24 = 2
     }
 
     // Rows are top-down. Pixels is caller-owned; this class never copies it.
@@ -21,7 +22,8 @@ namespace Jxr.Managed.Core
             byte[] pixels, int stride)
         {
             int channels = format == JxrPixelFormat.Gray8 ? 1 :
-                format == JxrPixelFormat.Rgb24 ? 3 : 0;
+                (format == JxrPixelFormat.Rgb24 ||
+                 format == JxrPixelFormat.Bgr24) ? 3 : 0;
             if (channels == 0 || width <= 0 || height <= 0 || pixels == null ||
                 (long)width * channels > stride || stride <= 0 ||
                 (long)stride * height > pixels.Length)

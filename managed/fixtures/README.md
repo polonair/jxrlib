@@ -23,3 +23,12 @@ compares managed-decoded pixels to the native decoder output for every mode.
 The native transform snapshot occurs before the delayed macroblock transform
 finishes and therefore is not directly equivalent to the managed
 pre-quantization snapshot.
+
+`create-rgb444-quality.ps1` uses the two existing real RGB24 BMP images to
+generate spatial YUV 4:4:4, no-overlap JPEG XR streams with native encoder
+options `-c 0 -d 3 -q 16 -l 0 -f -p`. The sign image covers all subbands,
+no flexbits, no highpass, DC-only and trim-flexbits=3; the city image covers
+all subbands. Each JXR and native-restored BMP is retained, and
+`rgb444_quality_native_fixtures` compares every RGB pixel byte after managed
+decoding. These fixtures exercise lossy scaled arithmetic, including the
+chroma normalization between inverse-transform stages.
