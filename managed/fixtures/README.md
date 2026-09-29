@@ -14,10 +14,12 @@ native decoder outputs, retained as additional reference artifacts.
 
 `create-gray-quality.ps1` generates lossy/profile fixtures from
 `gray-31x19.bmp` with the native Release x64 encoder. `q16-all`, `q64-all`,
-`q16-no-flex`, `q16-trim3`, `q16-no-hp`, and `q16-dc-only` retain the source
+`q1-no-flex`, `q2-all`, `q255-all`, `q16-no-flex`, `q16-trim3`,
+`q16-trim15`, `q16-no-hp`, and `q16-dc-only` retain the source
 JXR, native-decoded BMP, and `-X` structured trace. The managed conformance
 test compares complete JXR bytes and, per macroblock, native quantized and
-predicted coefficient arrays plus available DC/LP/HP bit counts. It also
-compares managed-decoded pixels for every mode except no-flexbits, whose
-managed HP decoder still has a known end-of-stream defect; its encoded JXR
-and coefficient/bit-range trace are verified exactly.
+predicted coefficient arrays plus exact DC/LP/HP bit boundaries. It also
+compares managed-decoded pixels to the native decoder output for every mode.
+The native transform snapshot occurs before the delayed macroblock transform
+finishes and therefore is not directly equivalent to the managed
+pre-quantization snapshot.

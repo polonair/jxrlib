@@ -42,6 +42,7 @@ namespace Jxr.Managed.Tests
             new TestCase("minimal_encoder_end_to_end", TestMinimalEncoderEndToEnd),
             new TestCase("gray_sizes_native_fixtures", TestGraySizesNativeFixtures),
             new TestCase("gray_quality_native_fixtures", TestGrayQualityNativeFixtures),
+            new TestCase("gray_mixed_qp_options", TestGrayMixedQpOptions),
             new TestCase("public_pixel_api", TestPublicPixelApi),
             new TestCase("public_stream_api", TestPublicStreamApi),
             new TestCase("image_pipeline_reference_vectors", TestImagePipelineReferenceVectors),
@@ -63,6 +64,7 @@ namespace Jxr.Managed.Tests
             new TestCase("adaptive_huffman_table_catalog_vectors", TestAdaptiveHuffmanTableCatalogVectors),
             new TestCase("adaptive_huffman_catalog_signature_vectors", TestAdaptiveHuffmanCatalogSignatureVectors),
             new TestCase("huffman_decoder_vectors", TestHuffmanDecoderVectors),
+            new TestCase("huffman_short_tail_vectors", TestHuffmanShortTailVectors),
             new TestCase("adaptive_huffman_decode_vectors", TestAdaptiveDecodeVectors),
             new TestCase("huffman_error_vectors", TestErrorVectors)
         };
@@ -533,14 +535,17 @@ namespace Jxr.Managed.Tests
             byte[] bmp = File.ReadAllBytes(Path.Combine(fixtureRoot, "gray-31x19.bmp"));
             JxrImage source;
             if (JxrBmpAdapter.ReadGray8(bmp, out source) != JxrError.None) return false;
-            string[] names = { "q16-all", "q64-all", "q16-no-flex", "q16-trim3",
+            string[] names = { "q1-no-flex", "q2-all", "q16-all", "q64-all",
+                "q255-all", "q16-no-flex", "q16-trim3", "q16-trim15",
                 "q16-no-hp", "q16-dc-only" };
-            JxrGraySubbandMode[] subbands = { JxrGraySubbandMode.All,
-                JxrGraySubbandMode.All, JxrGraySubbandMode.NoFlexbits,
+            JxrGraySubbandMode[] subbands = { JxrGraySubbandMode.NoFlexbits,
+                JxrGraySubbandMode.All, JxrGraySubbandMode.All,
+                JxrGraySubbandMode.All, JxrGraySubbandMode.All,
+                JxrGraySubbandMode.NoFlexbits, JxrGraySubbandMode.All,
                 JxrGraySubbandMode.All, JxrGraySubbandMode.NoHighpass,
                 JxrGraySubbandMode.DcOnly };
-            int[] qualities = { 16, 64, 16, 16, 16, 16 };
-            int[] trims = { 0, 0, 0, 3, 0, 0 };
+            int[] qualities = { 1, 2, 16, 64, 255, 16, 16, 16, 16, 16 };
+            int[] trims = { 0, 0, 0, 0, 0, 0, 3, 15, 0, 0 };
             for (int item = 0; item < names.Length; item++)
             {
                 JxrEncoderOptions options = new JxrEncoderOptions();
@@ -562,7 +567,6 @@ namespace Jxr.Managed.Tests
                         (encoded == null ? 0 : encoded.Length) + "/" + native.Length);
                     return false;
                 }
-                if (item != 2)
                 {
                     JxrImage decoded, expected;
                     error = JxrCodec.Decode(native, new JxrDecoderOptions(), out decoded);
@@ -577,6 +581,8 @@ namespace Jxr.Managed.Tests
                 }
                 string traceDir = Path.Combine(fixtureRoot, names[item] + "-trace");
                 if (trace.MacroblockCount != 4) return false;
+                int entropyStart = ReadJsonInt(Path.Combine(traceDir,
+                    "encoder-mb-000-000-bitstream-dc.json"), "bit_start");
                 for (int y = 0; y < 2; y++)
                     for (int x = 0; x < 2; x++)
                     {
@@ -588,24 +594,66 @@ namespace Jxr.Managed.Tests
                             ReadJsonValues(prefix + "-quantized_coefficients.json"));
                         bool predictedMatch = EqualInts(actual.PredictedCoefficients,
                             ReadJsonValues(prefix + "-predicted_coefficients.json"));
-                        bool bitCountsMatch = actual.DcBitEnd - actual.DcBitStart ==
-                            ReadJsonInt(prefix + "-bitstream-dc.json", "bit_count");
+                        bool bitRangesMatch = actual.DcBitStart + entropyStart ==
+                            ReadJsonInt(prefix + "-bitstream-dc.json", "bit_start") &&
+                            actual.DcBitEnd + entropyStart ==
+                            ReadJsonInt(prefix + "-bitstream-dc.json", "bit_end");
                         if (subbands[item] != JxrGraySubbandMode.DcOnly)
-                            bitCountsMatch = bitCountsMatch &&
-                                actual.LpBitEnd - actual.LpBitStart ==
-                                ReadJsonInt(prefix + "-bitstream-lp.json", "bit_count");
+                            bitRangesMatch = bitRangesMatch &&
+                                actual.LpBitStart + entropyStart ==
+                                ReadJsonInt(prefix + "-bitstream-lp.json", "bit_start") &&
+                                actual.LpBitEnd + entropyStart ==
+                                ReadJsonInt(prefix + "-bitstream-lp.json", "bit_end");
                         if ((int)subbands[item] < (int)JxrGraySubbandMode.NoHighpass)
-                            bitCountsMatch = bitCountsMatch &&
-                                actual.HpBitEnd - actual.HpBitStart ==
-                                ReadJsonInt(prefix + "-bitstream-hp.json", "bit_count");
-                        if (!quantizedMatch || !predictedMatch || !bitCountsMatch)
+                            bitRangesMatch = bitRangesMatch &&
+                                actual.HpBitStart + entropyStart ==
+                                ReadJsonInt(prefix + "-bitstream-hp.json", "bit_start") &&
+                                actual.HpBitEnd + entropyStart ==
+                                ReadJsonInt(prefix + "-bitstream-hp.json", "bit_end");
+                        if (!quantizedMatch || !predictedMatch || !bitRangesMatch)
                         { Console.WriteLine("Gray quality trace differs for " + names[item] +
                             " at macroblock " + x + "," + y + " (quantized=" +
                             quantizedMatch + ", predicted=" + predictedMatch +
-                            ", bit ranges=" + bitCountsMatch + ")"); return false; }
+                            ", bit ranges=" + bitRangesMatch + ")"); return false; }
                     }
             }
             return true;
+        }
+
+        private static bool TestGrayMixedQpOptions()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "managed\\fixtures\\gray-31x19.bmp"))) directory = directory.Parent;
+            if (directory == null) return false;
+            JxrImage source;
+            if (JxrBmpAdapter.ReadGray8(File.ReadAllBytes(Path.Combine(directory.FullName,
+                "managed\\fixtures\\gray-31x19.bmp")), out source) != JxrError.None)
+                return false;
+            JxrEncoderOptions options = new JxrEncoderOptions();
+            options.QualityIndex = 16;
+            options.DcQuantizerIndex = 3;
+            options.LowpassQuantizerIndex = 29;
+            options.HighpassQuantizerIndex = 93;
+            byte[] encoded;
+            if (JxrCodec.Encode(source, options, out encoded) != JxrError.None)
+                return false;
+            JxrHeaders headers;
+            if (JxrHeaders.Read(encoded, out headers) != JxrError.None ||
+                headers.Quantizers.GetDcIndex(0) != 3 ||
+                headers.Quantizers.GetLowpassIndex(0) != 29 ||
+                headers.Quantizers.GetHighpassIndex(0) != 93)
+                return false;
+            JxrImage decoded;
+            if (JxrCodec.Decode(encoded, new JxrDecoderOptions(), out decoded) !=
+                JxrError.None || decoded.Width != source.Width ||
+                decoded.Height != source.Height) return false;
+            options.HighpassQuantizerIndex = 256;
+            if (JxrCodec.Encode(source, options, out encoded) !=
+                JxrError.InvalidArgument || encoded != null) return false;
+            options.HighpassQuantizerIndex = -2;
+            return JxrCodec.Encode(source, options, out encoded) ==
+                JxrError.InvalidArgument && encoded == null;
         }
 
         private static bool EqualBytes(byte[] left, byte[] right)
@@ -2203,6 +2251,41 @@ namespace Jxr.Managed.Tests
             reader = new JxrBitReader(new byte[] { 0x04, 0 });
             return JxrHuffmanDecoder.DecodeSymbol(table, reader, out symbol) == JxrError.None &&
                 symbol == 6 && reader.BitPosition == 6;
+        }
+
+        private static bool TestHuffmanShortTailVectors()
+        {
+            short[] oneBit = new short[32];
+            short[] twoBit = new short[32];
+            for (int index = 0; index < 32; index++)
+            {
+                oneBit[index] = (short)(((index < 16 ? 1 : 2) << 3) | 1);
+                twoBit[index] = (short)((3 << 3) | 2);
+            }
+            int symbol;
+            JxrBitReader reader = new JxrBitReader(new byte[] { 0x01 });
+            if (reader.ConsumeBits(7) != JxrError.None ||
+                JxrHuffmanDecoder.DecodeSymbol(new JxrHuffmanTable(oneBit),
+                    reader, out symbol) != JxrError.None ||
+                symbol != 2 || reader.BitPosition != 8 || reader.HasFailed)
+                return false;
+            reader = new JxrBitReader(new byte[] { 0x01 });
+            if (reader.ConsumeBits(7) != JxrError.None ||
+                JxrHuffmanDecoder.DecodeShortSymbol(new JxrHuffmanTable(oneBit),
+                    reader, out symbol) != JxrError.None ||
+                symbol != 2 || reader.BitPosition != 8 || reader.HasFailed)
+                return false;
+            reader = new JxrBitReader(new byte[] { 0 });
+            if (reader.ConsumeBits(7) != JxrError.None ||
+                JxrHuffmanDecoder.DecodeSymbol(new JxrHuffmanTable(twoBit),
+                    reader, out symbol) != JxrError.UnexpectedEndOfStream ||
+                reader.BitPosition != 7 || !reader.HasFailed)
+                return false;
+            reader = new JxrBitReader(new byte[] { 0 });
+            return reader.ConsumeBits(7) == JxrError.None &&
+                JxrHuffmanDecoder.DecodeShortSymbol(new JxrHuffmanTable(twoBit),
+                    reader, out symbol) == JxrError.UnexpectedEndOfStream &&
+                reader.BitPosition == 7 && reader.HasFailed;
         }
 
         // Uses the built-in JPEG XR alphabet-5 catalog selected by Adapt().

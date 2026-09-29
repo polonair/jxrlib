@@ -53,11 +53,16 @@ The integrated `Gray8` encoder supports QP indexes 0–255 (indexes 0 and 1
 select the native lossless index), independent DC/LP/HP QP overrides, all four
 subband modes, optional flexbit trimming, no overlap and spatial layout.
 Native fixture tests compare complete JXR bytes, quantized/predicted
-coefficients and per-band bit counts for QP 16/64, trim-flexbits, no-HP and
-DC-only cases. The managed decoder also covers scaled QP, trimming, no-HP and
-DC-only fixtures. No-flexbits streams are encoder-conformant, but managed HP
-decoding still needs follow-up; the C decoder fixture remains the output
-reference for that case. Invalid option values return `InvalidArgument`;
+coefficients and exact per-band bit boundaries for QP 1/2/16/64/255,
+trim-flexbits, no-flexbits, no-HP and DC-only cases. The managed decoder also
+matches native-decoded pixels for every tested mode, including no-flexbits.
+`gray_mixed_qp_options` checks independent DC/LP/HP QP fields and managed
+decoding; mixed-QP byte-for-byte C comparison is not covered by the native
+command-line encoder, which exposes one image QP.
+The native `transform_coefficients` trace is captured before the delayed
+macroblock transform finishes; it is not the same snapshot as the managed
+pre-quantization array, so conformance compares the native quantized and
+predicted stages instead. Invalid option values return `InvalidArgument`;
 valid but unimplemented profiles return `UnsupportedFeature`.
 `JxrBmpAdapter` reads/writes canonical 8bpp Gray BMPs
 at arbitrary dimensions and is optional: JPEG XR encoding and decoding no longer depend

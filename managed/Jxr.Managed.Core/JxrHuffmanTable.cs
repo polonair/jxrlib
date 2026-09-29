@@ -132,12 +132,18 @@ namespace Jxr.Managed.Core
 
             symbol = 0;
             if (table == null || reader == null) return JxrError.InvalidArgument;
-            error = reader.PeekBits(JxrHuffmanTable.RootBits, out rootIndex);
+            // The last valid symbol may be shorter than the five-bit root
+            // lookup. Pad only the lookahead, never the consumed input.
+            int available = Math.Min(reader.BitsRemaining, JxrHuffmanTable.RootBits);
+            if (available == 0) return reader.PeekBits(1, out rootIndex);
+            error = reader.PeekBits(available, out rootIndex);
             if (error != JxrError.None) return error;
+            rootIndex <<= JxrHuffmanTable.RootBits - available;
             if (!table.TryGetEntry(rootIndex, out encodedEntry)) return JxrError.InvalidBitstream;
 
             length = encodedEntry < 0 ? JxrHuffmanTable.RootBits :
                 encodedEntry & ((1 << JxrHuffmanTable.EncodedLengthBits) - 1);
+            if (length > available) return reader.ConsumeBits(length);
             error = reader.ConsumeBits(length);
             if (error != JxrError.None) return error;
 
@@ -164,11 +170,15 @@ namespace Jxr.Managed.Core
 
             symbol = 0;
             if (table == null || reader == null) return JxrError.InvalidArgument;
-            error = reader.PeekBits(JxrHuffmanTable.RootBits, out rootIndex);
+            int available = Math.Min(reader.BitsRemaining, JxrHuffmanTable.RootBits);
+            if (available == 0) return reader.PeekBits(1, out rootIndex);
+            error = reader.PeekBits(available, out rootIndex);
             if (error != JxrError.None) return error;
+            rootIndex <<= JxrHuffmanTable.RootBits - available;
             if (!table.TryGetEntry(rootIndex, out encodedEntry) || encodedEntry < 0)
                 return JxrError.InvalidBitstream;
             length = encodedEntry & ((1 << JxrHuffmanTable.EncodedLengthBits) - 1);
+            if (length > available) return reader.ConsumeBits(length);
             error = reader.ConsumeBits(length);
             if (error != JxrError.None) return error;
             symbol = encodedEntry >> JxrHuffmanTable.EncodedLengthBits;
