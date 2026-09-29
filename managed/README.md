@@ -34,6 +34,31 @@ Build and run on this machine:
 The native `JxrConformanceTests` remains the reference oracle and must stay
 green alongside the managed runner.
 
+## Public pixel and stream API
+
+`JxrImage` describes top-down, row-major pixels with explicit width, height,
+format and byte stride. `Gray8` is currently integrated end-to-end; `Rgb24`
+reserves the next color integration boundary and currently returns
+`UnsupportedFeature`. The caller owns the image's `byte[]` buffer, which is
+not copied by the constructor. For `Rgb24`, channel order is R, G, B.
+
+`JxrCodec.Encode(image, options, out byte[])` and
+`JxrCodec.Decode(byte[], options, out image)` are BMP-independent. Matching
+`Stream` overloads read or write JPEG XR without seeking or closing the
+caller's stream. This stage buffers one complete compressed image internally;
+it is not incremental streaming. A failed destination write may leave a
+partial JXR in that stream and returns `IoFailure`.
+
+The current integrated options are lossless quality index 1, no overlap and
+spatial layout for exactly 16×16 `Gray8`. Invalid option values return
+`InvalidArgument`; valid but unimplemented profiles return
+`UnsupportedFeature`. `JxrBmpAdapter` reads/writes the canonical 8bpp Gray
+fixture BMP and is optional: JPEG XR encoding and decoding no longer depend
+on BMP. The original `JxrMinimalEncoder.EncodeGrayBmp` and
+`JxrMinimalDecoder.DecodeGrayBmp` methods remain compatibility wrappers.
+`public_pixel_api` and `public_stream_api` verify this boundary, including
+padded image stride and non-seekable streams.
+
 `JxrMinimalDecoder.DecodeGrayBmp` now connects the ported modules into a
 complete, fully managed decoder for the frozen 16x16 8-bit Y-only fixture.
 It accepts a JXR container or raw codestream, locates the single spatial

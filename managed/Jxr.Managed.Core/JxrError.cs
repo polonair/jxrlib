@@ -6,6 +6,7 @@ namespace Jxr.Managed.Core
         InvalidArgument,
         InvalidBitstream,
         UnexpectedEndOfStream,
-        UnsupportedFeature
+        UnsupportedFeature,
+        IoFailure
     }
 }

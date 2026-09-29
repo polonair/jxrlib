@@ -55,7 +55,7 @@ has been conformance-tested.
 | Alpha channel / planar or interleaved alpha | C `-a` and `-Q` | Component only | Session and image-plane helpers; no managed alpha file conversion |
 | Decode ROI, thumbnail, orientation, post-processing | C decoder `-r`, `-T`, `-O`, `-p` | Component only | Transcoder ROI/orientation and other stage vectors do not constitute a decoder entry point |
 | JXR-to-JXR compressed-domain transcode | C decoder output `.jxr` and `-s` | Component only | `JxrTranscoder` handles coefficient/ROI operations, not file-to-file packet decode/write |
-| BMP/TIFF/HDR input, BMP/TIFF output | C application file adapters (format-dependent) | Canonical 8bpp BMP only | Managed minimal APIs take `byte[]`; there is no general pixel/stream API or TIFF/HDR adapter |
+| BMP/TIFF/HDR input, BMP/TIFF output | C application file adapters (format-dependent) | Canonical 8bpp BMP adapter only | `JxrCodec` now accepts/returns pixel buffers and JPEG XR streams; no general BMP, TIFF or HDR adapter yet |
 | Container and codestream headers | C reader/writer | Read component; minimal fixed writer only | `JxrHeaders.Read` parses all three fixtures; encoder copies a fixed header template and patches codestream length |
 | Native CLI parity | `JXREncApp`/`JXRDecApp` | Not integrated | No managed command-line replacement yet |
 
@@ -76,6 +76,5 @@ standard coverage by either implementation.
    Do not promote a row from component to end-to-end based on isolated vectors.
 4. Check `git diff --check` and commit only after the applicable gates pass.
 
-The next integration boundary is a managed image/codec-options and stream API,
-followed by a real container/header writer. The existing minimal APIs remain
-compatibility checkpoints while those layers are introduced.
+The next integration boundary is a real container/header writer. The existing
+minimal APIs remain compatibility checkpoints while it is introduced.

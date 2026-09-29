@@ -2,7 +2,8 @@ using System;
 
 namespace Jxr.Managed.Core
 {
-    // Full BMP -> JXR route for one lossless 16x16 Y_ONLY macroblock.
+    // Compatibility BMP entry point and pixel-based core for one lossless
+    // 16x16 Y_ONLY macroblock.
     public static class JxrMinimalEncoder
     {
         private static readonly int[] LocalSampleOrder =
@@ -17,17 +18,24 @@ namespace Jxr.Managed.Core
         public static JxrError EncodeGrayBmp(byte[] bitmap, out byte[] jxr)
         {
             jxr = null;
-            int pixelOffset, stride;
-            JxrError error = CheckBitmap(bitmap, out pixelOffset, out stride);
+            JxrImage image;
+            JxrError error = JxrBmpAdapter.ReadGray8(bitmap, out image);
             if (error != JxrError.None) return error;
+            return JxrCodec.Encode(image, new JxrEncoderOptions(), out jxr);
+        }
+
+        internal static JxrError EncodeGrayPixels(byte[] pixels, int stride,
+            out byte[] jxr)
+        {
+            jxr = null;
             JxrSessionConfiguration sessionConfig = new JxrSessionConfiguration(
                 16, 16, 0, 1, 4, false);
             using (JxrEncoderSession session = JxrEncoderSession.Create(
                 sessionConfig, 0, 0))
-                return EncodeWithSession(bitmap, pixelOffset, stride, session, out jxr);
+                return EncodeWithSession(pixels, stride, session, out jxr);
         }
 
-        private static JxrError EncodeWithSession(byte[] bitmap, int pixelOffset,
+        private static JxrError EncodeWithSession(byte[] pixels,
             int stride, JxrEncoderSession session, out byte[] jxr)
         {
             jxr = null;
@@ -39,7 +47,7 @@ namespace Jxr.Managed.Core
                     int block = (x >> 2) * 64 + (y >> 2) * 16;
                     int local = LocalSampleOrder[(y & 3) * 4 + (x & 3)];
                     coefficients[block + local] =
-                        bitmap[pixelOffset + (15 - y) * stride + x] - 128;
+                        pixels[y * stride + x] - 128;
                 }
             ForwardMacroblock(coefficients);
 
@@ -81,32 +89,6 @@ namespace Jxr.Managed.Core
             return JxrError.None;
         }
 
-        private static JxrError CheckBitmap(byte[] bitmap,
-            out int pixelOffset, out int stride)
-        {
-            pixelOffset = stride = 0;
-            if (bitmap == null) return JxrError.InvalidArgument;
-            if (bitmap.Length < 54 || bitmap[0] != 'B' || bitmap[1] != 'M')
-                return JxrError.InvalidBitstream;
-            if (bitmap.Length != 1334 || Read32(bitmap, 14) != 40 ||
-                Read32(bitmap, 18) != 16 ||
-                Read32(bitmap, 22) != 16 || Read16(bitmap, 26) != 1 ||
-                Read16(bitmap, 28) != 8 || Read32(bitmap, 30) != 0 ||
-                Read32(bitmap, 38) != 3779 || Read32(bitmap, 42) != 3779)
-                return JxrError.UnsupportedFeature;
-            pixelOffset = Read32(bitmap, 10);
-            stride = 16;
-            if (pixelOffset != 1078) return JxrError.UnsupportedFeature;
-            for (int index = 0; index < 256; index++)
-            {
-                int palette = 54 + index * 4;
-                if (bitmap[palette] != index || bitmap[palette + 1] != index ||
-                    bitmap[palette + 2] != index || bitmap[palette + 3] != 0)
-                    return JxrError.UnsupportedFeature;
-            }
-            return JxrError.None;
-        }
-
         private static void ForwardMacroblock(int[] values)
         {
             for (int block = 0; block < 16; block++)
@@ -132,17 +114,6 @@ namespace Jxr.Managed.Core
                 ref values[128], ref values[192], ref values[144], ref values[208]);
             JxrForwardTransformMath.ApplyOdd(
                 ref values[32], ref values[48], ref values[96], ref values[112]);
-        }
-
-        private static int Read16(byte[] data, int offset)
-        {
-            return data[offset] | (data[offset + 1] << 8);
-        }
-
-        private static int Read32(byte[] data, int offset)
-        {
-            return data[offset] | (data[offset + 1] << 8) |
-                (data[offset + 2] << 16) | (data[offset + 3] << 24);
         }
 
         private static void Write32(byte[] data, int offset, int value)

@@ -38,6 +38,8 @@ namespace Jxr.Managed.Tests
             new TestCase("minimal_decoder_end_to_end", TestMinimalDecoderEndToEnd),
             new TestCase("minimal_entropy_encoder_fixture", TestMinimalEntropyEncoderFixture),
             new TestCase("minimal_encoder_end_to_end", TestMinimalEncoderEndToEnd),
+            new TestCase("public_pixel_api", TestPublicPixelApi),
+            new TestCase("public_stream_api", TestPublicStreamApi),
             new TestCase("image_pipeline_reference_vectors", TestImagePipelineReferenceVectors),
             new TestCase("image_pipeline_bitmap_fixtures", TestImagePipelineBitmapFixtures),
             new TestCase("session_memory_reference_vectors", TestSessionMemoryReferenceVectors),
@@ -438,6 +440,145 @@ namespace Jxr.Managed.Tests
             invalid[54] = 1;
             if (JxrMinimalEncoder.EncodeGrayBmp(invalid, out encoded) !=
                 JxrError.UnsupportedFeature || encoded != null) return false;
+            return true;
+        }
+
+        private static bool EqualBytes(byte[] left, byte[] right)
+        {
+            if (left == null || right == null || left.Length != right.Length)
+                return false;
+            for (int index = 0; index < left.Length; index++)
+                if (left[index] != right[index]) return false;
+            return true;
+        }
+
+        private static bool TestPublicPixelApi()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "minimal-profile\\minimal-gray-16x16.bmp"))) directory = directory.Parent;
+            if (directory == null) return false;
+            byte[] bmp = File.ReadAllBytes(Path.Combine(directory.FullName,
+                "minimal-profile\\minimal-gray-16x16.bmp"));
+            byte[] expectedJxr = File.ReadAllBytes(Path.Combine(directory.FullName,
+                "minimal-profile\\minimal-gray-16x16.jxr"));
+            JxrImage image;
+            if (JxrBmpAdapter.ReadGray8(bmp, out image) != JxrError.None ||
+                image.Width != 16 || image.Height != 16 || image.Stride != 16 ||
+                image.Format != JxrPixelFormat.Gray8) return false;
+            byte[] pixels = image.Pixels;
+            byte[] padded = new byte[16 * 20];
+            for (int row = 0; row < 16; row++)
+                Array.Copy(pixels, row * 16, padded, row * 20, 16);
+            JxrImage paddedImage = new JxrImage(16, 16,
+                JxrPixelFormat.Gray8, padded, 20);
+            JxrEncoderOptions options = new JxrEncoderOptions();
+            byte[] encoded;
+            if (JxrCodec.Encode(paddedImage, options, out encoded) !=
+                JxrError.None || !EqualBytes(encoded, expectedJxr)) return false;
+            JxrImage decoded;
+            if (JxrCodec.Decode(encoded, new JxrDecoderOptions(), out decoded) !=
+                JxrError.None || !EqualBytes(decoded.Pixels, pixels)) return false;
+            byte[] restoredBmp;
+            if (JxrBmpAdapter.WriteGray8(decoded, out restoredBmp) !=
+                JxrError.None || !EqualBytes(restoredBmp, bmp)) return false;
+            options.Overlap = 1;
+            if (JxrCodec.Encode(image, options, out encoded) !=
+                JxrError.UnsupportedFeature || encoded != null) return false;
+            options.Overlap = 0;
+            options.QualityIndex = 0;
+            if (JxrCodec.Encode(image, options, out encoded) !=
+                JxrError.InvalidArgument || encoded != null) return false;
+            options.QualityIndex = 1;
+            options.Layout = JxrBitstreamLayout.Frequency;
+            if (JxrCodec.Encode(image, options, out encoded) !=
+                JxrError.UnsupportedFeature || encoded != null) return false;
+            JxrImage rgb = new JxrImage(16, 16, JxrPixelFormat.Rgb24,
+                new byte[16 * 16 * 3], 48);
+            if (JxrCodec.Encode(rgb, new JxrEncoderOptions(), out encoded) !=
+                JxrError.UnsupportedFeature || encoded != null) return false;
+            JxrDecoderOptions decoderOptions = new JxrDecoderOptions();
+            decoderOptions.OutputFormat = JxrPixelFormat.Rgb24;
+            if (JxrCodec.Decode(expectedJxr, decoderOptions, out decoded) !=
+                JxrError.UnsupportedFeature || decoded != null) return false;
+            try { new JxrImage(16, 16, JxrPixelFormat.Gray8, new byte[255], 16); }
+            catch (ArgumentException) { return true; }
+            return false;
+        }
+
+        private sealed class NonSeekableStream : Stream
+        {
+            private readonly MemoryStream inner;
+            internal bool FailRead;
+            internal bool FailWrite;
+            internal NonSeekableStream(byte[] initial)
+            {
+                inner = initial == null ? new MemoryStream() :
+                    new MemoryStream(initial, false);
+            }
+            public override bool CanRead { get { return inner.CanRead; } }
+            public override bool CanWrite { get { return inner.CanWrite; } }
+            public override bool CanSeek { get { return false; } }
+            public override long Length { get { throw new NotSupportedException(); } }
+            public override long Position
+            {
+                get { throw new NotSupportedException(); }
+                set { throw new NotSupportedException(); }
+            }
+            public override void Flush() { inner.Flush(); }
+            public override int Read(byte[] buffer, int offset, int count)
+            {
+                if (FailRead) throw new IOException("test read failure");
+                return inner.Read(buffer, offset, Math.Min(count, 7));
+            }
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                if (FailWrite) throw new IOException("test write failure");
+                inner.Write(buffer, offset, count);
+            }
+            public override long Seek(long offset, SeekOrigin origin)
+            { throw new NotSupportedException(); }
+            public override void SetLength(long value)
+            { throw new NotSupportedException(); }
+            internal byte[] ToArray() { return inner.ToArray(); }
+        }
+
+        private static bool TestPublicStreamApi()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "minimal-profile\\minimal-gray-16x16.bmp"))) directory = directory.Parent;
+            if (directory == null) return false;
+            byte[] bmp = File.ReadAllBytes(Path.Combine(directory.FullName,
+                "minimal-profile\\minimal-gray-16x16.bmp"));
+            byte[] jxr = File.ReadAllBytes(Path.Combine(directory.FullName,
+                "minimal-profile\\minimal-gray-16x16.jxr"));
+            JxrImage image;
+            if (JxrBmpAdapter.ReadGray8(bmp, out image) != JxrError.None)
+                return false;
+            NonSeekableStream destination = new NonSeekableStream(null);
+            if (JxrCodec.Encode(image, new JxrEncoderOptions(), destination) !=
+                JxrError.None || !EqualBytes(destination.ToArray(), jxr) ||
+                !destination.CanWrite) return false;
+            NonSeekableStream source = new NonSeekableStream(jxr);
+            JxrImage decoded;
+            if (JxrCodec.Decode(source, new JxrDecoderOptions(), out decoded) !=
+                JxrError.None || !EqualBytes(decoded.Pixels, image.Pixels) ||
+                !source.CanRead) return false;
+            MemoryStream readOnly = new MemoryStream(new byte[0], false);
+            if (JxrCodec.Encode(image, new JxrEncoderOptions(), readOnly) !=
+                JxrError.InvalidArgument) return false;
+            MemoryStream malformed = new MemoryStream(new byte[] { 1, 2, 3 });
+            if (JxrCodec.Decode(malformed, new JxrDecoderOptions(), out decoded) ==
+                JxrError.None || decoded != null) return false;
+            source = new NonSeekableStream(jxr);
+            source.FailRead = true;
+            if (JxrCodec.Decode(source, new JxrDecoderOptions(), out decoded) !=
+                JxrError.IoFailure || decoded != null) return false;
+            destination = new NonSeekableStream(null);
+            destination.FailWrite = true;
+            if (JxrCodec.Encode(image, new JxrEncoderOptions(), destination) !=
+                JxrError.IoFailure) return false;
             return true;
         }
 

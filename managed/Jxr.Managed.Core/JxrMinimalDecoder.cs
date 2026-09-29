@@ -2,7 +2,7 @@ using System;
 
 namespace Jxr.Managed.Core
 {
-    // Complete managed decode for the intentionally narrow 16x16 Y_ONLY,
+    // Managed pixel decode for the intentionally narrow 16x16 Y_ONLY,
     // QP=1, spatial, one-tile, OL_NONE fixture. Unsupported JPEG XR variants
     // are rejected instead of silently following the minimal path.
     public static class JxrMinimalDecoder
@@ -15,6 +15,16 @@ namespace Jxr.Managed.Core
         public static JxrError DecodeGrayBmp(byte[] source, out byte[] bitmap)
         {
             bitmap = null;
+            JxrImage image;
+            JxrError error = JxrCodec.Decode(source,
+                new JxrDecoderOptions(), out image);
+            if (error != JxrError.None) return error;
+            return JxrBmpAdapter.WriteGray8(image, out bitmap);
+        }
+
+        internal static JxrError DecodeGrayPixels(byte[] source, out byte[] pixels)
+        {
+            pixels = null;
             JxrHeaders headers;
             JxrError error = JxrHeaders.Read(source, out headers);
             if (error != JxrError.None) return error;
@@ -110,7 +120,7 @@ namespace Jxr.Managed.Core
                         gray[y * 16 + x] =
                             JxrImagePipeline.ClipByte(unchecked(samples[block + local] + 128));
                     }
-                bitmap = WriteGrayBmp(gray);
+                pixels = gray;
                 return JxrError.None;
             }
         }
@@ -164,42 +174,5 @@ namespace Jxr.Managed.Core
             }
         }
 
-        private static byte[] WriteGrayBmp(byte[] pixels)
-        {
-            byte[] bmp = new byte[14 + 40 + 1024 + 256];
-            bmp[0] = (byte)'B'; bmp[1] = (byte)'M';
-            Write32(bmp, 2, bmp.Length);
-            Write32(bmp, 10, 1078);
-            Write32(bmp, 14, 40);
-            Write32(bmp, 18, 16);
-            Write32(bmp, 22, 16);
-            Write16(bmp, 26, 1);
-            Write16(bmp, 28, 8);
-            Write32(bmp, 34, 256);
-            Write32(bmp, 38, 3779);
-            Write32(bmp, 42, 3779);
-            for (int index = 0; index < 256; index++)
-            {
-                int entry = 54 + index * 4;
-                bmp[entry] = bmp[entry + 1] = bmp[entry + 2] = (byte)index;
-            }
-            for (int row = 0; row < 16; row++)
-                Array.Copy(pixels, row * 16, bmp, 1078 + (15 - row) * 16, 16);
-            return bmp;
-        }
-
-        private static void Write16(byte[] buffer, int offset, int value)
-        {
-            buffer[offset] = (byte)value;
-            buffer[offset + 1] = (byte)(value >> 8);
-        }
-
-        private static void Write32(byte[] buffer, int offset, int value)
-        {
-            buffer[offset] = (byte)value;
-            buffer[offset + 1] = (byte)(value >> 8);
-            buffer[offset + 2] = (byte)(value >> 16);
-            buffer[offset + 3] = (byte)(value >> 24);
-        }
     }
 }
