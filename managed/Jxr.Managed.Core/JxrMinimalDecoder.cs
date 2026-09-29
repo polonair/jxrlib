@@ -44,15 +44,16 @@ namespace Jxr.Managed.Core
                 main.HasAlpha || main.BlackWhite ||
                 main.VerticalSliceCountMinusOne != 0 ||
                 main.HorizontalSliceCountMinusOne != 0 ||
-                main.HasIndexTable || main.TrimFlexbits ||
+                main.HasIndexTable ||
                 main.ExtraTop != 0 || main.ExtraLeft != 0 ||
                 main.ExtraBottom != ((16 - ((int)main.Height & 15)) & 15) ||
                 main.ExtraRight != ((16 - ((int)main.Width & 15)) & 15) ||
                 plane.ColorFormat != 0 || plane.ChannelCount != 1 ||
-                plane.Subband != 0 || plane.ScaledArithmetic ||
-                main.SourceBitDepth != 1 || q.Mode != 0x600 ||
-                q.GetDcIndex(0) != 0 || q.GetLowpassIndex(0) != 0 ||
-                q.GetHighpassIndex(0) != 0)
+                plane.Subband < 0 || plane.Subband > 3 ||
+                main.SourceBitDepth != 1 ||
+                q.Mode != (plane.Subband == (int)JxrGraySubbandMode.DcOnly ? 0x200 : 0x600) ||
+                !q.HasDc || (plane.Subband != 3 && !q.HasLowpass) ||
+                (plane.Subband < 2 && !q.HasHighpass))
                 return JxrError.UnsupportedFeature;
 
             int packetOffset;
@@ -74,6 +75,14 @@ namespace Jxr.Managed.Core
             if (error != JxrError.None) return error;
             if (!packet.IsValid || packet.TileId != 0 || packet.PacketType != 0)
                 return JxrError.InvalidBitstream;
+            int trimFlexbits = 0;
+            if (main.TrimFlexbits)
+            {
+                uint trim;
+                error = reader.ReadBits(4, out trim);
+                if (error != JxrError.None) return error;
+                trimFlexbits = (int)trim;
+            }
 
             JxrSessionConfiguration sessionConfig;
             error = JxrSessionPlanner.FromHeaders(headers, out sessionConfig);
@@ -81,12 +90,19 @@ namespace Jxr.Managed.Core
             using (JxrDecoderSession session =
                 JxrDecoderSession.Create(sessionConfig, 0, 0, 0))
             {
+                bool dcOnly = plane.Subband == (int)JxrGraySubbandMode.DcOnly;
+                bool scaledArithmetic = plane.ScaledArithmetic;
+                bool hasHighpass = plane.Subband < (int)JxrGraySubbandMode.NoHighpass;
+                bool skipFlexbits = plane.Subband == (int)JxrGraySubbandMode.NoFlexbits;
                 JxrCodecConfiguration format = new JxrCodecConfiguration(
-                    JxrCodecColorFormat.YOnly, 1, true, false, true, true,
-                    false, true, true, false, false, 0, 0, 1, 1,
-                    new int[][] { new int[] { 1 } });
+                    JxrCodecColorFormat.YOnly, 1, true, dcOnly, hasHighpass,
+                    !skipFlexbits, skipFlexbits, true, true, false, false,
+                    0, 0, 1, 1,
+                    new int[][] { new int[] { JxrQuantization.Remap(
+                        q.GetHighpassIndex(0), plane.ScaledArithmetic, false).Parameter } });
                 JxrCodecState state = new JxrCodecState(format,
                     reader, reader, reader, reader);
+                state.Entropy.TrimFlexBits = trimFlexbits;
                 int imageWidth = (int)main.Width, imageHeight = (int)main.Height;
                 int columns = (imageWidth + 15) / 16;
                 int rowsCount = (imageHeight + 15) / 16;
@@ -94,11 +110,18 @@ namespace Jxr.Managed.Core
                     new JxrCoefficientPredictionRows(columns, 1);
                 int[] topCbp = new int[columns];
                 byte[] gray = new byte[imageWidth * imageHeight];
-                JxrQuantizer lossless = JxrQuantization.Remap(0, false, false);
+                JxrQuantizer dcQuantizer = JxrQuantization.Remap(
+                    q.GetDcIndex(0), plane.ScaledArithmetic, false);
+                JxrQuantizer lpQuantizer = JxrQuantization.Remap(
+                    plane.Subband == 3 ? q.GetDcIndex(0) : q.GetLowpassIndex(0),
+                    plane.ScaledArithmetic, false);
+                JxrQuantizer hpQuantizer = JxrQuantization.Remap(
+                    plane.Subband < 2 ? q.GetHighpassIndex(0) : q.GetDcIndex(0),
+                    plane.ScaledArithmetic, false);
                 JxrQuantizerSet quantizers = new JxrQuantizerSet(
-                    new JxrQuantizer[] { lossless.WithDcOffset() },
-                    new JxrQuantizer[][] { new JxrQuantizer[] { lossless } },
-                    new JxrQuantizer[][] { new JxrQuantizer[] { lossless } });
+                    new JxrQuantizer[] { dcQuantizer.WithDcOffset() },
+                    new JxrQuantizer[][] { new JxrQuantizer[] { lpQuantizer } },
+                    new JxrQuantizer[][] { new JxrQuantizer[] { hpQuantizer } });
                 for (int mbY = 0; mbY < rowsCount; mbY++)
                 {
                     if (mbY != 0) rows.AdvanceRow();
@@ -113,8 +136,11 @@ namespace Jxr.Managed.Core
                         Array.Clear(coefficients, 0, coefficients.Length);
                         error = JxrDcCodec.Decode(state);
                         if (error != JxrError.None) return error;
-                        error = JxrLpCodec.Decode(state);
-                        if (error != JxrError.None) return error;
+                        if (!dcOnly)
+                        {
+                            error = JxrLpCodec.Decode(state);
+                            if (error != JxrError.None) return error;
+                        }
                         error = JxrCoefficientPrediction.DecodeDcLp(state.Macroblock,
                             rows, JxrCodecColorFormat.YOnly, mbX, mbX == 0, mbY == 0);
                         if (error != JxrError.None) return error;
@@ -123,14 +149,17 @@ namespace Jxr.Managed.Core
                         if (error != JxrError.None) return error;
                         error = JxrQuantization.DequantizeMacroblock(state.CoefficientPlanes,
                             state.Macroblock, quantizers, JxrCodecColorFormat.YOnly,
-                            1, false);
+                            1, dcOnly);
                         if (error != JxrError.None) return error;
-                        error = JxrHpCodec.Decode(state);
-                        if (error != JxrError.None) return error;
-                        int cbp;
-                        error = state.MacroblockCbp.GetCbp(0, out cbp);
-                        if (error != JxrError.None) return error;
-                        leftCbp = topCbp[mbX] = cbp;
+                        if (hasHighpass)
+                        {
+                            error = JxrHpCodec.Decode(state);
+                            if (error != JxrError.None) return error;
+                            int cbp;
+                            error = state.MacroblockCbp.GetCbp(0, out cbp);
+                            if (error != JxrError.None) return error;
+                            leftCbp = topCbp[mbX] = cbp;
+                        }
                         error = JxrCoefficientPrediction.DecodeAc(state.Macroblock,
                             state.CoefficientPlanes, JxrCodecColorFormat.YOnly);
                         if (error != JxrError.None) return error;
@@ -144,8 +173,13 @@ namespace Jxr.Managed.Core
                                 if (pixelX >= imageWidth || pixelY >= imageHeight) continue;
                                 int block = (x >> 2) * 64 + (y >> 2) * 16;
                                 int local = LocalSampleOrder[(y & 3) * 4 + (x & 3)];
+                                int sample = samples[block + local];
+                                if (scaledArithmetic)
+                                    sample = unchecked(sample + 1027) >> 3;
+                                else
+                                    sample = unchecked(sample + 128);
                                 gray[pixelY * imageWidth + pixelX] =
-                                    JxrImagePipeline.ClipByte(unchecked(samples[block + local] + 128));
+                                    JxrImagePipeline.ClipByte(sample);
                             }
                     }
                 }

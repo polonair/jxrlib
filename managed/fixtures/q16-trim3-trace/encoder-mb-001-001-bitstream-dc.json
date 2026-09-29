@@ -1,0 +1,11 @@
+{
+  "mode": "encoder",
+  "packet": "dc",
+  "macroblock": { "x": 1, "y": 1 },
+  "byte_start": 804,
+  "bit_start": 6436,
+  "byte_end": 805,
+  "bit_end": 6443,
+  "bit_count": 7,
+  "binary_source": "encoder-bitstream.jxr"
+}

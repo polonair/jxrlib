@@ -41,6 +41,7 @@ namespace Jxr.Managed.Tests
             new TestCase("minimal_entropy_encoder_fixture", TestMinimalEntropyEncoderFixture),
             new TestCase("minimal_encoder_end_to_end", TestMinimalEncoderEndToEnd),
             new TestCase("gray_sizes_native_fixtures", TestGraySizesNativeFixtures),
+            new TestCase("gray_quality_native_fixtures", TestGrayQualityNativeFixtures),
             new TestCase("public_pixel_api", TestPublicPixelApi),
             new TestCase("public_stream_api", TestPublicStreamApi),
             new TestCase("image_pipeline_reference_vectors", TestImagePipelineReferenceVectors),
@@ -495,7 +496,128 @@ namespace Jxr.Managed.Tests
             return true;
         }
 
+        private static int ReadJsonInt(string path, string key)
+        {
+            string json = File.ReadAllText(path);
+            int position = json.IndexOf("\"" + key + "\"", StringComparison.Ordinal);
+            if (position < 0) throw new InvalidDataException("Missing JSON field " + key);
+            position = json.IndexOf(':', position) + 1;
+            while (position < json.Length && Char.IsWhiteSpace(json[position])) position++;
+            int end = position;
+            if (end < json.Length && json[end] == '-') end++;
+            while (end < json.Length && Char.IsDigit(json[end])) end++;
+            return Int32.Parse(json.Substring(position, end - position));
+        }
+
+        private static int[] ReadJsonValues(string path)
+        {
+            string json = File.ReadAllText(path);
+            int position = json.IndexOf("\"values\"", StringComparison.Ordinal);
+            if (position < 0) throw new InvalidDataException("Missing values in " + path);
+            position = json.IndexOf('[', position) + 1;
+            int end = json.IndexOf(']', position);
+            string[] fields = json.Substring(position, end - position).Split(',');
+            int[] values = new int[fields.Length];
+            for (int index = 0; index < fields.Length; index++)
+                values[index] = Int32.Parse(fields[index].Trim());
+            return values;
+        }
+
+        private static bool TestGrayQualityNativeFixtures()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "managed\\fixtures\\q16-all.jxr"))) directory = directory.Parent;
+            if (directory == null) return false;
+            string fixtureRoot = Path.Combine(directory.FullName, "managed\\fixtures");
+            byte[] bmp = File.ReadAllBytes(Path.Combine(fixtureRoot, "gray-31x19.bmp"));
+            JxrImage source;
+            if (JxrBmpAdapter.ReadGray8(bmp, out source) != JxrError.None) return false;
+            string[] names = { "q16-all", "q64-all", "q16-no-flex", "q16-trim3",
+                "q16-no-hp", "q16-dc-only" };
+            JxrGraySubbandMode[] subbands = { JxrGraySubbandMode.All,
+                JxrGraySubbandMode.All, JxrGraySubbandMode.NoFlexbits,
+                JxrGraySubbandMode.All, JxrGraySubbandMode.NoHighpass,
+                JxrGraySubbandMode.DcOnly };
+            int[] qualities = { 16, 64, 16, 16, 16, 16 };
+            int[] trims = { 0, 0, 0, 3, 0, 0 };
+            for (int item = 0; item < names.Length; item++)
+            {
+                JxrEncoderOptions options = new JxrEncoderOptions();
+                options.QualityIndex = qualities[item];
+                options.Subbands = subbands[item];
+                options.TrimFlexbits = trims[item];
+                byte[] encoded;
+                JxrGrayEncodingTrace trace = new JxrGrayEncodingTrace();
+                JxrError error = JxrCodec.Encode(source, options, out encoded, trace);
+                byte[] native = File.ReadAllBytes(Path.Combine(fixtureRoot, names[item] + ".jxr"));
+                if (error != JxrError.None || !EqualBytes(encoded, native))
+                {
+                    int difference = 0;
+                    if (encoded != null)
+                        while (difference < encoded.Length && difference < native.Length &&
+                            encoded[difference] == native[difference]) difference++;
+                    Console.WriteLine("Gray quality encode " + names[item] + ": " + error +
+                        " difference " + difference + " lengths " +
+                        (encoded == null ? 0 : encoded.Length) + "/" + native.Length);
+                    return false;
+                }
+                if (item != 2)
+                {
+                    JxrImage decoded, expected;
+                    error = JxrCodec.Decode(native, new JxrDecoderOptions(), out decoded);
+                    bool decodedMatches = error == JxrError.None;
+                    if (decodedMatches)
+                        decodedMatches = JxrBmpAdapter.ReadGray8(
+                            File.ReadAllBytes(Path.Combine(fixtureRoot,
+                                names[item] + "-restored.bmp")), out expected) == JxrError.None &&
+                            EqualBytes(decoded.Pixels, expected.Pixels);
+                    if (!decodedMatches)
+                    { Console.WriteLine("Gray quality decode " + names[item] + ": " + error); return false; }
+                }
+                string traceDir = Path.Combine(fixtureRoot, names[item] + "-trace");
+                if (trace.MacroblockCount != 4) return false;
+                for (int y = 0; y < 2; y++)
+                    for (int x = 0; x < 2; x++)
+                    {
+                        int index = y * 2 + x;
+                        string prefix = Path.Combine(traceDir, "encoder-mb-" +
+                            x.ToString("D3") + "-" + y.ToString("D3"));
+                        JxrGrayMacroblockTrace actual = trace.GetMacroblock(index);
+                        bool quantizedMatch = EqualInts(actual.QuantizedCoefficients,
+                            ReadJsonValues(prefix + "-quantized_coefficients.json"));
+                        bool predictedMatch = EqualInts(actual.PredictedCoefficients,
+                            ReadJsonValues(prefix + "-predicted_coefficients.json"));
+                        bool bitCountsMatch = actual.DcBitEnd - actual.DcBitStart ==
+                            ReadJsonInt(prefix + "-bitstream-dc.json", "bit_count");
+                        if (subbands[item] != JxrGraySubbandMode.DcOnly)
+                            bitCountsMatch = bitCountsMatch &&
+                                actual.LpBitEnd - actual.LpBitStart ==
+                                ReadJsonInt(prefix + "-bitstream-lp.json", "bit_count");
+                        if ((int)subbands[item] < (int)JxrGraySubbandMode.NoHighpass)
+                            bitCountsMatch = bitCountsMatch &&
+                                actual.HpBitEnd - actual.HpBitStart ==
+                                ReadJsonInt(prefix + "-bitstream-hp.json", "bit_count");
+                        if (!quantizedMatch || !predictedMatch || !bitCountsMatch)
+                        { Console.WriteLine("Gray quality trace differs for " + names[item] +
+                            " at macroblock " + x + "," + y + " (quantized=" +
+                            quantizedMatch + ", predicted=" + predictedMatch +
+                            ", bit ranges=" + bitCountsMatch + ")"); return false; }
+                    }
+            }
+            return true;
+        }
+
         private static bool EqualBytes(byte[] left, byte[] right)
+        {
+            if (left == null || right == null || left.Length != right.Length)
+                return false;
+            for (int index = 0; index < left.Length; index++)
+                if (left[index] != right[index]) return false;
+            return true;
+        }
+
+        private static bool EqualInts(int[] left, int[] right)
         {
             if (left == null || right == null || left.Length != right.Length)
                 return false;

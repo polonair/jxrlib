@@ -27,16 +27,34 @@ namespace Jxr.Managed.Core
         internal static JxrError EncodeGrayPixels(byte[] pixels, int stride,
             int width, int height, out byte[] jxr)
         {
+            return EncodeGrayPixels(pixels, stride, width, height,
+                new JxrEncoderOptions(), out jxr);
+        }
+
+        internal static JxrError EncodeGrayPixels(byte[] pixels, int stride,
+            int width, int height, JxrEncoderOptions options, out byte[] jxr)
+        {
+            return EncodeGrayPixels(pixels, stride, width, height, options,
+                null, out jxr);
+        }
+
+        internal static JxrError EncodeGrayPixels(byte[] pixels, int stride,
+            int width, int height, JxrEncoderOptions options,
+            JxrGrayEncodingTrace trace, out byte[] jxr)
+        {
             jxr = null;
+            if (trace != null) trace.Clear();
             JxrSessionConfiguration sessionConfig = new JxrSessionConfiguration(
                 width, height, 0, 1, 4, false);
             using (JxrEncoderSession session = JxrEncoderSession.Create(
                 sessionConfig, 0, 0))
-                return EncodeWithSession(pixels, stride, width, height, session, out jxr);
+                return EncodeWithSession(pixels, stride, width, height, options,
+                    session, trace, out jxr);
         }
 
         private static JxrError EncodeWithSession(byte[] pixels,
-            int stride, int width, int height, JxrEncoderSession session, out byte[] jxr)
+            int stride, int width, int height, JxrEncoderOptions options,
+            JxrEncoderSession session, JxrGrayEncodingTrace trace, out byte[] jxr)
         {
             jxr = null;
             JxrError error;
@@ -46,17 +64,28 @@ namespace Jxr.Managed.Core
             JxrCoefficientPlaneState planes = new JxrCoefficientPlaneState(
                 planeArrays, JxrCoefficientColorFormat.Other, 1);
             JxrMacroblockState macroblock = new JxrMacroblockState(1);
-            JxrQuantizer lossless = JxrQuantization.Remap(0, false, false);
+            byte dcIndex = QpIndex(options.DcQuantizerIndex, options.QualityIndex);
+            byte lpIndex = QpIndex(options.LowpassQuantizerIndex, options.QualityIndex);
+            byte hpIndex = QpIndex(options.HighpassQuantizerIndex, options.QualityIndex);
+            bool scaledArithmetic = options.Subbands != JxrGraySubbandMode.All ||
+                dcIndex > 1 || lpIndex > 1 || hpIndex > 1;
+            JxrQuantizer dcQuantizer = JxrQuantization.Remap(dcIndex, scaledArithmetic, false);
+            JxrQuantizer lpQuantizer = JxrQuantization.Remap(lpIndex, scaledArithmetic, false);
+            JxrQuantizer hpQuantizer = JxrQuantization.Remap(hpIndex, scaledArithmetic, false);
             JxrQuantizerSet quantizers = new JxrQuantizerSet(
-                new JxrQuantizer[] { lossless.WithDcOffset() },
-                new JxrQuantizer[][] { new JxrQuantizer[] { lossless } },
-                new JxrQuantizer[][] { new JxrQuantizer[] { lossless } });
+                new JxrQuantizer[] { dcQuantizer.WithDcOffset() },
+                new JxrQuantizer[][] { new JxrQuantizer[] { lpQuantizer } },
+                new JxrQuantizer[][] { new JxrQuantizer[] { hpQuantizer } });
             JxrCoefficientPredictionRows rows =
                 new JxrCoefficientPredictionRows(columns, 1);
             JxrCodecConfiguration format = new JxrCodecConfiguration(
-                JxrCodecColorFormat.YOnly, 1, true, false, true, true,
-                false, true, true, false, false, 0, 0, 1, 1,
-                new int[][] { new int[] { 1 } });
+                JxrCodecColorFormat.YOnly, 1, true,
+                options.Subbands == JxrGraySubbandMode.DcOnly,
+                (int)options.Subbands < (int)JxrGraySubbandMode.NoHighpass,
+                options.Subbands != JxrGraySubbandMode.NoFlexbits,
+                options.Subbands == JxrGraySubbandMode.NoFlexbits,
+                true, true, false, false, 0, 0, 1, 1,
+                new int[][] { new int[] { hpQuantizer.Parameter } });
             JxrBitReader unused = new JxrBitReader(new byte[0]);
             JxrCodecState state = new JxrCodecState(format, unused, unused, unused, unused);
             int[] dc = new int[16];
@@ -77,38 +106,66 @@ namespace Jxr.Managed.Core
                             int pixelY = Math.Min(height - 1, mbY * 16 + y);
                             int block = (x >> 2) * 64 + (y >> 2) * 16;
                             int local = LocalSampleOrder[(y & 3) * 4 + (x & 3)];
-                            coefficients[block + local] =
-                                pixels[pixelY * stride + pixelX] - 128;
+                            int centered = pixels[pixelY * stride + pixelX] - 128;
+                            // The native encoder keeps three fractional bits
+                            // for lossy integer profiles (SHIFTZERO + QPFRACBITS).
+                            // Preserve that scale through the integer transform.
+                            coefficients[block + local] = scaledArithmetic
+                                ? unchecked(centered << 3) : centered;
                         }
                     ForwardMacroblock(coefficients);
+                    int[] transformed = trace == null ? null :
+                        (int[])coefficients.Clone();
                     error = JxrQuantization.QuantizeMacroblock(planes, macroblock,
-                        quantizers, JxrCodecColorFormat.YOnly, 1, false, false, false);
+                        quantizers, JxrCodecColorFormat.YOnly, 1,
+                        options.Subbands == JxrGraySubbandMode.DcOnly,
+                (int)options.Subbands >= (int)JxrGraySubbandMode.NoHighpass, false);
                     if (error != JxrError.None) return error;
+                    int[] quantized = trace == null ? null :
+                        (int[])coefficients.Clone();
                     error = JxrCoefficientPrediction.Encode(macroblock, planes,
                         rows, JxrCodecColorFormat.YOnly, mbX, mbX == 0, mbY == 0);
                     if (error != JxrError.None) return error;
+                    int[] predicted = trace == null ? null :
+                        (int[])coefficients.Clone();
                     for (int index = 0; index < 16; index++)
                     {
                         error = macroblock.GetDcCoefficient(0, index, out dc[index]);
                         if (error != JxrError.None) return error;
                     }
                     int dcEnd, lpEnd, hpEnd;
+                    int macroblockBitStart = writer.BitCount;
                     error = JxrMinimalEntropyEncoder.EncodeMacroblock(state,
-                        coefficients, dc, macroblock.Orientation, writer,
+                        coefficients, dc, macroblock.Orientation,
+                        (int)options.Subbands, options.TrimFlexbits, writer,
                         out dcEnd, out lpEnd, out hpEnd);
                     if (error != JxrError.None) return error;
+                    if (trace != null)
+                        trace.Add(new JxrGrayMacroblockTrace(mbX, mbY,
+                            transformed, quantized, predicted,
+                            macroblockBitStart, dcEnd,
+                            dcEnd, lpEnd, lpEnd, hpEnd));
                     int previousTop;
                     state.GetNeighborCbp(0, out previousTop, out leftCbp);
                     topCbp[mbX] = leftCbp;
                 }
             }
+            int entropyBitCount = writer.BitCount;
             writer.AlignByte();
             byte[] codestream;
             error = JxrCodestreamWriter.WriteGraySpatial(writer.ToArray(),
-                width, height, 0, out codestream);
+                width, height, dcIndex, lpIndex, hpIndex, options.Subbands,
+                scaledArithmetic, options.TrimFlexbits, entropyBitCount,
+                out codestream);
             if (error != JxrError.None) return error;
             return JxrContainerWriter.WriteGray8(codestream, width, height,
                 95.9866f, 95.9866f, out jxr);
+        }
+
+        private static byte QpIndex(int overrideIndex, int qualityIndex)
+        {
+            int index = overrideIndex < 0 ? qualityIndex : overrideIndex;
+            return (byte)(index < 2 ? 0 : index);
         }
 
         private static void ForwardMacroblock(int[] values)

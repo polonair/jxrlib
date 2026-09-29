@@ -9,8 +9,18 @@ namespace Jxr.Managed.Core
         public static JxrError WriteGraySpatial(JxrBitWriter writer,
             int width, int height, byte quantizerIndex)
         {
+            return WriteGraySpatial(writer, width, height, quantizerIndex,
+                quantizerIndex, quantizerIndex, JxrGraySubbandMode.All, false, 0);
+        }
+
+        public static JxrError WriteGraySpatial(JxrBitWriter writer,
+            int width, int height, byte dcQuantizerIndex,
+            byte lowpassQuantizerIndex, byte highpassQuantizerIndex,
+            JxrGraySubbandMode subbands, bool scaledArithmetic, int trimFlexbits)
+        {
             if (writer == null || width < 1 || height < 1 ||
-                writer.BitCount != 0)
+                writer.BitCount != 0 || (int)subbands < 0 || (int)subbands > 3 ||
+                trimFlexbits < 0 || trimFlexbits > 15)
                 return JxrError.InvalidArgument;
             bool abbreviated = ((long)width + 15) / 16 <= 255 &&
                 ((long)height + 15) / 16 <= 255;
@@ -29,7 +39,7 @@ namespace Jxr.Managed.Core
             writer.Write(abbreviated ? 1U : 0U, 1);
             writer.Write(1, 1);  // short header flag used by native encoder
             writer.Write(0, 1);  // no windowing
-            writer.Write(0, 1);  // no flexbit trimming
+            writer.Write(trimFlexbits != 0 ? 1U : 0U, 1);
             writer.Write(0, 1);  // no tile stretching
             writer.Write(0, 2);  // reserved and red/blue swap
             writer.Write(0, 1);  // no alpha
@@ -40,13 +50,19 @@ namespace Jxr.Managed.Core
             writer.AlignByte();
 
             writer.Write(0, 3);  // Y_ONLY plane
-            writer.Write(0, 1);  // unscaled arithmetic
-            writer.Write(0, 4);  // all subbands
-            writer.Write(1, 1); writer.Write(quantizerIndex, 8); // DC frame QP
-            writer.Write(0, 1); writer.Write(1, 1);              // LP own frame QP
-            writer.Write(quantizerIndex, 8);
-            writer.Write(0, 1); writer.Write(1, 1);              // HP own frame QP
-            writer.Write(quantizerIndex, 8);
+            writer.Write(scaledArithmetic ? 1U : 0U, 1);
+            writer.Write((uint)subbands, 4);
+            writer.Write(1, 1); writer.Write(dcQuantizerIndex, 8); // DC frame QP
+            if (subbands != JxrGraySubbandMode.DcOnly)
+            {
+                writer.Write(0, 1); writer.Write(1, 1);          // LP own frame QP
+                writer.Write(lowpassQuantizerIndex, 8);
+            }
+            if ((int)subbands < (int)JxrGraySubbandMode.NoHighpass)
+            {
+                writer.Write(0, 1); writer.Write(1, 1);          // HP own frame QP
+                writer.Write(highpassQuantizerIndex, 8);
+            }
             writer.AlignByte();
             return JxrError.None;
         }
@@ -73,11 +89,38 @@ namespace Jxr.Managed.Core
         public static JxrError WriteGraySpatial(byte[] entropyPacket,
             int width, int height, byte quantizerIndex, out byte[] codestream)
         {
+            return WriteGraySpatial(entropyPacket, width, height, quantizerIndex,
+                quantizerIndex, quantizerIndex, JxrGraySubbandMode.All, false, 0,
+                out codestream);
+        }
+
+        public static JxrError WriteGraySpatial(byte[] entropyPacket,
+            int width, int height, byte dcQuantizerIndex,
+            byte lowpassQuantizerIndex, byte highpassQuantizerIndex,
+            JxrGraySubbandMode subbands, bool scaledArithmetic,
+            int trimFlexbits, out byte[] codestream)
+        {
+            return WriteGraySpatial(entropyPacket, width, height,
+                dcQuantizerIndex, lowpassQuantizerIndex, highpassQuantizerIndex,
+                subbands, scaledArithmetic, trimFlexbits,
+                entropyPacket == null ? 0 : entropyPacket.Length * 8,
+                out codestream);
+        }
+
+        public static JxrError WriteGraySpatial(byte[] entropyPacket,
+            int width, int height, byte dcQuantizerIndex,
+            byte lowpassQuantizerIndex, byte highpassQuantizerIndex,
+            JxrGraySubbandMode subbands, bool scaledArithmetic,
+            int trimFlexbits, int entropyBitCount, out byte[] codestream)
+        {
             codestream = null;
-            if (entropyPacket == null) return JxrError.InvalidArgument;
+            if (entropyPacket == null || entropyBitCount < 0 ||
+                entropyBitCount > (long)entropyPacket.Length * 8)
+                return JxrError.InvalidArgument;
             JxrBitWriter writer = new JxrBitWriter();
             JxrError error = JxrHeaderWriter.WriteGraySpatial(writer,
-                width, height, quantizerIndex);
+                width, height, dcQuantizerIndex, lowpassQuantizerIndex,
+                highpassQuantizerIndex, subbands, scaledArithmetic, trimFlexbits);
             if (error != JxrError.None) return error;
 
             // No index table in this spatial profile. The length word covers
@@ -95,14 +138,20 @@ namespace Jxr.Managed.Core
                 writer.Write(markerBytes[index], 8);
             error = JxrPacketWriter.WriteHeader(writer, 0, 0);
             if (error != JxrError.None) return error;
-            byte[] prefix = writer.ToArray();
-            long total = (long)prefix.Length + entropyPacket.Length;
-            if (total > Int32.MaxValue) return JxrError.UnsupportedFeature;
-            byte[] result = new byte[(int)total];
-            Array.Copy(prefix, result, prefix.Length);
-            Array.Copy(entropyPacket, 0, result, prefix.Length,
-                entropyPacket.Length);
-            codestream = result;
+            if (trimFlexbits != 0) writer.Write((uint)trimFlexbits, 4);
+            JxrBitReader entropyReader = new JxrBitReader(entropyPacket);
+            int remainingBits = entropyBitCount;
+            while (remainingBits > 0)
+            {
+                uint bit;
+                error = entropyReader.ReadBits(1, out bit);
+                if (error != JxrError.None) return error;
+                error = writer.Write(bit, 1);
+                if (error != JxrError.None) return error;
+                remainingBits--;
+            }
+            writer.AlignByte();
+            codestream = writer.ToArray();
             return JxrError.None;
         }
     }

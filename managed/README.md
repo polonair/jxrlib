@@ -49,10 +49,17 @@ caller's stream. This stage buffers one complete compressed image internally;
 it is not incremental streaming. A failed destination write may leave a
 partial JXR in that stream and returns `IoFailure`.
 
-The current integrated options are lossless quality index 1, no overlap and
-spatial layout for positive-size `Gray8` images. Invalid option values return
-`InvalidArgument`; valid but unimplemented profiles return
-`UnsupportedFeature`. `JxrBmpAdapter` reads/writes canonical 8bpp Gray BMPs
+The integrated `Gray8` encoder supports QP indexes 0–255 (indexes 0 and 1
+select the native lossless index), independent DC/LP/HP QP overrides, all four
+subband modes, optional flexbit trimming, no overlap and spatial layout.
+Native fixture tests compare complete JXR bytes, quantized/predicted
+coefficients and per-band bit counts for QP 16/64, trim-flexbits, no-HP and
+DC-only cases. The managed decoder also covers scaled QP, trimming, no-HP and
+DC-only fixtures. No-flexbits streams are encoder-conformant, but managed HP
+decoding still needs follow-up; the C decoder fixture remains the output
+reference for that case. Invalid option values return `InvalidArgument`;
+valid but unimplemented profiles return `UnsupportedFeature`.
+`JxrBmpAdapter` reads/writes canonical 8bpp Gray BMPs
 at arbitrary dimensions and is optional: JPEG XR encoding and decoding no longer depend
 on BMP. The original `JxrMinimalEncoder.EncodeGrayBmp` and
 `JxrMinimalDecoder.DecodeGrayBmp` methods remain compatibility wrappers.

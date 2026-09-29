@@ -1,0 +1,14 @@
+{
+  "mode": "encoder",
+  "width": 31,
+  "height": 19,
+  "macroblocks": { "width": 2, "height": 2 },
+  "color_format": 0,
+  "bit_depth": 1,
+  "overlap": 0,
+  "bitstream_format": 0,
+  "channels": 1,
+  "tiles": { "columns": 1, "rows": 1 },
+  "subbands": 1,
+  "alpha_mode": 0
+}

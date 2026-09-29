@@ -48,25 +48,34 @@ namespace Jxr.Managed.Core
             JxrBitReader unused = new JxrBitReader(new byte[0]);
             JxrCodecState state = new JxrCodecState(format, unused, unused, unused, unused);
             return EncodeMacroblock(state, coefficients, dc, orientation,
-                writer, out dcEnd, out lpEnd, out hpEnd);
+                0, 0, writer, out dcEnd, out lpEnd, out hpEnd);
         }
 
         internal static JxrError EncodeMacroblock(JxrCodecState state,
-            int[] coefficients, int[] dc, int orientation, JxrBitWriter writer,
+            int[] coefficients, int[] dc, int orientation, int subbands,
+            int trimFlexbits, JxrBitWriter writer,
             out int dcEnd, out int lpEnd, out int hpEnd)
         {
             dcEnd = lpEnd = hpEnd = 0;
             if (state == null || coefficients == null || coefficients.Length != 256 ||
                 dc == null || dc.Length != 16 || writer == null ||
-                orientation < 0 || orientation > 2) return JxrError.InvalidArgument;
+                orientation < 0 || orientation > 2 || subbands < 0 || subbands > 3 ||
+                trimFlexbits < 0 || trimFlexbits > 15) return JxrError.InvalidArgument;
             JxrError error = EncodeDc(state, dc, writer);
             if (error != JxrError.None) return error;
             dcEnd = writer.BitCount;
-            error = EncodeLp(state, dc, writer);
-            if (error != JxrError.None) return error;
+            if (subbands != (int)JxrGraySubbandMode.DcOnly)
+            {
+                error = EncodeLp(state, dc, writer);
+                if (error != JxrError.None) return error;
+            }
             lpEnd = writer.BitCount;
-            error = EncodeHp(state, coefficients, orientation, writer);
-            if (error != JxrError.None) return error;
+            if (subbands < (int)JxrGraySubbandMode.NoHighpass)
+            {
+                state.Entropy.TrimFlexBits = trimFlexbits;
+                error = EncodeHp(state, coefficients, orientation, writer, subbands);
+                if (error != JxrError.None) return error;
+            }
             hpEnd = writer.BitCount;
             return JxrError.None;
         }
@@ -207,11 +216,17 @@ namespace Jxr.Managed.Core
         }
 
         private static int Scan(int[] values, int offset, JxrAdaptiveScan scan,
-            int modelBits, int[] residuals, int[] pairs)
+            int modelBits, int trimBits, int[] residuals, int[] pairs)
         {
-            int run = 0, count = 0, mask = (1 << modelBits) - 1;
+            // The native zero-model-bit path is distinct from AdaptiveScanTrim
+            // even when trimBits is zero; keep its run syntax on the ordinary
+            // scan path.  AdaptiveScanTrim applies only to positive model bits.
+            bool fullyTrimmed = modelBits > 0 && modelBits <= trimBits;
+            int run = fullyTrimmed ? 1 : 0, count = 0;
+            int mask = (1 << modelBits) - 1;
             for (int position = 1; position < 16; position++)
             {
+                if (fullyTrimmed && position > 1) run++;
                 uint index;
                 scan.GetCoefficientIndex(position, out index);
                 int coefficient = values[offset + (int)index];
@@ -219,17 +234,30 @@ namespace Jxr.Managed.Core
                 int coarse = magnitude >> modelBits;
                 if (coarse != 0)
                 {
-                    residuals[index] = (magnitude & mask) * 2;
-                    pairs[2 * count] = run;
+                    if (!fullyTrimmed)
+                        residuals[index] = ((magnitude & mask) >> trimBits) * 2;
+                    pairs[2 * count] = fullyTrimmed ? run - 1 : run;
                     pairs[2 * count + 1] = coefficient < 0 ? -coarse : coarse;
                     count++; run = 0;
                     scan.ObserveNonZero(position);
                 }
                 else
                 {
-                    residuals[index] = magnitude * 4 +
-                        (coefficient < 0 ? 2 : 0) + (coefficient != 0 ? 1 : 0);
-                    run++;
+                    if (fullyTrimmed)
+                    {
+                        // Trimmed scan counts the implicit first location
+                        // differently; subsequent run increments happen at
+                        // the start of each iteration, matching the C loop.
+                    }
+                    else
+                    {
+                        int sign = coefficient < 0 ? -1 : 0;
+                        int trimmed = unchecked(((coefficient + sign) >> trimBits) - sign);
+                        int trimmedSign = trimmed < 0 ? -1 : 0;
+                        residuals[index] = unchecked((trimmed ^ trimmedSign) * 4 +
+                            (6 & trimmedSign) + (trimmed != 0 ? 1 : 0));
+                        run++;
+                    }
                 }
             }
             return count;
@@ -260,7 +288,7 @@ namespace Jxr.Managed.Core
             int ignored, bits;
             state.Entropy.LpModel.Get(0, out ignored, out bits);
             int[] residuals = new int[16], pairs = new int[32];
-            int count = Scan(dc, 0, scan, bits, residuals, pairs);
+            int count = Scan(dc, 0, scan, bits, 0, residuals, pairs);
             writer.Write((uint)(count > 0 ? 1 : 0), 1);
             if (count != 0)
             {
@@ -335,7 +363,7 @@ namespace Jxr.Managed.Core
         }
 
         private static JxrError EncodeHp(JxrCodecState state, int[] coefficients,
-            int orientation, JxrBitWriter writer)
+            int orientation, JxrBitWriter writer, int subbands)
         {
             JxrAdaptiveScan scan = orientation == 1 ?
                 state.Entropy.VerticalScan : state.Entropy.HorizontalScan;
@@ -355,6 +383,10 @@ namespace Jxr.Managed.Core
             int differential = PredictCbp(state, cbp);
             JxrError error = EncodeCbp(state, differential, writer);
             if (error != JxrError.None) return error;
+            int trimBits = state.Entropy.TrimFlexBits;
+            int flexBits = Math.Max(0, bits - trimBits);
+            bool writeFlexbits = subbands != (int)JxrGraySubbandMode.NoFlexbits &&
+                flexBits != 0;
             int[] residuals = new int[16], pairs = new int[32];
             int nonzero = 0;
             for (int block = 0; block < 16; block++)
@@ -364,21 +396,19 @@ namespace Jxr.Managed.Core
                 int count = 0;
                 if ((cbp & (1 << block)) != 0)
                 {
-                    count = Scan(coefficients, offset, scan, bits, residuals, pairs);
+                    count = Scan(coefficients, offset, scan, bits, trimBits, residuals, pairs);
                     nonzero += count;
                     error = EncodeBlock(state, pairs, count, 1, 13, writer);
                     if (error != JxrError.None) return error;
                 }
-                if (bits != 0)
+                if (writeFlexbits)
                     for (int index = 1; index < 16; index++)
                     {
                         int coefficientIndex = CoefficientOrder[index];
                         int residual = (cbp & (1 << block)) != 0 ?
                             residuals[coefficientIndex] :
-                            Math.Abs(coefficients[offset + coefficientIndex]) * 4 +
-                            (coefficients[offset + coefficientIndex] < 0 ? 2 : 0) +
-                            (coefficients[offset + coefficientIndex] != 0 ? 1 : 0);
-                        writer.Write((uint)(residual >> 1), bits + (residual & 1));
+                            TrimmedResidual(coefficients[offset + coefficientIndex], trimBits);
+                        writer.Write((uint)(residual >> 1), flexBits + (residual & 1));
                     }
             }
             error = state.Entropy.AcModel.UpdateForMacroblock(
@@ -395,6 +425,14 @@ namespace Jxr.Managed.Core
                 }
             }
             return JxrError.None;
+        }
+
+        private static int TrimmedResidual(int coefficient, int trimBits)
+        {
+            int sign = coefficient < 0 ? -1 : 0;
+            int trimmed = unchecked(((coefficient + sign) >> trimBits) - sign);
+            return unchecked((trimmed ^ sign) * 4 + (6 & sign) +
+                (trimmed != 0 ? 1 : 0));
         }
     }
 }
