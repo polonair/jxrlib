@@ -39,6 +39,44 @@ namespace Jxr.Managed.Core
             return JxrError.None;
         }
 
+        public static JxrError WriteRgb24(JxrImage image, out byte[] bitmap)
+        {
+            bitmap = null;
+            if (image == null) return JxrError.InvalidArgument;
+            if (image.Format != JxrPixelFormat.Rgb24 &&
+                image.Format != JxrPixelFormat.Bgr24)
+                return JxrError.UnsupportedFeature;
+            long rowBytes = ((long)image.Width * 3 + 3) & ~3L;
+            if (rowBytes * image.Height > Int32.MaxValue - 54)
+                return JxrError.UnsupportedFeature;
+            int bmpStride = (int)rowBytes;
+            byte[] bmp = new byte[54 + bmpStride * image.Height];
+            bmp[0] = (byte)'B'; bmp[1] = (byte)'M';
+            Write32(bmp, 2, bmp.Length);
+            Write32(bmp, 10, 54);
+            Write32(bmp, 14, 40);
+            Write32(bmp, 18, image.Width);
+            Write32(bmp, 22, image.Height);
+            Write16(bmp, 26, 1);
+            Write16(bmp, 28, 24);
+            Write32(bmp, 34, bmpStride * image.Height);
+            Write32(bmp, 38, 3780);
+            Write32(bmp, 42, 3780);
+            bool rgb = image.Format == JxrPixelFormat.Rgb24;
+            for (int row = 0; row < image.Height; row++)
+                for (int column = 0; column < image.Width; column++)
+                {
+                    int source = row * image.Stride + column * 3;
+                    int destination = 54 + (image.Height - 1 - row) *
+                        bmpStride + column * 3;
+                    bmp[destination] = image.Pixels[source + (rgb ? 2 : 0)];
+                    bmp[destination + 1] = image.Pixels[source + 1];
+                    bmp[destination + 2] = image.Pixels[source + (rgb ? 0 : 2)];
+                }
+            bitmap = bmp;
+            return JxrError.None;
+        }
+
         public static JxrError ReadGray8(byte[] bitmap, out JxrImage image)
         {
             image = null;

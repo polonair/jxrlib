@@ -27,11 +27,18 @@ namespace Jxr.Managed.Core
                 (options.Layout != JxrBitstreamLayout.Spatial &&
                  options.Layout != JxrBitstreamLayout.Frequency))
                 return JxrError.InvalidArgument;
-            if (image.Format != JxrPixelFormat.Gray8 ||
-                options.Overlap != 0 || options.Layout != JxrBitstreamLayout.Spatial)
+            if (options.Overlap != 0 || options.Layout != JxrBitstreamLayout.Spatial)
                 return JxrError.UnsupportedFeature;
-            return JxrMinimalEncoder.EncodeGrayPixels(image.Pixels,
-                image.Stride, image.Width, image.Height, options, trace, out jxr);
+            if (image.Format == JxrPixelFormat.Gray8)
+                return JxrMinimalEncoder.EncodeGrayPixels(image.Pixels,
+                    image.Stride, image.Width, image.Height, options, trace, out jxr);
+            if (image.Format == JxrPixelFormat.Rgb24 ||
+                image.Format == JxrPixelFormat.Bgr24)
+            {
+                if (trace != null) return JxrError.UnsupportedFeature;
+                return JxrMinimalColorEncoder.Encode(image, options, out jxr);
+            }
+            return JxrError.UnsupportedFeature;
         }
 
         public static JxrError Decode(byte[] jxr, JxrDecoderOptions options,

@@ -3,9 +3,62 @@ using System;
 namespace Jxr.Managed.Core
 {
     // Field-by-field counterpart of the native main/image-plane writers.
-    // This first writer supports one Y_ONLY spatial tile and frame quantizers.
+    // Single spatial packet for Gray8 or full-resolution RGB24/YUV444.
     public static class JxrHeaderWriter
     {
+        public static JxrError WriteRgbSpatial(JxrBitWriter writer,
+            int width, int height, byte dcQuantizerIndex,
+            byte lowpassQuantizerIndex, byte highpassQuantizerIndex,
+            JxrGraySubbandMode subbands, bool scaledArithmetic, int trimFlexbits)
+        {
+            if (writer == null || width < 1 || height < 1 ||
+                writer.BitCount != 0 || (int)subbands < 0 || (int)subbands > 3 ||
+                trimFlexbits < 0 || trimFlexbits > 15)
+                return JxrError.InvalidArgument;
+            bool abbreviated = ((long)width + 15) / 16 <= 255 &&
+                ((long)height + 15) / 16 <= 255;
+            byte[] signature = { (byte)'W', (byte)'M', (byte)'P', (byte)'H',
+                (byte)'O', (byte)'T', (byte)'O', 0 };
+            for (int index = 0; index < signature.Length; index++)
+                writer.Write(signature[index], 8);
+            writer.Write(1, 4); writer.Write(1, 4); // version, subversion
+            writer.Write(0, 1); writer.Write(0, 1); // no tiles, spatial
+            writer.Write(0, 3); writer.Write(0, 1); // orientation, index
+            writer.Write(0, 2); writer.Write(abbreviated ? 1U : 0U, 1);
+            writer.Write(1, 1); writer.Write(0, 1); // short header, no window
+            writer.Write(trimFlexbits != 0 ? 1U : 0U, 1);
+            writer.Write(0, 1); writer.Write(0, 2); writer.Write(0, 1);
+            writer.Write(7, 4); writer.Write(1, 4); // CF_RGB, BD_8
+            writer.Write((uint)(width - 1), abbreviated ? 16 : 32);
+            writer.Write((uint)(height - 1), abbreviated ? 16 : 32);
+            writer.AlignByte();
+
+            writer.Write(3, 3); // YUV_444 internal planes
+            writer.Write(scaledArithmetic ? 1U : 0U, 1);
+            writer.Write((uint)subbands, 4);
+            writer.Write(0, 8); // no chroma centering
+            writer.Write(1, 1); // frame DC quantizer
+            WriteThreeChannelQuantizer(writer, dcQuantizerIndex);
+            if (subbands != JxrGraySubbandMode.DcOnly)
+            {
+                writer.Write(0, 1); writer.Write(1, 1);
+                WriteThreeChannelQuantizer(writer, lowpassQuantizerIndex);
+            }
+            if ((int)subbands < (int)JxrGraySubbandMode.NoHighpass)
+            {
+                writer.Write(0, 1); writer.Write(1, 1);
+                WriteThreeChannelQuantizer(writer, highpassQuantizerIndex);
+            }
+            writer.AlignByte();
+            return JxrError.None;
+        }
+
+        private static void WriteThreeChannelQuantizer(JxrBitWriter writer, byte index)
+        {
+            writer.Write(2, 2); // native -q mode: independent channel indices
+            for (int channel = 0; channel < 3; channel++) writer.Write(index, 8);
+        }
+
         public static JxrError WriteGraySpatial(JxrBitWriter writer,
             int width, int height, byte quantizerIndex)
         {
@@ -86,6 +139,18 @@ namespace Jxr.Managed.Core
 
     public static class JxrCodestreamWriter
     {
+        public static JxrError WriteRgbSpatial(byte[] entropyPacket,
+            int width, int height, byte dcQuantizerIndex,
+            byte lowpassQuantizerIndex, byte highpassQuantizerIndex,
+            JxrGraySubbandMode subbands, bool scaledArithmetic,
+            int trimFlexbits, int entropyBitCount, out byte[] codestream)
+        {
+            return WriteSpatial(entropyPacket, width, height, dcQuantizerIndex,
+                lowpassQuantizerIndex, highpassQuantizerIndex, subbands,
+                scaledArithmetic, trimFlexbits, entropyBitCount, true,
+                out codestream);
+        }
+
         public static JxrError WriteGraySpatial(byte[] entropyPacket,
             int width, int height, byte quantizerIndex, out byte[] codestream)
         {
@@ -113,14 +178,31 @@ namespace Jxr.Managed.Core
             JxrGraySubbandMode subbands, bool scaledArithmetic,
             int trimFlexbits, int entropyBitCount, out byte[] codestream)
         {
+            return WriteSpatial(entropyPacket, width, height, dcQuantizerIndex,
+                lowpassQuantizerIndex, highpassQuantizerIndex, subbands,
+                scaledArithmetic, trimFlexbits, entropyBitCount, false,
+                out codestream);
+        }
+
+        private static JxrError WriteSpatial(byte[] entropyPacket,
+            int width, int height, byte dcQuantizerIndex,
+            byte lowpassQuantizerIndex, byte highpassQuantizerIndex,
+            JxrGraySubbandMode subbands, bool scaledArithmetic,
+            int trimFlexbits, int entropyBitCount, bool rgb,
+            out byte[] codestream)
+        {
             codestream = null;
             if (entropyPacket == null || entropyBitCount < 0 ||
                 entropyBitCount > (long)entropyPacket.Length * 8)
                 return JxrError.InvalidArgument;
             JxrBitWriter writer = new JxrBitWriter();
-            JxrError error = JxrHeaderWriter.WriteGraySpatial(writer,
+            JxrError error = rgb ? JxrHeaderWriter.WriteRgbSpatial(writer,
                 width, height, dcQuantizerIndex, lowpassQuantizerIndex,
-                highpassQuantizerIndex, subbands, scaledArithmetic, trimFlexbits);
+                highpassQuantizerIndex, subbands, scaledArithmetic, trimFlexbits) :
+                JxrHeaderWriter.WriteGraySpatial(writer, width, height,
+                    dcQuantizerIndex, lowpassQuantizerIndex,
+                    highpassQuantizerIndex, subbands, scaledArithmetic,
+                    trimFlexbits);
             if (error != JxrError.None) return error;
 
             // No index table in this spatial profile. The length word covers

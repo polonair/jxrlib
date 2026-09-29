@@ -38,9 +38,8 @@ green alongside the managed runner.
 
 `JxrImage` describes top-down, row-major pixels with explicit width, height,
 format and byte stride. `Gray8` is integrated end-to-end. `Rgb24` and `Bgr24`
-select R-G-B and B-G-R byte order respectively; decode supports spatial,
-no-overlap YUV 4:4:4, while encode
-remains Gray-only and returns `UnsupportedFeature` for color images. The
+select R-G-B and B-G-R byte order respectively. Both encode and decode support
+full-resolution 8-bit YUV 4:4:4 in one spatial packet without overlap. The
 caller owns the image's `byte[]` buffer, which is not copied by the constructor.
 
 `JxrCodec.Encode(image, options, out byte[])` and
@@ -60,6 +59,16 @@ matches native-decoded pixels for every tested mode, including no-flexbits.
 `gray_mixed_qp_options` checks independent DC/LP/HP QP fields and managed
 decoding; mixed-QP byte-for-byte C comparison is not covered by the native
 command-line encoder, which exposes one image QP.
+The color encoder supports the same four subband modes, QP fields and flexbit
+trimming. It processes arbitrary image dimensions with replicated border
+samples, three full-resolution transform planes, shared entropy adaptation,
+and per-channel prediction state. `rgb444_encoder_native_fixture` checks the
+lossless real sign image against the native JXR byte-for-byte;
+`rgb444_encoder_quality_native_fixtures` does the same for six lossy sign/city
+profiles. `rgb444_sizes_round_trip` covers 1x1, 15x17, 16x16, 31x19 and
+32x32, including a byte-identical native 15x17 reference. BGR input produces
+the same JXR as RGB input with equivalent pixels. The BMP adapter also reads
+and writes canonical 24bpp RGB/BGR images.
 The native `transform_coefficients` trace is captured before the delayed
 macroblock transform finishes; it is not the same snapshot as the managed
 pre-quantization array, so conformance compares the native quantized and
@@ -107,8 +116,8 @@ The fixture JXR is reproduced byte-for-byte, and eighteen additional sample
 patterns round-trip through the managed encoder and decoder. Image dimensions
 need not be multiples of 16: border samples are replicated for encoding and
 cropped after decoding. Consecutive macroblocks share entropy state, DC/LP
-prediction rows and HP CBP neighbours. Color encoding, tiles and other JPEG XR
-profiles are still unsupported.
+prediction rows and HP CBP neighbours. Tiles and other JPEG XR profiles are
+still unsupported.
 `gray_sizes_native_fixtures` compares native and managed output for eight
 dimensions, including a 17-macroblock-wide image that crosses an adaptive
 scan reset boundary. The [fixture generator](fixtures/README.md) documents the

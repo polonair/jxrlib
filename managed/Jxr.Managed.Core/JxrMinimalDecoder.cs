@@ -224,7 +224,14 @@ namespace Jxr.Managed.Core
             error = LocateSingleSpatialPacket(source, headers, out packetOffset);
             if (error != JxrError.None) return error;
             if (packetOffset > Int32.MaxValue / 8) return JxrError.UnsupportedFeature;
-            JxrBitReader reader = new JxrBitReader(source);
+            // Native packet bit I/O keeps a zero-filled lookahead word after
+            // the final byte. The color HP decoder may need that lookahead
+            // to resolve a short final Huffman symbol, but may not consume
+            // beyond the physical input. Validate that limit after decoding.
+            if (source.Length == Int32.MaxValue) return JxrError.UnsupportedFeature;
+            byte[] paddedSource = new byte[source.Length + 1];
+            Array.Copy(source, paddedSource, source.Length);
+            JxrBitReader reader = new JxrBitReader(paddedSource);
             int remaining = packetOffset * 8;
             while (remaining > 0)
             {
@@ -359,6 +366,8 @@ namespace Jxr.Managed.Core
                     imageWidth, imageHeight, rgbOrder, scaledArithmetic ? 3 : 0,
                     pixels, imageWidth * 3);
                 if (error != JxrError.None) { pixels = null; return error; }
+                if (reader.BitPosition > (long)source.Length * 8)
+                { pixels = null; return JxrError.UnexpectedEndOfStream; }
                 width = imageWidth; height = imageHeight;
                 return JxrError.None;
             }

@@ -3,7 +3,7 @@ using System;
 namespace Jxr.Managed.Core
 {
     // Writes the eight TIFF-like IFD entries emitted by the native utility
-    // for a single Gray8 image with no optional metadata or alpha plane.
+    // for an 8-bit Gray or RGB image with no optional metadata or alpha plane.
     public static class JxrContainerWriter
     {
         private const int DirectoryOffset = 32;
@@ -11,9 +11,26 @@ namespace Jxr.Managed.Core
         private const int CodestreamOffset = DirectoryOffset + 2 + 12 * EntryCount + 4;
         private static readonly Guid Gray8PixelFormat = new Guid(0x6fddc324,
             0x4e03, 0x4bfe, 0xb1, 0x85, 0x3d, 0x77, 0x76, 0x8d, 0xc9, 0x08);
+        private static readonly Guid Rgb24PixelFormat = new Guid(0x6fddc324,
+            0x4e03, 0x4bfe, 0xb1, 0x85, 0x3d, 0x77, 0x76, 0x8d, 0xc9, 0x0c);
+
+        public static JxrError WriteRgb24(byte[] codestream, int width,
+            int height, float horizontalDpi, float verticalDpi, out byte[] container)
+        {
+            return WriteContainer(codestream, width, height, horizontalDpi,
+                verticalDpi, Rgb24PixelFormat, out container);
+        }
 
         public static JxrError WriteGray8(byte[] codestream, int width,
             int height, float horizontalDpi, float verticalDpi, out byte[] container)
+        {
+            return WriteContainer(codestream, width, height, horizontalDpi,
+                verticalDpi, Gray8PixelFormat, out container);
+        }
+
+        private static JxrError WriteContainer(byte[] codestream, int width,
+            int height, float horizontalDpi, float verticalDpi, Guid pixelFormat,
+            out byte[] container)
         {
             container = null;
             if (codestream == null || width <= 0 || height <= 0 ||
@@ -28,7 +45,7 @@ namespace Jxr.Managed.Core
             writer.Write((byte)'I', 8);
             Write16(writer, 0x01bc);
             Write32(writer, DirectoryOffset);
-            byte[] guid = Gray8PixelFormat.ToByteArray();
+            byte[] guid = pixelFormat.ToByteArray();
             for (int index = 0; index < guid.Length; index++)
                 writer.Write(guid[index], 8);
             for (int index = 0; index < DirectoryOffset - 8 - guid.Length; index++)

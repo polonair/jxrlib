@@ -32,3 +32,10 @@ all subbands. Each JXR and native-restored BMP is retained, and
 `rgb444_quality_native_fixtures` compares every RGB pixel byte after managed
 decoding. These fixtures exercise lossy scaled arithmetic, including the
 chroma normalization between inverse-transform stages.
+
+`create-rgb444-small.ps1` creates a deterministic 15x17 RGB24 BMP, native
+lossless YUV 4:4:4 JXR and native-restored BMP. The restored BMP equals the
+source byte-for-byte. `rgb444_sizes_round_trip` compares the entire managed
+JXR with this native reference, then decodes it to the original pixels. The
+real sign and city images above also serve as native byte-for-byte encoder
+references, including the QP=16 subband and flexbit variants.

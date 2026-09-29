@@ -168,7 +168,12 @@ namespace Jxr.Managed.Core
             return (byte)(index < 2 ? 0 : index);
         }
 
-        private static void ForwardMacroblock(int[] values)
+        internal static void ForwardMacroblock(int[] values)
+        {
+            ForwardMacroblock(values, false);
+        }
+
+        internal static void ForwardMacroblock(int[] values, bool normalizeChroma)
         {
             for (int block = 0; block < 16; block++)
             {
@@ -185,6 +190,12 @@ namespace Jxr.Managed.Core
                     ref work[10], ref work[8], ref work[11], ref work[9]);
                 Array.Copy(work, 0, values, offset, 16);
             }
+            // Native scaled YUV444 divides the sixteen chroma DCs before
+            // stage 2, not after quantization. The arithmetic shift matters
+            // for negative odd coefficients.
+            if (normalizeChroma)
+                for (int offset = 0; offset < 256; offset += 16)
+                    values[offset] >>= 1;
             JxrTransformMath.ApplySecondStageFourButterfly(values);
             JxrTransformMath.ApplyDct2x2Up(values, 0, 64, 16, 80);
             JxrForwardTransformMath.ApplyOddOdd(

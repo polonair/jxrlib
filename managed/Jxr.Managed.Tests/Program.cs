@@ -39,6 +39,11 @@ namespace Jxr.Managed.Tests
             new TestCase("headers_syntax_vectors", TestHeadersSyntaxVectors),
             new TestCase("header_writer_fixture", TestHeaderWriterFixture),
             new TestCase("header_writer_fields", TestHeaderWriterFields),
+            new TestCase("rgb444_header_writer_fixture", TestRgb444HeaderWriterFixture),
+            new TestCase("rgb444_encoder_native_fixture", TestRgb444EncoderNativeFixture),
+            new TestCase("rgb444_encoder_quality_native_fixtures", TestRgb444EncoderQualityNativeFixtures),
+            new TestCase("bgr444_encoder_round_trip", TestBgr444EncoderRoundTrip),
+            new TestCase("rgb444_sizes_round_trip", TestRgb444SizesRoundTrip),
             new TestCase("minimal_decoder_end_to_end", TestMinimalDecoderEndToEnd),
             new TestCase("minimal_entropy_encoder_fixture", TestMinimalEntropyEncoderFixture),
             new TestCase("minimal_encoder_end_to_end", TestMinimalEncoderEndToEnd),
@@ -815,9 +820,13 @@ namespace Jxr.Managed.Tests
             JxrImage rgb = new JxrImage(16, 16, JxrPixelFormat.Rgb24,
                 new byte[16 * 16 * 3], 48);
             if (JxrCodec.Encode(rgb, new JxrEncoderOptions(), out encoded) !=
-                JxrError.UnsupportedFeature || encoded != null) return false;
+                JxrError.None || encoded == null) return false;
             JxrDecoderOptions decoderOptions = new JxrDecoderOptions();
             decoderOptions.OutputFormat = JxrPixelFormat.Rgb24;
+            if (JxrCodec.Decode(encoded, decoderOptions, out decoded) !=
+                JxrError.None || decoded == null ||
+                decoded.Format != JxrPixelFormat.Rgb24 ||
+                !EqualBytes(decoded.Pixels, rgb.Pixels)) return false;
             if (JxrCodec.Decode(expectedJxr, decoderOptions, out decoded) !=
                 JxrError.UnsupportedFeature || decoded != null) return false;
             try { new JxrImage(16, 16, JxrPixelFormat.Gray8, new byte[255], 16); }
@@ -884,6 +893,23 @@ namespace Jxr.Managed.Tests
             if (JxrCodec.Decode(source, new JxrDecoderOptions(), out decoded) !=
                 JxrError.None || !EqualBytes(decoded.Pixels, image.Pixels) ||
                 !source.CanRead) return false;
+            byte[] colorBmp = File.ReadAllBytes(Path.Combine(directory.FullName,
+                "managed\\fixtures\\rgb444-15x17.bmp"));
+            byte[] colorJxr = File.ReadAllBytes(Path.Combine(directory.FullName,
+                "managed\\fixtures\\rgb444-15x17.jxr"));
+            JxrImage color;
+            if (JxrBmpAdapter.ReadRgb24(colorBmp, out color) != JxrError.None)
+                return false;
+            destination = new NonSeekableStream(null);
+            if (JxrCodec.Encode(color, new JxrEncoderOptions(), destination) !=
+                JxrError.None || !EqualBytes(destination.ToArray(), colorJxr))
+                return false;
+            JxrDecoderOptions colorOptions = new JxrDecoderOptions();
+            colorOptions.OutputFormat = JxrPixelFormat.Rgb24;
+            source = new NonSeekableStream(colorJxr);
+            if (JxrCodec.Decode(source, colorOptions, out decoded) !=
+                JxrError.None || !EqualBytes(decoded.Pixels, color.Pixels))
+                return false;
             MemoryStream readOnly = new MemoryStream(new byte[0], false);
             if (JxrCodec.Encode(image, new JxrEncoderOptions(), readOnly) !=
                 JxrError.InvalidArgument) return false;
@@ -1919,6 +1945,258 @@ namespace Jxr.Managed.Tests
                 if (decoded.Pixels[index] != source.Pixels[index + 2] ||
                     decoded.Pixels[index + 1] != source.Pixels[index + 1] ||
                     decoded.Pixels[index + 2] != source.Pixels[index]) return false;
+            return true;
+        }
+
+        private static bool TestRgb444HeaderWriterFixture()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "real-image-profile\\test-sign-334x330.jxr"))) directory = directory.Parent;
+            if (directory == null) return false;
+            string root = directory.FullName;
+            string[] files = {
+                "real-image-profile\\test-sign-334x330.jxr",
+                "managed\\fixtures\\rgb444-q16-all.jxr",
+                "managed\\fixtures\\rgb444-q16-no-flex.jxr",
+                "managed\\fixtures\\rgb444-q16-no-hp.jxr",
+                "managed\\fixtures\\rgb444-q16-dc-only.jxr",
+                "managed\\fixtures\\rgb444-q16-trim3.jxr" };
+            for (int item = 0; item < files.Length; item++)
+            {
+                byte[] reference = File.ReadAllBytes(Path.Combine(root, files[item]));
+                JxrHeaders headers;
+                if (JxrHeaders.Read(reference, out headers) != JxrError.None) return false;
+                JxrBitWriter writer = new JxrBitWriter();
+                byte dc = headers.Quantizers.GetDcIndex(0);
+                byte lp = headers.Quantizers.GetLowpassIndex(0);
+                byte hp = headers.Quantizers.GetHighpassIndex(0);
+                int trim = files[item].IndexOf("trim3") >= 0 ? 3 : 0;
+                if (JxrHeaderWriter.WriteRgbSpatial(writer, (int)headers.Main.Width,
+                    (int)headers.Main.Height, dc, lp, hp,
+                    (JxrGraySubbandMode)headers.Plane.Subband,
+                    headers.Plane.ScaledArithmetic, trim) != JxrError.None)
+                    return false;
+                byte[] actual = writer.ToArray();
+                if (actual.Length != headers.ByteCount) return false;
+                for (int index = 0; index < actual.Length; index++)
+                    if (actual[index] != reference[headers.CodestreamOffset + index])
+                    {
+                        Console.WriteLine("Color header " + files[item] +
+                            " differs at byte " + index + ": " + actual[index] +
+                            "/" + reference[headers.CodestreamOffset + index]);
+                        return false;
+                    }
+            }
+            return true;
+        }
+
+        private static bool TestRgb444EncoderNativeFixture()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "real-image-profile\\test-sign-334x330.jxr"))) directory = directory.Parent;
+            if (directory == null) return false;
+            string root = directory.FullName;
+            JxrImage image;
+            if (JxrBmpAdapter.ReadRgb24(File.ReadAllBytes(Path.Combine(root,
+                "real-image-profile\\test-sign-334x330.bmp")), out image) != JxrError.None)
+                return false;
+            byte[] actual;
+            JxrEncoderOptions options = new JxrEncoderOptions();
+            JxrError error = JxrCodec.Encode(image, options, out actual);
+            if (error != JxrError.None || actual == null)
+            {
+                Console.WriteLine("RGB444 encode: " + error);
+                return false;
+            }
+            byte[] expected = File.ReadAllBytes(Path.Combine(root,
+                "real-image-profile\\test-sign-334x330.jxr"));
+            if (!EqualBytes(actual, expected))
+            {
+                Console.WriteLine("RGB444 JXR sizes " + actual.Length + "/" + expected.Length);
+                for (int index = 0; index < Math.Min(actual.Length, expected.Length); index++)
+                    if (actual[index] != expected[index])
+                    {
+                        Console.WriteLine("First RGB444 JXR mismatch at " + index +
+                            ": " + actual[index] + "/" + expected[index]);
+                        break;
+                    }
+                return false;
+            }
+            JxrDecoderOptions decodeOptions = new JxrDecoderOptions();
+            decodeOptions.OutputFormat = JxrPixelFormat.Rgb24;
+            JxrImage decoded;
+            error = JxrCodec.Decode(actual, decodeOptions, out decoded);
+            return error == JxrError.None && decoded != null &&
+                EqualBytes(decoded.Pixels, image.Pixels);
+        }
+
+        private static bool TestRgb444EncoderQualityNativeFixtures()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "managed\\fixtures\\rgb444-q16-all.jxr"))) directory = directory.Parent;
+            if (directory == null) return false;
+            string root = directory.FullName;
+            string fixtures = Path.Combine(root, "managed\\fixtures");
+            JxrImage sign, city;
+            if (JxrBmpAdapter.ReadRgb24(File.ReadAllBytes(Path.Combine(root,
+                "real-image-profile\\test-sign-334x330.bmp")), out sign) != JxrError.None ||
+                JxrBmpAdapter.ReadRgb24(File.ReadAllBytes(Path.Combine(root,
+                "default-profile\\city-park-605x478.bmp")), out city) != JxrError.None)
+                return false;
+            string[] names = { "rgb444-q16-all", "rgb444-q16-no-flex",
+                "rgb444-q16-no-hp", "rgb444-q16-dc-only",
+                "rgb444-q16-trim3", "rgb444-city-q16-all" };
+            JxrGraySubbandMode[] subbands = { JxrGraySubbandMode.All,
+                JxrGraySubbandMode.NoFlexbits, JxrGraySubbandMode.NoHighpass,
+                JxrGraySubbandMode.DcOnly, JxrGraySubbandMode.All,
+                JxrGraySubbandMode.All };
+            for (int item = 0; item < names.Length; item++)
+            {
+                JxrEncoderOptions options = new JxrEncoderOptions();
+                options.QualityIndex = 16;
+                options.Subbands = subbands[item];
+                options.TrimFlexbits = item == 4 ? 3 : 0;
+                byte[] actual;
+                JxrError error = JxrCodec.Encode(item == 5 ? city : sign,
+                    options, out actual);
+                if (error != JxrError.None || actual == null)
+                {
+                    Console.WriteLine("RGB444 quality encode " + names[item] +
+                        ": " + error);
+                    return false;
+                }
+                byte[] expected = File.ReadAllBytes(Path.Combine(fixtures,
+                    names[item] + ".jxr"));
+                if (!EqualBytes(actual, expected))
+                {
+                    Console.WriteLine("RGB444 quality JXR sizes " + names[item] +
+                        " " + actual.Length + "/" + expected.Length);
+                    for (int index = 0; index < Math.Min(actual.Length, expected.Length); index++)
+                        if (actual[index] != expected[index])
+                        {
+                            Console.WriteLine("First mismatch at " + index +
+                                ": " + actual[index] + "/" + expected[index]);
+                            break;
+                        }
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static bool TestBgr444EncoderRoundTrip()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "real-image-profile\\test-sign-334x330.jxr"))) directory = directory.Parent;
+            if (directory == null) return false;
+            string root = directory.FullName;
+            JxrImage rgb;
+            if (JxrBmpAdapter.ReadRgb24(File.ReadAllBytes(Path.Combine(root,
+                "real-image-profile\\test-sign-334x330.bmp")), out rgb) != JxrError.None)
+                return false;
+            byte[] bgrPixels = (byte[])rgb.Pixels.Clone();
+            for (int index = 0; index < bgrPixels.Length; index += 3)
+            {
+                byte red = bgrPixels[index];
+                bgrPixels[index] = bgrPixels[index + 2];
+                bgrPixels[index + 2] = red;
+            }
+            JxrImage bgr = new JxrImage(rgb.Width, rgb.Height,
+                JxrPixelFormat.Bgr24, bgrPixels, rgb.Stride);
+            byte[] bitmap;
+            JxrImage reread;
+            if (JxrBmpAdapter.WriteRgb24(bgr, out bitmap) != JxrError.None ||
+                JxrBmpAdapter.ReadRgb24(bitmap, out reread) != JxrError.None ||
+                !EqualBytes(reread.Pixels, rgb.Pixels)) return false;
+            byte[] encoded;
+            JxrError error = JxrCodec.Encode(bgr, new JxrEncoderOptions(),
+                out encoded);
+            if (error != JxrError.None || !EqualBytes(encoded,
+                File.ReadAllBytes(Path.Combine(root,
+                    "real-image-profile\\test-sign-334x330.jxr"))))
+                return false;
+            JxrDecoderOptions options = new JxrDecoderOptions();
+            options.OutputFormat = JxrPixelFormat.Bgr24;
+            JxrImage restored;
+            error = JxrCodec.Decode(encoded, options, out restored);
+            return error == JxrError.None && restored != null &&
+                restored.Format == JxrPixelFormat.Bgr24 &&
+                EqualBytes(restored.Pixels, bgrPixels);
+        }
+
+        private static bool TestRgb444SizesRoundTrip()
+        {
+            int[,] dimensions = { { 1, 1 }, { 15, 17 }, { 16, 16 },
+                { 31, 19 }, { 32, 32 } };
+            for (int sample = 0; sample < dimensions.GetLength(0); sample++)
+            {
+                int width = dimensions[sample, 0];
+                int height = dimensions[sample, 1];
+                int stride = width * 3 + 5;
+                byte[] pixels = new byte[stride * height];
+                for (int y = 0; y < height; y++)
+                    for (int x = 0; x < width; x++)
+                    {
+                        int index = y * stride + x * 3;
+                        pixels[index] = (byte)((x * 37 + y * 11) & 255);
+                        pixels[index + 1] = (byte)((x * 13 + y * 29) & 255);
+                        pixels[index + 2] = (byte)((x * 7 + y * 53) & 255);
+                    }
+                JxrImage image = new JxrImage(width, height,
+                    JxrPixelFormat.Rgb24, pixels, stride);
+                byte[] jxr;
+                JxrError error = JxrCodec.Encode(image,
+                    new JxrEncoderOptions(), out jxr);
+                if (error != JxrError.None) return false;
+                if (width == 15 && height == 17)
+                {
+                    DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+                    while (directory != null && !File.Exists(Path.Combine(
+                        directory.FullName, "managed\\fixtures\\rgb444-15x17.jxr")))
+                        directory = directory.Parent;
+                    if (directory == null || !EqualBytes(jxr,
+                        File.ReadAllBytes(Path.Combine(directory.FullName,
+                            "managed\\fixtures\\rgb444-15x17.jxr"))))
+                        return false;
+                    JxrHeaders headers;
+                    if (JxrHeaders.Read(jxr, out headers) != JxrError.None)
+                        return false;
+                    int shortLength = jxr.Length - headers.CodestreamOffset - 1;
+                    byte[] truncated = new byte[shortLength];
+                    Array.Copy(jxr, headers.CodestreamOffset, truncated,
+                        0, shortLength);
+                    JxrDecoderOptions truncatedOptions = new JxrDecoderOptions();
+                    truncatedOptions.OutputFormat = JxrPixelFormat.Rgb24;
+                    JxrImage truncatedImage;
+                    if (JxrCodec.Decode(truncated, truncatedOptions,
+                        out truncatedImage) == JxrError.None)
+                    { Console.WriteLine("Truncated RGB444 stream accepted"); return false; }
+                }
+                JxrDecoderOptions decodeOptions = new JxrDecoderOptions();
+                decodeOptions.OutputFormat = JxrPixelFormat.Rgb24;
+                JxrImage decoded;
+                error = JxrCodec.Decode(jxr, decodeOptions, out decoded);
+                if (error != JxrError.None || decoded == null ||
+                    decoded.Width != width || decoded.Height != height)
+                {
+                    Console.WriteLine("RGB444 size " + width + "x" + height +
+                        " decode: " + error);
+                    return false;
+                }
+                for (int y = 0; y < height; y++)
+                    for (int x = 0; x < width * 3; x++)
+                        if (decoded.Pixels[y * decoded.Stride + x] !=
+                            pixels[y * stride + x])
+                        {
+                            Console.WriteLine("RGB444 size " + width + "x" +
+                                height + " differs at " + x + "," + y);
+                            return false;
+                        }
+            }
             return true;
         }
 
