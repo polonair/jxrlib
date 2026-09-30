@@ -11,9 +11,33 @@ namespace Jxr.Managed.Core
             byte lowpassQuantizerIndex, byte highpassQuantizerIndex,
             JxrGraySubbandMode subbands, bool scaledArithmetic, int trimFlexbits)
         {
+            return WriteRgbSpatial(writer, width, height, dcQuantizerIndex,
+                lowpassQuantizerIndex, highpassQuantizerIndex, subbands,
+                scaledArithmetic, trimFlexbits, 0);
+        }
+
+        public static JxrError WriteRgbSpatial(JxrBitWriter writer,
+            int width, int height, byte dcQuantizerIndex,
+            byte lowpassQuantizerIndex, byte highpassQuantizerIndex,
+            JxrGraySubbandMode subbands, bool scaledArithmetic, int trimFlexbits,
+            int overlap)
+        {
+            return WriteRgbSpatial(writer, width, height, dcQuantizerIndex,
+                lowpassQuantizerIndex, highpassQuantizerIndex, subbands,
+                scaledArithmetic, trimFlexbits, overlap,
+                JxrChromaSubsampling.Yuv444);
+        }
+
+        public static JxrError WriteRgbSpatial(JxrBitWriter writer,
+            int width, int height, byte dcQuantizerIndex,
+            byte lowpassQuantizerIndex, byte highpassQuantizerIndex,
+            JxrGraySubbandMode subbands, bool scaledArithmetic, int trimFlexbits,
+            int overlap, JxrChromaSubsampling chromaSubsampling)
+        {
             if (writer == null || width < 1 || height < 1 ||
                 writer.BitCount != 0 || (int)subbands < 0 || (int)subbands > 3 ||
-                trimFlexbits < 0 || trimFlexbits > 15)
+                trimFlexbits < 0 || trimFlexbits > 15 || overlap < 0 || overlap > 2 ||
+                (int)chromaSubsampling < 1 || (int)chromaSubsampling > 3)
                 return JxrError.InvalidArgument;
             bool abbreviated = ((long)width + 15) / 16 <= 255 &&
                 ((long)height + 15) / 16 <= 255;
@@ -24,7 +48,7 @@ namespace Jxr.Managed.Core
             writer.Write(1, 4); writer.Write(1, 4); // version, subversion
             writer.Write(0, 1); writer.Write(0, 1); // no tiles, spatial
             writer.Write(0, 3); writer.Write(0, 1); // orientation, index
-            writer.Write(0, 2); writer.Write(abbreviated ? 1U : 0U, 1);
+            writer.Write((uint)overlap, 2); writer.Write(abbreviated ? 1U : 0U, 1);
             writer.Write(1, 1); writer.Write(0, 1); // short header, no window
             writer.Write(trimFlexbits != 0 ? 1U : 0U, 1);
             writer.Write(0, 1); writer.Write(0, 2); writer.Write(0, 1);
@@ -33,7 +57,7 @@ namespace Jxr.Managed.Core
             writer.Write((uint)(height - 1), abbreviated ? 16 : 32);
             writer.AlignByte();
 
-            writer.Write(3, 3); // YUV_444 internal planes
+            writer.Write((uint)chromaSubsampling, 3);
             writer.Write(scaledArithmetic ? 1U : 0U, 1);
             writer.Write((uint)subbands, 4);
             writer.Write(0, 8); // no chroma centering
@@ -71,9 +95,20 @@ namespace Jxr.Managed.Core
             byte lowpassQuantizerIndex, byte highpassQuantizerIndex,
             JxrGraySubbandMode subbands, bool scaledArithmetic, int trimFlexbits)
         {
+            return WriteGraySpatial(writer, width, height, dcQuantizerIndex,
+                lowpassQuantizerIndex, highpassQuantizerIndex, subbands,
+                scaledArithmetic, trimFlexbits, 0);
+        }
+
+        public static JxrError WriteGraySpatial(JxrBitWriter writer,
+            int width, int height, byte dcQuantizerIndex,
+            byte lowpassQuantizerIndex, byte highpassQuantizerIndex,
+            JxrGraySubbandMode subbands, bool scaledArithmetic, int trimFlexbits,
+            int overlap)
+        {
             if (writer == null || width < 1 || height < 1 ||
                 writer.BitCount != 0 || (int)subbands < 0 || (int)subbands > 3 ||
-                trimFlexbits < 0 || trimFlexbits > 15)
+                trimFlexbits < 0 || trimFlexbits > 15 || overlap < 0 || overlap > 2)
                 return JxrError.InvalidArgument;
             bool abbreviated = ((long)width + 15) / 16 <= 255 &&
                 ((long)height + 15) / 16 <= 255;
@@ -88,7 +123,7 @@ namespace Jxr.Managed.Core
             writer.Write(0, 1);  // spatial layout
             writer.Write(0, 3);  // orientation
             writer.Write(0, 1);  // no index table
-            writer.Write(0, 2);  // no overlap
+            writer.Write((uint)overlap, 2);
             writer.Write(abbreviated ? 1U : 0U, 1);
             writer.Write(1, 1);  // short header flag used by native encoder
             writer.Write(0, 1);  // no windowing
@@ -145,9 +180,36 @@ namespace Jxr.Managed.Core
             JxrGraySubbandMode subbands, bool scaledArithmetic,
             int trimFlexbits, int entropyBitCount, out byte[] codestream)
         {
+            return WriteRgbSpatial(entropyPacket, width, height,
+                dcQuantizerIndex, lowpassQuantizerIndex, highpassQuantizerIndex,
+                subbands, scaledArithmetic, trimFlexbits, entropyBitCount, 0,
+                out codestream);
+        }
+
+        public static JxrError WriteRgbSpatial(byte[] entropyPacket,
+            int width, int height, byte dcQuantizerIndex,
+            byte lowpassQuantizerIndex, byte highpassQuantizerIndex,
+            JxrGraySubbandMode subbands, bool scaledArithmetic,
+            int trimFlexbits, int entropyBitCount, int overlap,
+            out byte[] codestream)
+        {
+            return WriteRgbSpatial(entropyPacket, width, height,
+                dcQuantizerIndex, lowpassQuantizerIndex, highpassQuantizerIndex,
+                subbands, scaledArithmetic, trimFlexbits, entropyBitCount,
+                overlap, JxrChromaSubsampling.Yuv444, out codestream);
+        }
+
+        public static JxrError WriteRgbSpatial(byte[] entropyPacket,
+            int width, int height, byte dcQuantizerIndex,
+            byte lowpassQuantizerIndex, byte highpassQuantizerIndex,
+            JxrGraySubbandMode subbands, bool scaledArithmetic,
+            int trimFlexbits, int entropyBitCount, int overlap,
+            JxrChromaSubsampling chromaSubsampling, out byte[] codestream)
+        {
             return WriteSpatial(entropyPacket, width, height, dcQuantizerIndex,
                 lowpassQuantizerIndex, highpassQuantizerIndex, subbands,
-                scaledArithmetic, trimFlexbits, entropyBitCount, true,
+                scaledArithmetic, trimFlexbits, entropyBitCount, overlap, true,
+                chromaSubsampling,
                 out codestream);
         }
 
@@ -178,9 +240,23 @@ namespace Jxr.Managed.Core
             JxrGraySubbandMode subbands, bool scaledArithmetic,
             int trimFlexbits, int entropyBitCount, out byte[] codestream)
         {
+            return WriteGraySpatial(entropyPacket, width, height,
+                dcQuantizerIndex, lowpassQuantizerIndex, highpassQuantizerIndex,
+                subbands, scaledArithmetic, trimFlexbits, entropyBitCount, 0,
+                out codestream);
+        }
+
+        public static JxrError WriteGraySpatial(byte[] entropyPacket,
+            int width, int height, byte dcQuantizerIndex,
+            byte lowpassQuantizerIndex, byte highpassQuantizerIndex,
+            JxrGraySubbandMode subbands, bool scaledArithmetic,
+            int trimFlexbits, int entropyBitCount, int overlap,
+            out byte[] codestream)
+        {
             return WriteSpatial(entropyPacket, width, height, dcQuantizerIndex,
                 lowpassQuantizerIndex, highpassQuantizerIndex, subbands,
-                scaledArithmetic, trimFlexbits, entropyBitCount, false,
+                scaledArithmetic, trimFlexbits, entropyBitCount, overlap, false,
+                JxrChromaSubsampling.Yuv444,
                 out codestream);
         }
 
@@ -188,7 +264,8 @@ namespace Jxr.Managed.Core
             int width, int height, byte dcQuantizerIndex,
             byte lowpassQuantizerIndex, byte highpassQuantizerIndex,
             JxrGraySubbandMode subbands, bool scaledArithmetic,
-            int trimFlexbits, int entropyBitCount, bool rgb,
+            int trimFlexbits, int entropyBitCount, int overlap, bool rgb,
+            JxrChromaSubsampling chromaSubsampling,
             out byte[] codestream)
         {
             codestream = null;
@@ -198,11 +275,12 @@ namespace Jxr.Managed.Core
             JxrBitWriter writer = new JxrBitWriter();
             JxrError error = rgb ? JxrHeaderWriter.WriteRgbSpatial(writer,
                 width, height, dcQuantizerIndex, lowpassQuantizerIndex,
-                highpassQuantizerIndex, subbands, scaledArithmetic, trimFlexbits) :
+                highpassQuantizerIndex, subbands, scaledArithmetic, trimFlexbits,
+                overlap, chromaSubsampling) :
                 JxrHeaderWriter.WriteGraySpatial(writer, width, height,
                     dcQuantizerIndex, lowpassQuantizerIndex,
                     highpassQuantizerIndex, subbands, scaledArithmetic,
-                    trimFlexbits);
+                    trimFlexbits, overlap);
             if (error != JxrError.None) return error;
 
             // No index table in this spatial profile. The length word covers

@@ -44,6 +44,11 @@ namespace Jxr.Managed.Tests
             new TestCase("rgb444_encoder_quality_native_fixtures", TestRgb444EncoderQualityNativeFixtures),
             new TestCase("bgr444_encoder_round_trip", TestBgr444EncoderRoundTrip),
             new TestCase("rgb444_sizes_round_trip", TestRgb444SizesRoundTrip),
+            new TestCase("overlap_forward_native_fixtures", TestOverlapForwardNativeFixtures),
+            new TestCase("subsampled_decode_native_fixtures", TestSubsampledDecodeNativeFixtures),
+            new TestCase("subsampled_encode_native_fixtures", TestSubsampledEncodeNativeFixtures),
+            new TestCase("subsampled_edge_native_fixtures", TestSubsampledEdgeNativeFixtures),
+            new TestCase("real_subsampled_native_fixtures", TestRealSubsampledNativeFixtures),
             new TestCase("minimal_decoder_end_to_end", TestMinimalDecoderEndToEnd),
             new TestCase("minimal_entropy_encoder_fixture", TestMinimalEntropyEncoderFixture),
             new TestCase("minimal_encoder_end_to_end", TestMinimalEncoderEndToEnd),
@@ -808,8 +813,14 @@ namespace Jxr.Managed.Tests
                 JxrError.None || !EqualBytes(restoredBmp, bmp)) return false;
             options.Overlap = 1;
             if (JxrCodec.Encode(image, options, out encoded) !=
-                JxrError.UnsupportedFeature || encoded != null) return false;
+                JxrError.None || encoded == null ||
+                JxrCodec.Decode(encoded, new JxrDecoderOptions(), out decoded) !=
+                JxrError.None || !EqualBytes(decoded.Pixels, pixels)) return false;
             options.Overlap = 0;
+            options.ChromaSubsampling = JxrChromaSubsampling.Yuv420;
+            if (JxrCodec.Encode(image, options, out encoded) !=
+                JxrError.InvalidArgument || encoded != null) return false;
+            options.ChromaSubsampling = JxrChromaSubsampling.Yuv444;
             options.QualityIndex = 0;
             if (JxrCodec.Encode(image, options, out encoded) !=
                 JxrError.InvalidArgument || encoded != null) return false;
@@ -2081,6 +2092,317 @@ namespace Jxr.Managed.Tests
                                 ": " + actual[index] + "/" + expected[index]);
                             break;
                         }
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static bool TestOverlapForwardNativeFixtures()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "managed\\fixtures\\gray-31x19-ol1.jxr"))) directory = directory.Parent;
+            if (directory == null) return false;
+            string fixtures = Path.Combine(directory.FullName, "managed\\fixtures");
+            JxrImage gray, rgb;
+            if (JxrBmpAdapter.ReadGray8(File.ReadAllBytes(Path.Combine(fixtures,
+                "gray-31x19.bmp")), out gray) != JxrError.None ||
+                JxrBmpAdapter.ReadRgb24(File.ReadAllBytes(Path.Combine(fixtures,
+                "rgb-overlap-32x32.bmp")), out rgb) != JxrError.None)
+                return false;
+            string[] names = { "gray-31x19-ol1", "gray-31x19-ol2",
+                "rgb444-32x32-ol1", "rgb444-32x32-ol2" };
+            for (int item = 0; item < names.Length; item++)
+            {
+                JxrEncoderOptions options = new JxrEncoderOptions();
+                options.Overlap = item % 2 + 1;
+                if (item >= 2) options.QualityIndex = 16;
+                byte[] encoded;
+                JxrError error = JxrCodec.Encode(item < 2 ? gray : rgb,
+                    options, out encoded);
+                byte[] expected = File.ReadAllBytes(Path.Combine(fixtures,
+                    names[item] + ".jxr"));
+                if (error != JxrError.None || !EqualBytes(encoded, expected))
+                {
+                    Console.WriteLine(names[item] + " overlap encode: " + error);
+                    if (encoded != null)
+                    {
+                        Console.WriteLine("length " + encoded.Length + " vs " + expected.Length);
+                        for (int index = 0; index < Math.Min(encoded.Length,
+                            expected.Length); index++)
+                            if (encoded[index] != expected[index])
+                            { Console.WriteLine("first difference at " + index);
+                              break; }
+                    }
+                    return false;
+                }
+                JxrImage restored;
+                if (item < 2)
+                {
+                    if (JxrBmpAdapter.ReadGray8(File.ReadAllBytes(
+                        Path.Combine(fixtures, names[item] + "-restored.bmp")),
+                        out restored) != JxrError.None) return false;
+                }
+                else if (JxrBmpAdapter.ReadRgb24(File.ReadAllBytes(
+                    Path.Combine(fixtures, names[item] + "-restored.bmp")),
+                    out restored) != JxrError.None) return false;
+                JxrDecoderOptions decodeOptions = new JxrDecoderOptions();
+                if (item >= 2) decodeOptions.OutputFormat = JxrPixelFormat.Rgb24;
+                JxrImage decoded;
+                error = JxrCodec.Decode(expected, decodeOptions, out decoded);
+                if (error != JxrError.None || decoded == null ||
+                    !EqualBytes(decoded.Pixels, restored.Pixels))
+                {
+                    Console.WriteLine(names[item] + " overlap decode: " + error);
+                    if (decoded != null)
+                        for (int index = 0; index < Math.Min(decoded.Pixels.Length,
+                            restored.Pixels.Length); index++)
+                            if (decoded.Pixels[index] != restored.Pixels[index])
+                            { Console.WriteLine("first pixel difference at " + index +
+                                ": " + decoded.Pixels[index] + " vs " + restored.Pixels[index]);
+                              break; }
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static bool TestSubsampledEncodeNativeFixtures()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "managed\\fixtures\\rgb422-32x32-ol0.jxr"))) directory = directory.Parent;
+            if (directory == null) return false;
+            string fixtures = Path.Combine(directory.FullName, "managed\\fixtures");
+            JxrImage image, odd;
+            if (JxrBmpAdapter.ReadRgb24(File.ReadAllBytes(Path.Combine(fixtures,
+                "rgb-overlap-32x32.bmp")), out image) != JxrError.None)
+                return false;
+            if (JxrBmpAdapter.ReadRgb24(File.ReadAllBytes(Path.Combine(fixtures,
+                "rgb-overlap-31x19.bmp")), out odd) != JxrError.None)
+                return false;
+            string[] names = { "rgb422-32x32-ol0", "rgb422-32x32-ol1",
+                "rgb422-32x32-ol2", "rgb420-32x32-ol0",
+                "rgb420-32x32-ol1", "rgb420-32x32-ol2",
+                "rgb422-32x32-q1-ol0", "rgb422-32x32-q1-ol1",
+                "rgb422-32x32-q1-ol2", "rgb420-32x32-q1-ol0",
+                "rgb420-32x32-q1-ol1", "rgb420-32x32-q1-ol2",
+                "rgb422-31x19-q1-ol1", "rgb422-31x19-q1-ol2",
+                "rgb420-31x19-q1-ol1", "rgb420-31x19-q1-ol2" };
+            for (int item = 0; item < names.Length; item++)
+            {
+                JxrEncoderOptions options = new JxrEncoderOptions();
+                options.QualityIndex = names[item].IndexOf("-q1-") >= 0 ? 1 : 16;
+                options.ChromaSubsampling = names[item].StartsWith("rgb422") ?
+                    JxrChromaSubsampling.Yuv422 : JxrChromaSubsampling.Yuv420;
+                options.Overlap = names[item].EndsWith("ol0") ? 0 :
+                    names[item].EndsWith("ol1") ? 1 : 2;
+                byte[] actual;
+                JxrError error = JxrCodec.Encode(
+                    names[item].IndexOf("31x19") >= 0 ? odd : image,
+                    options, out actual);
+                byte[] expected = File.ReadAllBytes(Path.Combine(fixtures,
+                    names[item] + ".jxr"));
+                if (error != JxrError.None || !EqualBytes(actual, expected))
+                {
+                    Console.WriteLine(names[item] + " encode: " + error);
+                    if (actual != null)
+                    {
+                        Console.WriteLine("length " + actual.Length + " vs " + expected.Length);
+                        for (int index = 0; index < Math.Min(actual.Length,
+                            expected.Length); index++)
+                            if (actual[index] != expected[index])
+                            { Console.WriteLine("first difference at " + index +
+                                ": " + actual[index] + " vs " + expected[index]);
+                              break; }
+                    }
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static bool TestSubsampledEdgeNativeFixtures()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "managed\\fixtures\\rgb422-31x19-ol2.jxr"))) directory = directory.Parent;
+            if (directory == null) return false;
+            string fixtures = Path.Combine(directory.FullName, "managed\\fixtures");
+            string[] dimensions = { "1x1", "31x19" };
+            JxrDecoderOptions decodeOptions = new JxrDecoderOptions();
+            decodeOptions.OutputFormat = JxrPixelFormat.Rgb24;
+            foreach (string dimensionsTag in dimensions)
+            {
+                JxrImage source;
+                if (JxrBmpAdapter.ReadRgb24(File.ReadAllBytes(Path.Combine(fixtures,
+                    "rgb-overlap-" + dimensionsTag + ".bmp")), out source) !=
+                    JxrError.None)
+                { Console.WriteLine(dimensionsTag + " source BMP read"); return false; }
+                foreach (int format in new int[] { 2, 1 })
+                    foreach (int overlap in new int[] { 1, 2 })
+                    {
+                        if (dimensionsTag == "1x1" && overlap == 2) continue;
+                        string name = (format == 2 ? "rgb422" : "rgb420") +
+                            "-" + dimensionsTag +
+                            "-ol" + overlap;
+                        byte[] reference = File.ReadAllBytes(Path.Combine(fixtures,
+                            name + ".jxr"));
+                        JxrEncoderOptions options = new JxrEncoderOptions();
+                        options.QualityIndex = 16;
+                        options.ChromaSubsampling = format == 2 ?
+                            JxrChromaSubsampling.Yuv422 : JxrChromaSubsampling.Yuv420;
+                        options.Overlap = overlap;
+                        byte[] encoded;
+                        JxrError error = JxrCodec.Encode(source, options, out encoded);
+                        if (error != JxrError.None || !EqualBytes(encoded, reference))
+                        {
+                            Console.WriteLine(name + " encode: " + error);
+                            if (encoded != null)
+                            {
+                                Console.WriteLine("length " + encoded.Length +
+                                    " vs " + reference.Length);
+                                for (int index = 0; index < Math.Min(encoded.Length,
+                                    reference.Length); index++)
+                                    if (encoded[index] != reference[index])
+                                    { Console.WriteLine("first difference " + index);
+                                      break; }
+                            }
+                            return false;
+                        }
+                        JxrImage restored, decoded;
+                        if (JxrBmpAdapter.ReadRgb24(File.ReadAllBytes(
+                            Path.Combine(fixtures, name + "-restored.bmp")),
+                            out restored) != JxrError.None)
+                        { Console.WriteLine(name + " restored BMP read"); return false; }
+                        error = JxrCodec.Decode(reference, decodeOptions, out decoded);
+                        if (error != JxrError.None || decoded == null ||
+                            !EqualBytes(decoded.Pixels, restored.Pixels))
+                        {
+                            Console.WriteLine(name + " decode: " + error);
+                            if (decoded != null)
+                                for (int index = 0; index < decoded.Pixels.Length; index++)
+                                    if (decoded.Pixels[index] != restored.Pixels[index])
+                                    { Console.WriteLine("first pixel difference " + index);
+                                      break; }
+                            return false;
+                        }
+                    }
+                if (dimensionsTag == "1x1")
+                {
+                    foreach (JxrChromaSubsampling rejectedFormat in new
+                        JxrChromaSubsampling[] { JxrChromaSubsampling.Yuv422,
+                            JxrChromaSubsampling.Yuv420 })
+                    {
+                        JxrEncoderOptions unsupported = new JxrEncoderOptions();
+                        unsupported.ChromaSubsampling = rejectedFormat;
+                        unsupported.Overlap = 2;
+                        byte[] rejected;
+                        if (JxrCodec.Encode(source, unsupported, out rejected) !=
+                            JxrError.UnsupportedFeature || rejected != null)
+                            return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        private static bool TestRealSubsampledNativeFixtures()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "managed\\fixtures\\sign422-q16-ol1.jxr"))) directory = directory.Parent;
+            if (directory == null) return false;
+            string fixtures = Path.Combine(directory.FullName, "managed\\fixtures");
+            JxrImage source;
+            if (JxrBmpAdapter.ReadRgb24(File.ReadAllBytes(Path.Combine(
+                directory.FullName, "real-image-profile\\test-sign-334x330.bmp")),
+                out source) != JxrError.None) return false;
+            string[] names = { "sign422-q16-ol1", "sign420-q16-ol2" };
+            for (int item = 0; item < names.Length; item++)
+            {
+                JxrEncoderOptions encodeOptions = new JxrEncoderOptions();
+                encodeOptions.QualityIndex = 16;
+                encodeOptions.ChromaSubsampling = item == 0 ?
+                    JxrChromaSubsampling.Yuv422 : JxrChromaSubsampling.Yuv420;
+                encodeOptions.Overlap = item + 1;
+                byte[] actual;
+                JxrError error = JxrCodec.Encode(source, encodeOptions, out actual);
+                byte[] reference = File.ReadAllBytes(Path.Combine(fixtures,
+                    names[item] + ".jxr"));
+                if (error != JxrError.None || !EqualBytes(actual, reference))
+                {
+                    Console.WriteLine(names[item] + " real encode: " + error);
+                    if (actual != null)
+                    {
+                        Console.WriteLine("length " + actual.Length +
+                            " vs " + reference.Length);
+                        for (int index = 0; index < Math.Min(actual.Length,
+                            reference.Length); index++)
+                            if (actual[index] != reference[index])
+                            { Console.WriteLine("first difference " + index); break; }
+                    }
+                    return false;
+                }
+                JxrImage expected, decoded;
+                if (JxrBmpAdapter.ReadRgb24(File.ReadAllBytes(Path.Combine(fixtures,
+                    names[item] + "-restored.bmp")), out expected) != JxrError.None)
+                    return false;
+                JxrDecoderOptions decodeOptions = new JxrDecoderOptions();
+                decodeOptions.OutputFormat = JxrPixelFormat.Rgb24;
+                error = JxrCodec.Decode(reference, decodeOptions, out decoded);
+                if (error != JxrError.None || decoded == null ||
+                    !EqualBytes(decoded.Pixels, expected.Pixels))
+                {
+                    Console.WriteLine(names[item] + " real decode: " + error);
+                    if (decoded != null)
+                        for (int index = 0; index < decoded.Pixels.Length; index++)
+                            if (decoded.Pixels[index] != expected.Pixels[index])
+                            { Console.WriteLine("first pixel difference " + index);
+                              break; }
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static bool TestSubsampledDecodeNativeFixtures()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "managed\\fixtures\\rgb422-32x32-ol0.jxr"))) directory = directory.Parent;
+            if (directory == null) return false;
+            string fixtures = Path.Combine(directory.FullName, "managed\\fixtures");
+            string[] names = { "rgb422-32x32-ol0", "rgb422-32x32-ol1",
+                "rgb422-32x32-ol2", "rgb420-32x32-ol0",
+                "rgb420-32x32-ol1", "rgb420-32x32-ol2",
+                "rgb422-32x32-q1-ol0", "rgb422-32x32-q1-ol1",
+                "rgb422-32x32-q1-ol2", "rgb420-32x32-q1-ol0",
+                "rgb420-32x32-q1-ol1", "rgb420-32x32-q1-ol2",
+                "rgb422-31x19-q1-ol1", "rgb422-31x19-q1-ol2",
+                "rgb420-31x19-q1-ol1", "rgb420-31x19-q1-ol2" };
+            JxrDecoderOptions options = new JxrDecoderOptions();
+            options.OutputFormat = JxrPixelFormat.Rgb24;
+            for (int item = 0; item < names.Length; item++)
+            {
+                JxrImage expected, actual;
+                if (JxrBmpAdapter.ReadRgb24(File.ReadAllBytes(Path.Combine(fixtures,
+                    names[item] + "-restored.bmp")), out expected) != JxrError.None)
+                    return false;
+                JxrError error = JxrCodec.Decode(File.ReadAllBytes(
+                    Path.Combine(fixtures, names[item] + ".jxr")), options,
+                    out actual);
+                if (error != JxrError.None || actual == null ||
+                    !EqualBytes(actual.Pixels, expected.Pixels))
+                {
+                    Console.WriteLine(names[item] + " decode: " + error);
+                    if (actual != null)
+                        for (int index = 0; index < actual.Pixels.Length; index++)
+                            if (actual.Pixels[index] != expected.Pixels[index])
+                            { Console.WriteLine("first pixel difference " + index +
+                                ": " + actual.Pixels[index] + " vs " + expected.Pixels[index]);
+                              break; }
                     return false;
                 }
             }

@@ -69,6 +69,16 @@ namespace Jxr.Managed.Core
             byte hpIndex = QpIndex(options.HighpassQuantizerIndex, options.QualityIndex);
             bool scaledArithmetic = options.Subbands != JxrGraySubbandMode.All ||
                 dcIndex > 1 || lpIndex > 1 || hpIndex > 1;
+            int[][] overlapped = null;
+            if (options.Overlap != 0)
+            {
+                int[] samples;
+                error = JxrImagePipeline.EncodeGray8(pixels, stride, width,
+                    height, scaledArithmetic ? 3 : 0, out samples);
+                if (error != JxrError.None) return error;
+                overlapped = JxrOverlapForward.Transform(samples, width, height,
+                    options.Overlap, false);
+            }
             JxrQuantizer dcQuantizer = JxrQuantization.Remap(dcIndex, scaledArithmetic, false);
             JxrQuantizer lpQuantizer = JxrQuantization.Remap(lpIndex, scaledArithmetic, false);
             JxrQuantizer hpQuantizer = JxrQuantization.Remap(hpIndex, scaledArithmetic, false);
@@ -99,21 +109,23 @@ namespace Jxr.Managed.Core
                 {
                     state.SetMacroblockPosition(mbX, mbY, columns);
                     state.SetNeighborCbp(0, topCbp[mbX], leftCbp);
-                    for (int y = 0; y < 16; y++)
-                        for (int x = 0; x < 16; x++)
-                        {
-                            int pixelX = Math.Min(width - 1, mbX * 16 + x);
-                            int pixelY = Math.Min(height - 1, mbY * 16 + y);
-                            int block = (x >> 2) * 64 + (y >> 2) * 16;
-                            int local = LocalSampleOrder[(y & 3) * 4 + (x & 3)];
-                            int centered = pixels[pixelY * stride + pixelX] - 128;
-                            // The native encoder keeps three fractional bits
-                            // for lossy integer profiles (SHIFTZERO + QPFRACBITS).
-                            // Preserve that scale through the integer transform.
-                            coefficients[block + local] = scaledArithmetic
-                                ? unchecked(centered << 3) : centered;
-                        }
-                    ForwardMacroblock(coefficients);
+                    if (overlapped != null)
+                        Array.Copy(overlapped[mbY * columns + mbX], coefficients, 256);
+                    else
+                    {
+                        for (int y = 0; y < 16; y++)
+                            for (int x = 0; x < 16; x++)
+                            {
+                                int pixelX = Math.Min(width - 1, mbX * 16 + x);
+                                int pixelY = Math.Min(height - 1, mbY * 16 + y);
+                                int block = (x >> 2) * 64 + (y >> 2) * 16;
+                                int local = LocalSampleOrder[(y & 3) * 4 + (x & 3)];
+                                int centered = pixels[pixelY * stride + pixelX] - 128;
+                                coefficients[block + local] = scaledArithmetic
+                                    ? unchecked(centered << 3) : centered;
+                            }
+                        ForwardMacroblock(coefficients);
+                    }
                     int[] transformed = trace == null ? null :
                         (int[])coefficients.Clone();
                     error = JxrQuantization.QuantizeMacroblock(planes, macroblock,
@@ -156,6 +168,7 @@ namespace Jxr.Managed.Core
             error = JxrCodestreamWriter.WriteGraySpatial(writer.ToArray(),
                 width, height, dcIndex, lpIndex, hpIndex, options.Subbands,
                 scaledArithmetic, options.TrimFlexbits, entropyBitCount,
+                options.Overlap,
                 out codestream);
             if (error != JxrError.None) return error;
             return JxrContainerWriter.WriteGray8(codestream, width, height,

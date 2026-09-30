@@ -56,6 +56,13 @@ namespace Jxr.Managed.Core
         DcOnly = 3
     }
 
+    public enum JxrChromaSubsampling
+    {
+        Yuv444 = 3,
+        Yuv422 = 2,
+        Yuv420 = 1
+    }
+
     public sealed class JxrEncoderOptions
     {
         private int qualityIndex = 1;
@@ -66,6 +73,7 @@ namespace Jxr.Managed.Core
         private int highpassQuantizerIndex = -1;
         private int trimFlexbits;
         private JxrGraySubbandMode subbands = JxrGraySubbandMode.All;
+        private JxrChromaSubsampling chromaSubsampling = JxrChromaSubsampling.Yuv444;
 
         public int QualityIndex { get { return qualityIndex; } set { qualityIndex = value; } }
         public int Overlap { get { return overlap; } set { overlap = value; } }
@@ -76,6 +84,8 @@ namespace Jxr.Managed.Core
         public int HighpassQuantizerIndex { get { return highpassQuantizerIndex; } set { highpassQuantizerIndex = value; } }
         public int TrimFlexbits { get { return trimFlexbits; } set { trimFlexbits = value; } }
         public JxrGraySubbandMode Subbands { get { return subbands; } set { subbands = value; } }
+        public JxrChromaSubsampling ChromaSubsampling
+        { get { return chromaSubsampling; } set { chromaSubsampling = value; } }
     }
 
     public sealed class JxrDecoderOptions

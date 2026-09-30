@@ -22,6 +22,13 @@ namespace Jxr.Managed.Core
                 image.Height > Int32.MaxValue - 15 ||
                 (long)image.Width * image.Height > Int32.MaxValue / 3)
                 return JxrError.UnsupportedFeature;
+            JxrCodecColorFormat colorFormat =
+                (JxrCodecColorFormat)options.ChromaSubsampling;
+            bool subsampled = colorFormat != JxrCodecColorFormat.Yuv444;
+            // The C encoder rejects a single-MB-wide subsampled image with
+            // two overlap levels; keep the same public profile boundary.
+            if (subsampled && options.Overlap == 2 && image.Width <= 16)
+                return JxrError.UnsupportedFeature;
             byte dcIndex = QpIndex(options.DcQuantizerIndex, options.QualityIndex);
             byte lpIndex = QpIndex(options.LowpassQuantizerIndex, options.QualityIndex);
             byte hpIndex = QpIndex(options.HighpassQuantizerIndex, options.QualityIndex);
@@ -34,10 +41,31 @@ namespace Jxr.Managed.Core
                 image.Format == JxrPixelFormat.Rgb24, scaled ? 3 : 0,
                 out yPlane, out uPlane, out vPlane);
             if (error != JxrError.None) return error;
+            if (subsampled)
+            {
+                bool vertical = colorFormat == JxrCodecColorFormat.Yuv420;
+                uPlane = JxrChromaResampler.Downsample(uPlane, width, height,
+                    vertical);
+                vPlane = JxrChromaResampler.Downsample(vPlane, width, height,
+                    vertical);
+            }
             int[][] sourcePlanes = { yPlane, uPlane, vPlane };
+            int[][][] overlapped = null;
+            if (options.Overlap != 0)
+            {
+                overlapped = new int[3][][];
+                for (int channel = 0; channel < 3; channel++)
+                    overlapped[channel] = subsampled && channel != 0 ?
+                        JxrChromaOverlapForward.Transform(sourcePlanes[channel],
+                            (width + 15) / 16, (height + 15) / 16,
+                            colorFormat, options.Overlap, scaled) :
+                        JxrOverlapForward.Transform(sourcePlanes[channel],
+                            width, height, options.Overlap,
+                            channel != 0 && scaled);
+            }
             int columns = (width + 15) / 16, rowsCount = (height + 15) / 16;
             JxrSessionConfiguration sessionConfig = new JxrSessionConfiguration(
-                width, height, 3, 3, 4, false);
+                width, height, (int)colorFormat, 3, 4, false);
             using (JxrEncoderSession session = JxrEncoderSession.Create(
                 sessionConfig, 0, 0))
             {
@@ -57,7 +85,7 @@ namespace Jxr.Managed.Core
                 }
                 JxrQuantizerSet quantizers = new JxrQuantizerSet(dc, lp, hp);
                 JxrCodecConfiguration format = new JxrCodecConfiguration(
-                    JxrCodecColorFormat.Yuv444, 3, true,
+                    colorFormat, 3, true,
                     options.Subbands == JxrGraySubbandMode.DcOnly,
                     (int)options.Subbands < (int)JxrGraySubbandMode.NoHighpass,
                     options.Subbands != JxrGraySubbandMode.NoFlexbits,
@@ -88,29 +116,40 @@ namespace Jxr.Managed.Core
                                 leftCbp[channel]);
                             int[] values = coefficients[channel];
                             int[] source = sourcePlanes[channel];
-                            for (int y = 0; y < 16; y++)
-                                for (int x = 0; x < 16; x++)
-                                {
-                                    int pixelX = Math.Min(width - 1, mbX * 16 + x);
-                                    int pixelY = Math.Min(height - 1, mbY * 16 + y);
-                                    int block = (x >> 2) * 64 + (y >> 2) * 16;
-                                    int local = LocalSampleOrder[(y & 3) * 4 + (x & 3)];
-                                    values[block + local] =
-                                        source[pixelY * width + pixelX];
-                                }
-                            JxrMinimalEncoder.ForwardMacroblock(values,
-                                channel != 0 && scaled);
+                            if (overlapped != null)
+                                Array.Copy(overlapped[channel][mbY * columns + mbX],
+                                    values, Math.Min(values.Length,
+                                        overlapped[channel][mbY * columns + mbX].Length));
+                            else if (subsampled && channel != 0)
+                                JxrChromaForward.LoadAndTransform(source,
+                                    columns * 8, mbX, mbY, colorFormat,
+                                    scaled, values);
+                            else
+                            {
+                                for (int y = 0; y < 16; y++)
+                                    for (int x = 0; x < 16; x++)
+                                    {
+                                        int pixelX = Math.Min(width - 1, mbX * 16 + x);
+                                        int pixelY = Math.Min(height - 1, mbY * 16 + y);
+                                        int block = (x >> 2) * 64 + (y >> 2) * 16;
+                                        int local = LocalSampleOrder[(y & 3) * 4 + (x & 3)];
+                                        values[block + local] =
+                                            source[pixelY * width + pixelX];
+                                    }
+                                JxrMinimalEncoder.ForwardMacroblock(values,
+                                    channel != 0 && scaled);
+                            }
                         }
                         error = JxrQuantization.QuantizeMacroblock(
                             state.CoefficientPlanes, state.Macroblock, quantizers,
-                            JxrCodecColorFormat.Yuv444, 3,
+                            colorFormat, 3,
                             options.Subbands == JxrGraySubbandMode.DcOnly,
                             (int)options.Subbands >= (int)JxrGraySubbandMode.NoHighpass,
                             false);
                         if (error != JxrError.None) return error;
                         error = JxrCoefficientPrediction.Encode(state.Macroblock,
                             state.CoefficientPlanes, rows,
-                            JxrCodecColorFormat.Yuv444, mbX, mbX == 0, mbY == 0);
+                            colorFormat, mbX, mbX == 0, mbY == 0);
                         if (error != JxrError.None) return error;
                         for (int channel = 0; channel < 3; channel++)
                             for (int index = 0; index < 16; index++)
@@ -119,10 +158,15 @@ namespace Jxr.Managed.Core
                                     index, out dcCoefficients[channel][index]);
                                 if (error != JxrError.None) return error;
                             }
-                        error = JxrMinimalEntropyEncoder.EncodeYuv444Macroblock(
-                            state, coefficients, dcCoefficients,
-                            state.Macroblock.Orientation, (int)options.Subbands,
-                            options.TrimFlexbits, writer);
+                        error = subsampled ?
+                            JxrMinimalEntropyEncoder.EncodeSubsampledMacroblock(
+                                state, coefficients, dcCoefficients,
+                                state.Macroblock.Orientation, (int)options.Subbands,
+                                options.TrimFlexbits, writer) :
+                            JxrMinimalEntropyEncoder.EncodeYuv444Macroblock(
+                                state, coefficients, dcCoefficients,
+                                state.Macroblock.Orientation, (int)options.Subbands,
+                                options.TrimFlexbits, writer);
                         if (error != JxrError.None) return error;
                         for (int channel = 0; channel < 3; channel++)
                         {
@@ -138,7 +182,8 @@ namespace Jxr.Managed.Core
                 byte[] codestream;
                 error = JxrCodestreamWriter.WriteRgbSpatial(writer.ToArray(),
                     width, height, dcIndex, lpIndex, hpIndex, options.Subbands,
-                    scaled, options.TrimFlexbits, bitCount, out codestream);
+                    scaled, options.TrimFlexbits, bitCount, options.Overlap,
+                    options.ChromaSubsampling, out codestream);
                 if (error != JxrError.None) return error;
                 return JxrContainerWriter.WriteRgb24(codestream,
                     width, height, 96.012f, 96.012f, out jxr);

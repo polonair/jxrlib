@@ -38,7 +38,7 @@ namespace Jxr.Managed.Core
                 main.Width > Int32.MaxValue - 15 ||
                 main.Height > Int32.MaxValue - 15 ||
                 (long)main.Width * main.Height > Int32.MaxValue ||
-                main.Overlap != 0 ||
+                main.Overlap > 2 ||
                 main.BitstreamFormat != 0 || main.Orientation != 0 ||
                 main.CodedBitDepth != 1 || main.SourceColorFormat != 0 ||
                 main.HasAlpha || main.BlackWhite ||
@@ -110,6 +110,8 @@ namespace Jxr.Managed.Core
                     new JxrCoefficientPredictionRows(columns, 1);
                 int[] topCbp = new int[columns];
                 byte[] gray = new byte[imageWidth * imageHeight];
+                int[][] overlapCoefficients = main.Overlap == 0 ? null :
+                    new int[columns * rowsCount][];
                 JxrQuantizer dcQuantizer = JxrQuantization.Remap(
                     q.GetDcIndex(0), plane.ScaledArithmetic, false);
                 JxrQuantizer lpQuantizer = JxrQuantization.Remap(
@@ -165,23 +167,26 @@ namespace Jxr.Managed.Core
                         if (error != JxrError.None) return error;
                         int[] samples = new int[256];
                         Array.Copy(coefficients, samples, 256);
-                        InverseMacroblock(samples);
-                        for (int y = 0; y < 16; y++)
-                            for (int x = 0; x < 16; x++)
-                            {
-                                int pixelX = mbX * 16 + x, pixelY = mbY * 16 + y;
-                                if (pixelX >= imageWidth || pixelY >= imageHeight) continue;
-                                int block = (x >> 2) * 64 + (y >> 2) * 16;
-                                int local = LocalSampleOrder[(y & 3) * 4 + (x & 3)];
-                                int sample = samples[block + local];
-                                if (scaledArithmetic)
-                                    sample = unchecked(sample + 1027) >> 3;
-                                else
-                                    sample = unchecked(sample + 128);
-                                gray[pixelY * imageWidth + pixelX] =
-                                    JxrImagePipeline.ClipByte(sample);
-                            }
+                        if (overlapCoefficients != null)
+                            overlapCoefficients[mbY * columns + mbX] = samples;
+                        else
+                        {
+                            InverseMacroblock(samples);
+                            CopyGrayMacroblock(samples, gray, imageWidth,
+                                imageHeight, mbX, mbY, scaledArithmetic);
+                        }
                     }
+                }
+                if (overlapCoefficients != null)
+                {
+                    int[][] overlapSamples = JxrOverlapInverse.Transform(
+                        overlapCoefficients, imageWidth, imageHeight,
+                        main.Overlap, false, hpQuantizer.Parameter, !hasHighpass);
+                    for (int mbY = 0; mbY < rowsCount; mbY++)
+                        for (int mbX = 0; mbX < columns; mbX++)
+                            CopyGrayMacroblock(overlapSamples[mbY * columns + mbX],
+                                gray, imageWidth, imageHeight, mbX, mbY,
+                                scaledArithmetic);
                 }
                 pixels = gray;
                 width = imageWidth; height = imageHeight;
@@ -207,13 +212,15 @@ namespace Jxr.Managed.Core
             if (main.Width < 1 || main.Height < 1 ||
                 main.Width > Int32.MaxValue - 15 || main.Height > Int32.MaxValue - 15 ||
                 (long)main.Width * main.Height > Int32.MaxValue ||
-                main.Overlap != 0 || main.BitstreamFormat != 0 || main.Orientation != 0 ||
+                main.Overlap > 2 || main.BitstreamFormat != 0 || main.Orientation != 0 ||
                 main.CodedBitDepth != 1 || main.HasAlpha || main.BlackWhite ||
                 main.VerticalSliceCountMinusOne != 0 || main.HorizontalSliceCountMinusOne != 0 ||
                 main.HasIndexTable || main.ExtraTop != 0 || main.ExtraLeft != 0 ||
                 main.ExtraBottom != ((16 - ((int)main.Height & 15)) & 15) ||
                 main.ExtraRight != ((16 - ((int)main.Width & 15)) & 15) ||
-                plane.ColorFormat != (int)JxrCodecColorFormat.Yuv444 ||
+                (plane.ColorFormat != (int)JxrCodecColorFormat.Yuv444 &&
+                 plane.ColorFormat != (int)JxrCodecColorFormat.Yuv422 &&
+                 plane.ColorFormat != (int)JxrCodecColorFormat.Yuv420) ||
                 plane.ChannelCount != 3 || plane.Subband < 0 || plane.Subband > 3 ||
                 main.SourceBitDepth != 1 ||
                 !q.HasDc || (plane.Subband != 3 && !q.HasLowpass) ||
@@ -260,6 +267,10 @@ namespace Jxr.Managed.Core
             using (JxrDecoderSession session = JxrDecoderSession.Create(
                 sessionConfig, 0, 0, 0))
             {
+                JxrCodecColorFormat colorFormat =
+                    (JxrCodecColorFormat)plane.ColorFormat;
+                bool subsampled = colorFormat == JxrCodecColorFormat.Yuv422 ||
+                    colorFormat == JxrCodecColorFormat.Yuv420;
                 bool dcOnly = plane.Subband == (int)JxrGraySubbandMode.DcOnly;
                 bool scaledArithmetic = plane.ScaledArithmetic;
                 bool hasHighpass = plane.Subband < (int)JxrGraySubbandMode.NoHighpass;
@@ -282,7 +293,7 @@ namespace Jxr.Managed.Core
                 }
                 JxrQuantizerSet quantizers = new JxrQuantizerSet(dc, lp, hp);
                 JxrCodecConfiguration format = new JxrCodecConfiguration(
-                    JxrCodecColorFormat.Yuv444, 3, true, dcOnly, hasHighpass,
+                    colorFormat, 3, true, dcOnly, hasHighpass,
                     !skipFlexbits, skipFlexbits, true, true, false, false,
                     0, 0, 1, 1, hpParameters);
                 JxrCodecState state = new JxrCodecState(format,
@@ -298,8 +309,18 @@ namespace Jxr.Managed.Core
                 for (int channel = 0; channel < 3; channel++)
                     state.CoefficientPlanes.GetPlane(channel, out planes[channel]);
                 int count = imageWidth * imageHeight;
-                int[] yPlane = new int[count], uPlane = new int[count], vPlane = new int[count];
+                int chromaWidth = columns * 8;
+                int chromaHeight = rowsCount *
+                    (colorFormat == JxrCodecColorFormat.Yuv420 ? 8 : 16);
+                int chromaCount = subsampled ? chromaWidth * chromaHeight : count;
+                int[] yPlane = new int[count], uPlane = new int[chromaCount],
+                    vPlane = new int[chromaCount];
                 int[][] outputPlanes = { yPlane, uPlane, vPlane };
+                int[][][] overlapCoefficients = main.Overlap == 0 ? null :
+                    new int[3][][];
+                if (overlapCoefficients != null)
+                    for (int channel = 0; channel < 3; channel++)
+                        overlapCoefficients[channel] = new int[columns * rowsCount][];
                 for (int mbY = 0; mbY < rowsCount; mbY++)
                 {
                     if (mbY != 0) rows.AdvanceRow();
@@ -310,7 +331,7 @@ namespace Jxr.Managed.Core
                         for (int channel = 0; channel < 3; channel++)
                         {
                             state.SetNeighborCbp(channel, topCbp[channel][mbX], leftCbp[channel]);
-                            Array.Clear(planes[channel], 0, 256);
+                            Array.Clear(planes[channel], 0, planes[channel].Length);
                         }
                         error = JxrDcCodec.Decode(state);
                         if (error != JxrError.None) return error;
@@ -320,13 +341,13 @@ namespace Jxr.Managed.Core
                             if (error != JxrError.None) return error;
                         }
                         error = JxrCoefficientPrediction.DecodeDcLp(state.Macroblock,
-                            rows, JxrCodecColorFormat.Yuv444, mbX, mbX == 0, mbY == 0);
+                            rows, colorFormat, mbX, mbX == 0, mbY == 0);
                         if (error != JxrError.None) return error;
                         error = JxrCoefficientPrediction.StoreCurrent(state.Macroblock,
-                            rows, JxrCodecColorFormat.Yuv444, mbX);
+                            rows, colorFormat, mbX);
                         if (error != JxrError.None) return error;
                         error = JxrQuantization.DequantizeMacroblock(state.CoefficientPlanes,
-                            state.Macroblock, quantizers, JxrCodecColorFormat.Yuv444,
+                            state.Macroblock, quantizers, colorFormat,
                             3, dcOnly);
                         if (error != JxrError.None) return error;
                         if (hasHighpass)
@@ -341,25 +362,67 @@ namespace Jxr.Managed.Core
                             }
                         }
                         error = JxrCoefficientPrediction.DecodeAc(state.Macroblock,
-                            state.CoefficientPlanes, JxrCodecColorFormat.Yuv444);
+                            state.CoefficientPlanes, colorFormat);
                         if (error != JxrError.None) return error;
                         for (int channel = 0; channel < 3; channel++)
                         {
-                            int[] samples = new int[256];
-                            Array.Copy(planes[channel], samples, 256);
-                            InverseMacroblock(samples, channel != 0 && scaledArithmetic);
-                            for (int y = 0; y < 16; y++)
-                                for (int x = 0; x < 16; x++)
+                            int[] samples = new int[planes[channel].Length];
+                            Array.Copy(planes[channel], samples, samples.Length);
+                            if (overlapCoefficients != null)
+                                overlapCoefficients[channel][mbY * columns + mbX] = samples;
+                            else
+                            {
+                                if (channel == 0 || !subsampled)
                                 {
-                                    int pixelX = mbX * 16 + x, pixelY = mbY * 16 + y;
-                                    if (pixelX >= imageWidth || pixelY >= imageHeight) continue;
-                                    int block = (x >> 2) * 64 + (y >> 2) * 16;
-                                    int local = LocalSampleOrder[(y & 3) * 4 + (x & 3)];
-                                    outputPlanes[channel][pixelY * imageWidth + pixelX] =
-                                        samples[block + local];
+                                    InverseMacroblock(samples,
+                                        channel != 0 && scaledArithmetic);
+                                    CopyColorMacroblock(samples, outputPlanes[channel],
+                                        imageWidth, imageHeight, mbX, mbY, 16, 16);
                                 }
+                                else
+                                {
+                                    InverseChromaMacroblock(samples, colorFormat,
+                                        scaledArithmetic);
+                                    CopyColorMacroblock(samples, outputPlanes[channel],
+                                        chromaWidth, chromaHeight, mbX, mbY, 8,
+                                        colorFormat == JxrCodecColorFormat.Yuv420 ? 8 : 16);
+                                }
+                            }
                         }
                     }
+                }
+                if (overlapCoefficients != null)
+                    for (int channel = 0; channel < 3; channel++)
+                    {
+                        int[][] overlapSamples = subsampled && channel != 0 ?
+                            JxrChromaOverlapInverse.Transform(
+                                overlapCoefficients[channel], columns, rowsCount,
+                                colorFormat, main.Overlap, scaledArithmetic) :
+                            JxrOverlapInverse.Transform(
+                                overlapCoefficients[channel], imageWidth, imageHeight,
+                                main.Overlap, channel != 0 && scaledArithmetic,
+                                hp[channel][0].Parameter, !hasHighpass);
+                        for (int mbY = 0; mbY < rowsCount; mbY++)
+                            for (int mbX = 0; mbX < columns; mbX++)
+                                CopyColorMacroblock(
+                                    overlapSamples[mbY * columns + mbX],
+                                    outputPlanes[channel],
+                                    subsampled && channel != 0 ? chromaWidth : imageWidth,
+                                    subsampled && channel != 0 ? chromaHeight : imageHeight,
+                                    mbX, mbY,
+                                    subsampled && channel != 0 ? 8 : 16,
+                                    subsampled && channel != 0 &&
+                                        colorFormat == JxrCodecColorFormat.Yuv420 ? 8 : 16);
+                    }
+                if (subsampled)
+                {
+                    int paddedWidth = columns * 16;
+                    int paddedHeight = rowsCount * 16;
+                    bool vertical = colorFormat == JxrCodecColorFormat.Yuv420;
+                    uPlane = JxrChromaResampler.Interpolate(uPlane, imageWidth,
+                        imageHeight, paddedWidth, paddedHeight, vertical);
+                    vPlane = JxrChromaResampler.Interpolate(vPlane, imageWidth,
+                        imageHeight, paddedWidth, paddedHeight, vertical);
                 }
                 pixels = new byte[imageWidth * imageHeight * 3];
                 error = JxrImagePipeline.DecodeRgb8(yPlane, uPlane, vPlane,
@@ -390,6 +453,86 @@ namespace Jxr.Managed.Core
                 return JxrError.UnexpectedEndOfStream;
             offset = (int)packetPosition;
             return JxrError.None;
+        }
+
+        private static void CopyColorMacroblock(int[] samples, int[] plane,
+            int width, int height, int mbX, int mbY,
+            int macroblockWidth, int macroblockHeight)
+        {
+            for (int y = 0; y < macroblockHeight; y++)
+                for (int x = 0; x < macroblockWidth; x++)
+                {
+                    int pixelX = mbX * macroblockWidth + x;
+                    int pixelY = mbY * macroblockHeight + y;
+                    if (pixelX >= width || pixelY >= height) continue;
+                    int block = (x >> 2) * macroblockHeight * 4 + (y >> 2) * 16;
+                    int local = LocalSampleOrder[(y & 3) * 4 + (x & 3)];
+                    plane[pixelY * width + pixelX] = samples[block + local];
+                }
+        }
+
+        private static void InverseChromaMacroblock(int[] values,
+            JxrCodecColorFormat colorFormat, bool scaledArithmetic)
+        {
+            if (colorFormat == JxrCodecColorFormat.Yuv420)
+            {
+                if (scaledArithmetic)
+                    JxrInverseTransformMath.ApplyScaledDct2x2Down(
+                        ref values[0], ref values[32], ref values[16],
+                        ref values[48]);
+                else
+                    JxrTransformMath.ApplyDct2x2Down(values, 0, 32, 16, 48);
+            }
+            else
+            {
+                values[0] = unchecked(values[0] - ((values[32] + 1) >> 1));
+                values[32] = unchecked(values[32] + values[0]);
+                if (scaledArithmetic)
+                {
+                    JxrInverseTransformMath.ApplyScaledDct2x2Down(
+                        ref values[0], ref values[64], ref values[16],
+                        ref values[80]);
+                    JxrInverseTransformMath.ApplyScaledDct2x2Down(
+                        ref values[32], ref values[96], ref values[48],
+                        ref values[112]);
+                }
+                else
+                {
+                    JxrTransformMath.ApplyDct2x2Down(values, 0, 64, 16, 80);
+                    JxrTransformMath.ApplyDct2x2Down(values, 32, 96, 48, 112);
+                }
+            }
+            for (int offset = 0; offset < values.Length; offset += 16)
+            {
+                int[] work = new int[16];
+                Array.Copy(values, offset, work, 0, 16);
+                JxrTransformMath.ApplyDct2x2Up(work, 0, 1, 2, 3);
+                JxrInverseTransformMath.ApplyOdd(ref work[5], ref work[4],
+                    ref work[7], ref work[6]);
+                JxrInverseTransformMath.ApplyOdd(ref work[10], ref work[8],
+                    ref work[11], ref work[9]);
+                JxrInverseTransformMath.ApplyOddOdd(ref work[15], ref work[14],
+                    ref work[13], ref work[12]);
+                JxrTransformMath.ApplyFirstStageFourButterfly(work);
+                Array.Copy(work, 0, values, offset, 16);
+            }
+        }
+
+        private static void CopyGrayMacroblock(int[] samples, byte[] gray,
+            int width, int height, int mbX, int mbY, bool scaledArithmetic)
+        {
+            for (int y = 0; y < 16; y++)
+                for (int x = 0; x < 16; x++)
+                {
+                    int pixelX = mbX * 16 + x, pixelY = mbY * 16 + y;
+                    if (pixelX >= width || pixelY >= height) continue;
+                    int block = (x >> 2) * 64 + (y >> 2) * 16;
+                    int local = LocalSampleOrder[(y & 3) * 4 + (x & 3)];
+                    int sample = samples[block + local];
+                    sample = scaledArithmetic ? unchecked(sample + 1027) >> 3 :
+                        unchecked(sample + 128);
+                    gray[pixelY * width + pixelX] = JxrImagePipeline.ClipByte(sample);
+                }
         }
 
         private static void InverseMacroblock(int[] values)

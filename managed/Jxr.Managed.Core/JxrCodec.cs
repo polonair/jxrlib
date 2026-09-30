@@ -24,14 +24,20 @@ namespace Jxr.Managed.Core
                 options.HighpassQuantizerIndex < -1 || options.HighpassQuantizerIndex > 255 ||
                 options.TrimFlexbits < 0 || options.TrimFlexbits > 15 ||
                 (int)options.Subbands < 0 || (int)options.Subbands > 3 ||
+                (int)options.ChromaSubsampling < 1 ||
+                (int)options.ChromaSubsampling > 3 ||
                 (options.Layout != JxrBitstreamLayout.Spatial &&
                  options.Layout != JxrBitstreamLayout.Frequency))
                 return JxrError.InvalidArgument;
-            if (options.Overlap != 0 || options.Layout != JxrBitstreamLayout.Spatial)
+            if (options.Layout != JxrBitstreamLayout.Spatial)
                 return JxrError.UnsupportedFeature;
             if (image.Format == JxrPixelFormat.Gray8)
+            {
+                if (options.ChromaSubsampling != JxrChromaSubsampling.Yuv444)
+                    return JxrError.InvalidArgument;
                 return JxrMinimalEncoder.EncodeGrayPixels(image.Pixels,
                     image.Stride, image.Width, image.Height, options, trace, out jxr);
+            }
             if (image.Format == JxrPixelFormat.Rgb24 ||
                 image.Format == JxrPixelFormat.Bgr24)
             {

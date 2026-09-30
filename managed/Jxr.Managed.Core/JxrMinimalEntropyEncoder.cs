@@ -8,6 +8,9 @@ namespace Jxr.Managed.Core
     {
         private static readonly int[] BlockOffsets =
             { 0,64,16,80,128,192,144,208,32,96,48,112,160,224,176,240 };
+        private static readonly int[] Chroma420Offsets = { 0,32,16,48 };
+        private static readonly int[] Chroma422Offsets =
+            { 0,64,16,80,32,96,48,112 };
         private static readonly int[] CoefficientOrder =
             { 0,5,1,6,10,12,8,14,2,4,3,7,9,13,11,15 };
         private static readonly int[] LevelIndex =
@@ -110,6 +113,31 @@ namespace Jxr.Managed.Core
             return JxrError.None;
         }
 
+        internal static JxrError EncodeSubsampledMacroblock(JxrCodecState state,
+            int[][] coefficients, int[][] dc, int orientation, int subbands,
+            int trimFlexbits, JxrBitWriter writer)
+        {
+            JxrCodecColorFormat color = state.Configuration.ColorFormat;
+            if (color != JxrCodecColorFormat.Yuv420 &&
+                color != JxrCodecColorFormat.Yuv422)
+                return JxrError.InvalidArgument;
+            JxrError error = EncodeYuv444Dc(state, dc, writer);
+            if (error != JxrError.None) return error;
+            if (subbands != 3)
+            {
+                error = EncodeSubsampledLp(state, dc, writer);
+                if (error != JxrError.None) return error;
+            }
+            if (subbands < 2)
+            {
+                state.Entropy.TrimFlexBits = trimFlexbits;
+                error = EncodeSubsampledHp(state, coefficients, orientation,
+                    subbands, writer);
+                if (error != JxrError.None) return error;
+            }
+            return JxrError.None;
+        }
+
         private static JxrError EncodeYuv444Dc(JxrCodecState state,
             int[][] dc, JxrBitWriter writer)
         {
@@ -147,7 +175,7 @@ namespace Jxr.Managed.Core
                 }
             }
             error = state.Entropy.DcModel.UpdateForMacroblock(
-                JxrCodecColorFormat.Yuv444, 3, means);
+                state.Configuration.ColorFormat, 3, means);
             if (error != JxrError.None) return error;
             if (state.ResetContext && state.Configuration.DcOnly)
                 for (int table = 2; table <= 4; table++)
@@ -220,25 +248,135 @@ namespace Jxr.Managed.Core
             return JxrError.None;
         }
 
+        private static JxrError EncodeSubsampledLp(JxrCodecState state,
+            int[][] dc, JxrBitWriter writer)
+        {
+            JxrCodecColorFormat color = state.Configuration.ColorFormat;
+            bool is420 = color == JxrCodecColorFormat.Yuv420;
+            JxrAdaptiveScan scan = state.Entropy.LowpassScan;
+            if (state.ResetScan) scan.ResetTotals(16);
+            int ignored, lumaBits, chromaBits;
+            state.Entropy.LpModel.Get(0, out ignored, out lumaBits);
+            state.Entropy.LpModel.Get(1, out ignored, out chromaBits);
+            int[] lumaResiduals = new int[16], lumaPairs = new int[32];
+            int lumaCount = Scan(dc[0], 0, scan, lumaBits, 0,
+                lumaResiduals, lumaPairs);
+            int[] remap = is420 ? new int[] { 1, 2, 3 } :
+                new int[] { 4, 1, 2, 3, 5, 6, 7 };
+            int[] chromaPairs = new int[32];
+            int chromaCount = 0, run = 0;
+            for (int index = 0; index < remap.Length * 2; index++)
+            {
+                int value = dc[1 + (index & 1)][remap[index >> 1]];
+                int coarse = Math.Abs(value) >> chromaBits;
+                if (coarse == 0) run++;
+                else
+                {
+                    chromaPairs[2 * chromaCount] = run;
+                    chromaPairs[2 * chromaCount + 1] = value < 0 ? -coarse : coarse;
+                    chromaCount++; run = 0;
+                }
+            }
+            int cbp = (lumaCount != 0 ? 1 : 0) +
+                (chromaCount != 0 ? 2 : 0);
+            JxrLowpassCbpState cbpState = state.Entropy.LowpassCbp;
+            int coded = cbp;
+            JxrError error;
+            if (cbpState.ZeroCount <= 0 || cbpState.MaxCount < 0)
+            {
+                if (cbpState.MaxCount < cbpState.ZeroCount) coded = 3 - cbp;
+                if (coded == 0) error = writer.Write(0, 1);
+                else if (coded == 1) error = writer.Write(2, 2);
+                else error = writer.Write((uint)(coded + 4), 3);
+            }
+            else error = writer.Write((uint)cbp, 2);
+            if (error != JxrError.None) return error;
+            cbpState.Observe(cbp, 3);
+            if (lumaCount != 0)
+            {
+                error = EncodeBlock(state, lumaPairs, lumaCount, 1, 5,
+                    false, writer);
+                if (error != JxrError.None) return error;
+            }
+            if (lumaBits != 0)
+                for (int index = 1; index < 16; index++)
+                {
+                    int residual = lumaResiduals[index];
+                    error = writer.Write((uint)(residual >> 1),
+                        lumaBits + (residual & 1));
+                    if (error != JxrError.None) return error;
+                }
+            if (chromaCount != 0)
+            {
+                error = EncodeBlock(state, chromaPairs, chromaCount,
+                    is420 ? 10 : 2, 5, true, writer);
+                if (error != JxrError.None) return error;
+            }
+            if (chromaBits != 0)
+                for (int index = 1; index < (is420 ? 4 : 8); index++)
+                    for (int channel = 1; channel <= 2; channel++)
+                    {
+                        int value = dc[channel][index];
+                        error = writer.Write((uint)Math.Abs(value), chromaBits);
+                        if (error != JxrError.None) return error;
+                        if ((Math.Abs(value) >> chromaBits) == 0 && value != 0)
+                        {
+                            error = writer.Write((uint)(value < 0 ? 1 : 0), 1);
+                            if (error != JxrError.None) return error;
+                        }
+                    }
+            error = state.Entropy.LpModel.UpdateForMacroblock(color, 3,
+                new int[] { lumaCount, chromaCount });
+            if (error != JxrError.None) return error;
+            if (state.ResetContext)
+                for (int table = 0; table < 13; table++)
+                {
+                    error = state.Huffman.Adapt(table);
+                    if (error != JxrError.None) return error;
+                }
+            return JxrError.None;
+        }
+
         private static int PredictColorCbp(JxrCodecState state,
             int channel, int cbp)
+        {
+            return PredictColorCbp(state, channel, cbp, 16);
+        }
+
+        private static int PredictColorCbp(JxrCodecState state,
+            int channel, int cbp, int blockCount)
         {
             int model = channel == 0 ? 0 : 1;
             int zero, one, mode, top, left;
             state.HighpassCbp.PredictionModel.Get(model, out zero, out one, out mode);
             state.GetNeighborCbp(channel, out top, out left);
             int prediction = state.AtLeftBoundary ?
-                (state.AtTopBoundary ? 1 : (top >> 10) & 1) :
-                (left >> 5) & 1;
-            prediction |= (cbp & 0x3300) << 2;
-            prediction |= (cbp & 0xcc) << 6;
-            prediction |= (cbp & 0x33) << 2;
-            prediction |= (cbp & 0x11) << 1;
-            prediction |= (cbp & 0x2) << 3;
+                (state.AtTopBoundary ? 1 :
+                    (top >> (blockCount == 16 ? 10 : blockCount == 8 ? 6 : 2)) & 1) :
+                (left >> (blockCount == 16 ? 5 : 1)) & 1;
+            if (blockCount == 16)
+            {
+                prediction |= (cbp & 0x3300) << 2;
+                prediction |= (cbp & 0xcc) << 6;
+                prediction |= (cbp & 0x33) << 2;
+                prediction |= (cbp & 0x11) << 1;
+                prediction |= (cbp & 0x2) << 3;
+            }
+            else
+            {
+                prediction |= (cbp & 1) << 1;
+                prediction |= (cbp & 3) << 2;
+                if (blockCount == 8)
+                {
+                    prediction |= (cbp & 0xc) << 2;
+                    prediction |= (cbp & 0x30) << 2;
+                }
+            }
             int differential = mode == 0 ? prediction ^ cbp :
-                mode == 1 ? cbp : cbp ^ 0xffff;
+                mode == 1 ? cbp : cbp ^ ((1 << blockCount) - 1);
             int ones = 0;
-            for (int bit = 0; bit < 16; bit++) ones += (cbp >> bit) & 1;
+            for (int bit = 0; bit < blockCount; bit++) ones += (cbp >> bit) & 1;
+            ones *= 16 / blockCount;
             zero = Math.Max(-16, Math.Min(15, zero + ones - 3));
             one = Math.Max(-16, Math.Min(15, one + 16 - ones - 3));
             mode = zero < 0 ? (zero < one ? 1 : 2) : one < 0 ? 2 : 0;
@@ -301,6 +439,89 @@ namespace Jxr.Managed.Core
                             PatternLength[nibble]);
                         if (error != JxrError.None) return error;
                     }
+            }
+            return JxrError.None;
+        }
+
+        private static JxrError EncodeSubsampledCbp(JxrCodecState state,
+            int[] differential, JxrBitWriter writer)
+        {
+            bool is420 = state.Configuration.ColorFormat == JxrCodecColorFormat.Yuv420;
+            uint packed = 0;
+            for (int group = 0; group < 4; group++)
+            {
+                int y = (differential[0] >> (group * 4)) & 15;
+                int u, v;
+                if (is420)
+                {
+                    u = (differential[1] >> group) & 1;
+                    v = (differential[2] >> group) & 1;
+                    packed |= (uint)(y | (u << 4) | (v << 5)) << (group * 6);
+                }
+                else
+                {
+                    int shift = group == 0 ? 0 : group == 1 ? 1 :
+                        group == 2 ? 4 : 5;
+                    u = (differential[1] >> shift) & 1;
+                    u |= ((differential[1] >> (shift + 2)) & 1) << 1;
+                    v = (differential[2] >> shift) & 1;
+                    v |= ((differential[2] >> (shift + 2)) & 1) << 1;
+                    packed |= (uint)(y | (u << 4) | (v << 6)) << (group * 8);
+                }
+            }
+            int groupWidth = is420 ? 6 : 8;
+            int groupMask = (1 << groupWidth) - 1;
+            int pattern = 0;
+            for (int group = 0; group < 4; group++)
+            {
+                pattern |= ((packed >> (group * groupWidth)) &
+                    (uint)groupMask) != 0 ? 1 << group : 0;
+            }
+            JxrError error = Code(state.HighpassCbp.CountHuffman,
+                CountOnes[pattern], writer, true);
+            if (error != JxrError.None) return error;
+            error = writer.Write((uint)PatternCode[pattern], PatternLength[pattern]);
+            if (error != JxrError.None) return error;
+            for (int group = 0; group < 4; group++)
+            {
+                int code = (int)((packed >> (group * groupWidth)) &
+                    (uint)groupMask);
+                if (code == 0) continue;
+                int y = code & 15, blockClass = BlockClass[y];
+                int u = is420 ? (code >> 4) & 1 : (code >> 4) & 3;
+                int v = is420 ? (code >> 5) & 1 : (code >> 6) & 3;
+                int chroma = (u != 0 ? 1 : 0) + (v != 0 ? 2 : 0);
+                int symbol = chroma == 0 ? blockClass - 1 :
+                    blockClass > 2 ? 8 : blockClass + 5;
+                error = Code(state.HighpassCbp.PatternHuffman,
+                    symbol, writer, true);
+                if (error != JxrError.None) return error;
+                if (chroma != 0)
+                {
+                    error = writer.Write((uint)(chroma == 1 ? 1 : 3 - chroma),
+                        chroma == 1 ? 1 : 2);
+                    if (error != JxrError.None) return error;
+                }
+                if (symbol == 8)
+                {
+                    error = writer.Write((uint)(blockClass == 3 ? 1 : 5 - blockClass),
+                        blockClass == 3 ? 1 : 2);
+                    if (error != JxrError.None) return error;
+                }
+                error = writer.Write((uint)BlockCode[y], BlockLength[y]);
+                if (error != JxrError.None) return error;
+                if (!is420)
+                {
+                    int[] chromaCodes = { u, v };
+                    for (int channel = 0; channel < 2; channel++)
+                        if (chromaCodes[channel] != 0)
+                        {
+                            int value = chromaCodes[channel];
+                            error = writer.Write((uint)(value == 1 ? 1 : 3 - value),
+                                value == 1 ? 1 : 2);
+                            if (error != JxrError.None) return error;
+                        }
+                }
             }
             return JxrError.None;
         }
@@ -369,6 +590,94 @@ namespace Jxr.Managed.Core
             }
             error = state.Entropy.AcModel.UpdateForMacroblock(
                 JxrCodecColorFormat.Yuv444, 3, means);
+            if (error != JxrError.None) return error;
+            if (state.ResetContext)
+            {
+                error = state.HighpassCbp.Adapt();
+                if (error != JxrError.None) return error;
+                for (int table = 13; table < 21; table++)
+                {
+                    error = state.Huffman.Adapt(table);
+                    if (error != JxrError.None) return error;
+                }
+            }
+            return JxrError.None;
+        }
+
+        private static JxrError EncodeSubsampledHp(JxrCodecState state,
+            int[][] coefficients, int orientation, int subbands,
+            JxrBitWriter writer)
+        {
+            JxrCodecColorFormat color = state.Configuration.ColorFormat;
+            bool is420 = color == JxrCodecColorFormat.Yuv420;
+            JxrAdaptiveScan scan = orientation == 1 ?
+                state.Entropy.VerticalScan : state.Entropy.HorizontalScan;
+            if (state.ResetScan)
+            {
+                state.Entropy.HorizontalScan.ResetTotals(16);
+                state.Entropy.VerticalScan.ResetTotals(16);
+            }
+            int ignored, lumaBits, chromaBits;
+            state.Entropy.AcModel.Get(0, out ignored, out lumaBits);
+            state.Entropy.AcModel.Get(1, out ignored, out chromaBits);
+            int chromaBlocks = is420 ? 4 : 8;
+            int[] cbp = new int[3], differential = new int[3];
+            for (int channel = 0; channel < 3; channel++)
+            {
+                int[] offsets = channel == 0 ? BlockOffsets :
+                    is420 ? Chroma420Offsets : Chroma422Offsets;
+                int bits = channel == 0 ? lumaBits : chromaBits;
+                int threshold = (1 << bits) - 1;
+                int blocks = channel == 0 ? 16 : chromaBlocks;
+                for (int block = 0; block < blocks; block++)
+                    for (int index = 1; index < 16; index++)
+                        if ((uint)(coefficients[channel][offsets[block] + index] +
+                            threshold) >= (uint)(2 * threshold + 1))
+                        { cbp[channel] |= 1 << block; break; }
+                differential[channel] = PredictColorCbp(state, channel,
+                    cbp[channel], blocks);
+            }
+            JxrError error = EncodeSubsampledCbp(state, differential, writer);
+            if (error != JxrError.None) return error;
+            int[] means = { 0, 0 };
+            for (int channel = 0; channel < 3; channel++)
+            {
+                int bits = channel == 0 ? lumaBits : chromaBits;
+                int trim = state.Entropy.TrimFlexBits;
+                int flex = subbands != (int)JxrGraySubbandMode.NoFlexbits ?
+                    Math.Max(0, bits - trim) : 0;
+                int[] offsets = channel == 0 ? BlockOffsets :
+                    is420 ? Chroma420Offsets : Chroma422Offsets;
+                int blocks = channel == 0 ? 16 : chromaBlocks;
+                int[] residuals = new int[16], pairs = new int[32];
+                for (int block = 0; block < blocks; block++)
+                {
+                    int offset = offsets[block];
+                    Array.Clear(residuals, 0, residuals.Length);
+                    if ((cbp[channel] & (1 << block)) != 0)
+                    {
+                        int count = Scan(coefficients[channel], offset,
+                            scan, bits, trim, residuals, pairs);
+                        means[channel == 0 ? 0 : 1] += count;
+                        error = EncodeBlock(state, pairs, count, 1, 13,
+                            channel != 0, writer);
+                        if (error != JxrError.None) return error;
+                    }
+                    if (flex != 0)
+                        for (int index = 1; index < 16; index++)
+                        {
+                            int coefficientIndex = CoefficientOrder[index];
+                            int residual = (cbp[channel] & (1 << block)) != 0 ?
+                                residuals[coefficientIndex] :
+                                TrimmedResidual(coefficients[channel][offset +
+                                    coefficientIndex], trim);
+                            error = writer.Write((uint)(residual >> 1),
+                                flex + (residual & 1));
+                            if (error != JxrError.None) return error;
+                        }
+                }
+            }
+            error = state.Entropy.AcModel.UpdateForMacroblock(color, 3, means);
             if (error != JxrError.None) return error;
             if (state.ResetContext)
             {

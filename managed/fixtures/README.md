@@ -39,3 +39,13 @@ source byte-for-byte. `rgb444_sizes_round_trip` compares the entire managed
 JXR with this native reference, then decodes it to the original pixels. The
 real sign and city images above also serve as native byte-for-byte encoder
 references, including the QP=16 subband and flexbit variants.
+
+`create-overlap-subsampled.ps1` generates deterministic 32×32, 31×19 and
+1×1 RGB24 BMPs, plus Gray overlap references. It uses the native spatial,
+sequential encoder to produce YUV 4:4:4 overlap and YUV 4:2:2/4:2:0 streams
+at OL_NONE, OL_ONE and OL_TWO. The QP=16 fixtures exercise scaled arithmetic;
+the QP=1 fixtures pass `-u` and exercise unscaled arithmetic. Native-restored
+BMPs are retained for pixel comparison. The managed conformance tests require
+byte-identical JXR and native-identical decoded pixels. The native encoder
+rejects OL_TWO for one-macroblock-wide subsampled input, so the 1×1 fixtures
+cover OL_ONE and the public API tests the corresponding rejection.

@@ -39,7 +39,8 @@ green alongside the managed runner.
 `JxrImage` describes top-down, row-major pixels with explicit width, height,
 format and byte stride. `Gray8` is integrated end-to-end. `Rgb24` and `Bgr24`
 select R-G-B and B-G-R byte order respectively. Both encode and decode support
-full-resolution 8-bit YUV 4:4:4 in one spatial packet without overlap. The
+8-bit YUV 4:4:4, 4:2:2 and 4:2:0 in one spatial packet with overlap levels
+0, 1 and 2. The
 caller owns the image's `byte[]` buffer, which is not copied by the constructor.
 
 `JxrCodec.Encode(image, options, out byte[])` and
@@ -51,7 +52,7 @@ partial JXR in that stream and returns `IoFailure`.
 
 The integrated `Gray8` encoder supports QP indexes 0–255 (indexes 0 and 1
 select the native lossless index), independent DC/LP/HP QP overrides, all four
-subband modes, optional flexbit trimming, no overlap and spatial layout.
+subband modes, optional flexbit trimming, overlap levels 0–2 and spatial layout.
 Native fixture tests compare complete JXR bytes, quantized/predicted
 coefficients and exact per-band bit boundaries for QP 1/2/16/64/255,
 trim-flexbits, no-flexbits, no-HP and DC-only cases. The managed decoder also
@@ -61,12 +62,19 @@ decoding; mixed-QP byte-for-byte C comparison is not covered by the native
 command-line encoder, which exposes one image QP.
 The color encoder supports the same four subband modes, QP fields and flexbit
 trimming. It processes arbitrary image dimensions with replicated border
-samples, three full-resolution transform planes, shared entropy adaptation,
+samples, luma and either full-resolution or subsampled chroma planes, shared entropy adaptation,
 and per-channel prediction state. `rgb444_encoder_native_fixture` checks the
 lossless real sign image against the native JXR byte-for-byte;
 `rgb444_encoder_quality_native_fixtures` does the same for six lossy sign/city
 profiles. `rgb444_sizes_round_trip` covers 1x1, 15x17, 16x16, 31x19 and
-32x32, including a byte-identical native 15x17 reference. BGR input produces
+32x32, including a byte-identical native 15x17 reference. The subsampled
+encoder applies the native five-tap chroma downsampler, compact transforms,
+LP/HP entropy syntax and CBP packing; decoding interpolates chroma before
+the inverse color transform. Native fixtures compare byte-identical JXR and
+restored RGB pixels for 4:2:2/4:2:0, overlap levels 0–2, scaled and unscaled
+arithmetic, single-macroblock and non-multiple-of-16 boundaries. The C encoder
+rejects OL_TWO on a one-macroblock-wide subsampled image, and so does this API.
+BGR input produces
 the same JXR as RGB input with equivalent pixels. The BMP adapter also reads
 and writes canonical 24bpp RGB/BGR images.
 The native `transform_coefficients` trace is captured before the delayed
@@ -88,15 +96,16 @@ packet from the header, decodes DC/LP/HP, applies prediction, dequantization
 and inverse transform, and emits an 8-bit grayscale BMP. The
 `minimal_decoder_end_to_end` test compares the entire BMP byte-for-byte with
 both the source and native-decoded fixture. The RGB24 decode path additionally
-handles spatial, no-overlap 8-bit YUV 4:4:4 streams with one packet, sharing
+handles spatial 8-bit YUV 4:4:4/4:2:2/4:2:0 streams with one packet, sharing
 DC/LP/HP entropy and prediction state across Y, U and V. It inverse-transforms
-each full-resolution plane and applies the reversible color transform.
+the luma and full-resolution or subsampled chroma planes, then applies the
+reversible color transform.
 `real_rgb444_decode` checks the 334x330 real-image fixture against its source
 BGR BMP. `rgb444_quality_native_fixtures` also compares native-restored RGB
 pixels for QP=16 and four subband/trim variants of the sign image plus the
 605x478 city image. The scaled-arithmetic chroma DC/LP values are doubled
-after inverse transform stage 2, as in the native decoder. Other color
-subsampling, overlap, tiles, alpha and non-spatial layouts
+after inverse transform stage 2, as in the native decoder. Tiles, alpha and
+non-spatial layouts
 remain unsupported; this is not yet a general-purpose JPEG XR decoder.
 
 `JxrMinimalEncoder.EncodeGrayBmp` now connects the managed forward transform,
