@@ -15,6 +15,7 @@
     <DebugType>pdbonly</DebugType><Optimize>true</Optimize><OutputPath>bin\Release\</OutputPath>
   </PropertyGroup>
   <ItemGroup><Reference Include="System" /></ItemGroup>
+  <ItemGroup><Compile Include="JxrSpatialIndexTable.cs" /></ItemGroup>
   <ItemGroup><Compile Include="JxrChromaForward.cs" /></ItemGroup>
   <ItemGroup><Compile Include="JxrChromaOverlapForward.cs" /></ItemGroup>
   <ItemGroup><Compile Include="JxrChromaOverlapInverse.cs" /></ItemGroup>

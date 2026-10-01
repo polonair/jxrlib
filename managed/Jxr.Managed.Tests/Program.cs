@@ -49,6 +49,8 @@ namespace Jxr.Managed.Tests
             new TestCase("subsampled_encode_native_fixtures", TestSubsampledEncodeNativeFixtures),
             new TestCase("subsampled_edge_native_fixtures", TestSubsampledEdgeNativeFixtures),
             new TestCase("real_subsampled_native_fixtures", TestRealSubsampledNativeFixtures),
+            new TestCase("spatial_tile_native_fixtures", TestSpatialTileNativeFixtures),
+            new TestCase("spatial_tile_invalid_tables", TestSpatialTileInvalidTables),
             new TestCase("minimal_decoder_end_to_end", TestMinimalDecoderEndToEnd),
             new TestCase("minimal_entropy_encoder_fixture", TestMinimalEntropyEncoderFixture),
             new TestCase("minimal_encoder_end_to_end", TestMinimalEncoderEndToEnd),
@@ -2363,6 +2365,117 @@ namespace Jxr.Managed.Tests
                               break; }
                     return false;
                 }
+            }
+            return true;
+        }
+
+        private static bool TestSpatialTileNativeFixtures()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "managed\\fixtures\\gray32-tiles2x2-q1-ol0.jxr")))
+                directory = directory.Parent;
+            if (directory == null) return false;
+            string fixtures = Path.Combine(directory.FullName, "managed\\fixtures");
+            string[] names = { "gray32-tiles2x2-q1-ol0",
+                "gray32-tiles2x2-q16-ol2", "rgb444-tiles2x2-q16-ol0",
+                "rgb444-tiles2x2-q16-ol2", "rgb422-tiles2x2-q16-ol0",
+                "rgb422-tiles2x2-q16-ol2", "rgb420-tiles2x2-q16-ol0",
+                "rgb420-tiles2x2-q16-ol2", "rgb422-tiles-v1-2-q16-ol2",
+                "rgb420-tiles31x19-q1-ol2" };
+            for (int item = 0; item < names.Length; item++)
+            {
+                string name = names[item];
+                byte[] jxr = File.ReadAllBytes(Path.Combine(fixtures, name + ".jxr"));
+                JxrHeaders headers;
+                if (JxrHeaders.Read(jxr, out headers) != JxrError.None ||
+                    !headers.Main.HasIndexTable || headers.Main.BitstreamFormat != 0)
+                {
+                    Console.WriteLine(name + " header/index table");
+                    return false;
+                }
+                if (name == "rgb422-tiles-v1-2-q16-ol2" &&
+                    (headers.Main.VerticalSliceCountMinusOne != 1 ||
+                     headers.Main.GetTileX(1) != 1))
+                {
+                    Console.WriteLine(name + " variable tile boundaries");
+                    return false;
+                }
+                JxrPixelFormat format = name.StartsWith("gray") ?
+                    JxrPixelFormat.Gray8 : JxrPixelFormat.Rgb24;
+                JxrImage expected, actual;
+                byte[] restored = File.ReadAllBytes(Path.Combine(fixtures,
+                    name + "-restored.bmp"));
+                JxrError error = format == JxrPixelFormat.Gray8 ?
+                    JxrBmpAdapter.ReadGray8(restored, out expected) :
+                    JxrBmpAdapter.ReadRgb24(restored, out expected);
+                if (error != JxrError.None) return false;
+                JxrDecoderOptions options = new JxrDecoderOptions();
+                options.OutputFormat = format;
+                error = JxrCodec.Decode(jxr, options, out actual);
+                if (error != JxrError.None || actual == null ||
+                    actual.Width != expected.Width || actual.Height != expected.Height ||
+                    !EqualBytes(actual.Pixels, expected.Pixels))
+                {
+                    Console.WriteLine(name + " decode: " + error);
+                    if (actual != null)
+                        for (int index = 0; index < Math.Min(actual.Pixels.Length,
+                            expected.Pixels.Length); index++)
+                            if (actual.Pixels[index] != expected.Pixels[index])
+                            { Console.WriteLine("first pixel difference " + index); break; }
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static bool TestSpatialTileInvalidTables()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "managed\\fixtures\\rgb444-tiles2x2-q16-ol0.jxr")))
+                directory = directory.Parent;
+            if (directory == null) return false;
+            byte[] reference = File.ReadAllBytes(Path.Combine(directory.FullName,
+                "managed\\fixtures\\rgb444-tiles2x2-q16-ol0.jxr"));
+            JxrHeaders headers;
+            if (JxrHeaders.Read(reference, out headers) != JxrError.None) return false;
+            int table = headers.CodestreamOffset + headers.ByteCount;
+            JxrDecoderOptions options = new JxrDecoderOptions();
+            options.OutputFormat = JxrPixelFormat.Rgb24;
+            byte[] invalid = (byte[])reference.Clone();
+            invalid[table + 1] = 0;
+            if (!ExpectInvalidSpatialStream(invalid, options, "bad table marker")) return false;
+
+            invalid = (byte[])reference.Clone();
+            // The first packet offset follows the two-byte table marker.
+            invalid[table + 2] = 0x7f;
+            invalid[table + 3] = 0xff;
+            if (!ExpectInvalidSpatialStream(invalid, options, "bad packet offset")) return false;
+
+            // The fixture uses four 16-bit offsets followed by an escaped
+            // trailing length word, then the first packet.
+            if (reference[table + 10] < 0xfd)
+            {
+                Console.WriteLine("unexpected table trailer: table=" + table +
+                    " trailer=" + reference[table + 10]);
+                return false;
+            }
+            invalid = (byte[])reference.Clone();
+            invalid[table + 11 + 3] = 0x08;
+            if (!ExpectInvalidSpatialStream(invalid, options, "bad packet tile id")) return false;
+            return true;
+        }
+
+        private static bool ExpectInvalidSpatialStream(byte[] jxr,
+            JxrDecoderOptions options, string label)
+        {
+            JxrImage image;
+            JxrError error = JxrCodec.Decode(jxr, options, out image);
+            if (error != JxrError.InvalidBitstream || image != null)
+            {
+                Console.WriteLine(label + ": " + error);
+                return false;
             }
             return true;
         }

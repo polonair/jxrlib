@@ -84,15 +84,18 @@ namespace Jxr.Managed.Core
         private readonly JxrImagePlaneQuantizerHeader quantizers;
         private readonly int byteCount;
         private readonly int codestreamOffset;
+        private readonly int codestreamLength;
 
         private JxrHeaders(JxrMainHeader main, JxrImagePlaneHeader plane,
-            JxrImagePlaneQuantizerHeader quantizers, int byteCount, int codestreamOffset)
+            JxrImagePlaneQuantizerHeader quantizers, int byteCount,
+            int codestreamOffset, int codestreamLength)
         {
             this.main = main;
             this.plane = plane;
             this.quantizers = quantizers;
             this.byteCount = byteCount;
             this.codestreamOffset = codestreamOffset;
+            this.codestreamLength = codestreamLength;
         }
 
         public JxrMainHeader Main { get { return main; } }
@@ -100,6 +103,7 @@ namespace Jxr.Managed.Core
         public JxrImagePlaneQuantizerHeader Quantizers { get { return quantizers; } }
         public int ByteCount { get { return byteCount; } }
         public int CodestreamOffset { get { return codestreamOffset; } }
+        public int CodestreamLength { get { return codestreamLength; } }
 
         // Syntax-level entry points mirror the three native descriptor readers.
         // The reader remains at the first bit after the parsed descriptor.
@@ -186,7 +190,7 @@ namespace Jxr.Managed.Core
             cursor.Align();
             if (cursor.Error != JxrError.None) return cursor.Error;
             result = new JxrHeaders(main, plane, quantizers,
-                cursor.BitPosition / 8, codestreamOffset);
+                cursor.BitPosition / 8, codestreamOffset, codestreamLength);
             return JxrError.None;
         }
 

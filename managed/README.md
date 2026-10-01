@@ -125,8 +125,9 @@ The fixture JXR is reproduced byte-for-byte, and eighteen additional sample
 patterns round-trip through the managed encoder and decoder. Image dimensions
 need not be multiples of 16: border samples are replicated for encoding and
 cropped after decoding. Consecutive macroblocks share entropy state, DC/LP
-prediction rows and HP CBP neighbours. Tiles and other JPEG XR profiles are
-still unsupported.
+prediction rows and HP CBP neighbours. Spatial Gray/RGB decoding also
+supports indexed tiles, including 4:2:2/4:2:0 and overlap; the managed encoder
+still emits one tile, and frequency-layout decoding remains unsupported.
 `gray_sizes_native_fixtures` compares native and managed output for eight
 dimensions, including a 17-macroblock-wide image that crosses an adaptive
 scan reset boundary. The [fixture generator](fixtures/README.md) documents the
@@ -138,8 +139,8 @@ quantizer indices, packet fields and lengths by parsing the generated output.
 `JxrImagePipeline` currently covers the full-resolution 8-bit pixel boundary:
 Gray/RGB input centering, reversible RGB/CMYK color transforms, scaled and
 unscaled RGB/Gray output, clipping, and explicit row strides. Its native and
-managed reference vectors share a frozen signature. General-purpose composition
-with tiles, alpha and arbitrary image sizes remains future work.
+managed reference vectors share a frozen signature. Alpha and other
+not-yet-integrated profiles remain future work.
 
 `JxrDecoderSession` and `JxrEncoderSession` now own separate two-row
 coefficient buffers for each channel and optional alpha plane. Their memory

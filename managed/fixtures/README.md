@@ -49,3 +49,14 @@ BMPs are retained for pixel comparison. The managed conformance tests require
 byte-identical JXR and native-identical decoded pixels. The native encoder
 rejects OL_TWO for one-macroblock-wide subsampled input, so the 1×1 fixtures
 cover OL_ONE and the public API tests the corresponding rejection.
+
+`create-spatial-tiles.ps1` generates C-reference spatial streams with an index
+table for tiled decoding. The set includes Gray 32×32, RGB 4:4:4/4:2:2/4:2:0
+32×32 uniform 2×2 grids at OL_NONE and OL_TWO, a 48×32 4:2:2 image with
+variable tile widths of one and two macroblocks, and a 31×19 4:2:0 edge case
+at QP 1/OL_TWO. Each JXR is paired with the native decoder's restored BMP.
+`spatial_tile_native_fixtures` compares managed output pixels with those BMPs;
+`spatial_tile_invalid_tables` verifies rejection of malformed index markers,
+out-of-range packet offsets and incorrect tile IDs. The native CLI fixtures
+use soft tile boundaries; hard-boundary decoding does not yet have a native
+reference fixture.
