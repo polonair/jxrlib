@@ -5,6 +5,71 @@ namespace Jxr.Managed.Core
     // Optional file-format boundary. The JPEG XR codec itself does not use BMP.
     public static class JxrBmpAdapter
     {
+        // Reads uncompressed 32bpp BGRA with straight (not premultiplied) alpha.
+        public static JxrError ReadBgra32(byte[] bitmap, out JxrImage image)
+        {
+            image = null;
+            if (bitmap == null) return JxrError.InvalidArgument;
+            if (bitmap.Length < 54 || bitmap[0] != 'B' || bitmap[1] != 'M')
+                return JxrError.InvalidBitstream;
+            int width = Read32(bitmap, 18), signedHeight = Read32(bitmap, 22);
+            int height = signedHeight < 0 ? -signedHeight : signedHeight;
+            int offset = Read32(bitmap, 10);
+            if (width < 1 || height < 1 || signedHeight == Int32.MinValue ||
+                (long)width * height > Int32.MaxValue / 4 || offset != 54 ||
+                (long)offset + (long)width * height * 4 != bitmap.Length ||
+                Read32(bitmap, 14) != 40 || Read16(bitmap, 26) != 1 ||
+                Read16(bitmap, 28) != 32 || Read32(bitmap, 30) != 0)
+                return JxrError.UnsupportedFeature;
+            byte[] pixels = new byte[width * height * 4];
+            for (int row = 0; row < height; row++)
+            {
+                int sourceRow = signedHeight < 0 ? row : height - 1 - row;
+                Array.Copy(bitmap, offset + sourceRow * width * 4,
+                    pixels, row * width * 4, width * 4);
+            }
+            image = new JxrImage(width, height, JxrPixelFormat.Bgra32,
+                pixels, width * 4);
+            return JxrError.None;
+        }
+
+        public static JxrError WriteBgra32(JxrImage image, out byte[] bitmap)
+        {
+            bitmap = null;
+            if (image == null) return JxrError.InvalidArgument;
+            if (image.Format != JxrPixelFormat.Bgra32 &&
+                image.Format != JxrPixelFormat.Rgba32)
+                return JxrError.UnsupportedFeature;
+            if ((long)image.Width * image.Height > Int32.MaxValue / 4 - 54 / 4)
+                return JxrError.UnsupportedFeature;
+            byte[] result = new byte[54 + image.Width * image.Height * 4];
+            result[0] = (byte)'B'; result[1] = (byte)'M';
+            Write32(result, 2, result.Length);
+            Write32(result, 10, 54);
+            Write32(result, 14, 40);
+            Write32(result, 18, image.Width);
+            Write32(result, 22, image.Height);
+            Write16(result, 26, 1);
+            Write16(result, 28, 32);
+            Write32(result, 34, image.Width * image.Height * 4);
+            Write32(result, 38, 3780);
+            Write32(result, 42, 3780);
+            bool bgra = image.Format == JxrPixelFormat.Bgra32;
+            for (int row = 0; row < image.Height; row++)
+                for (int column = 0; column < image.Width; column++)
+                {
+                    int source = row * image.Stride + column * 4;
+                    int target = 54 + (image.Height - 1 - row) * image.Width * 4 +
+                        column * 4;
+                    result[target] = image.Pixels[source + (bgra ? 0 : 2)];
+                    result[target + 1] = image.Pixels[source + 1];
+                    result[target + 2] = image.Pixels[source + (bgra ? 2 : 0)];
+                    result[target + 3] = image.Pixels[source + 3];
+                }
+            bitmap = result;
+            return JxrError.None;
+        }
+
         // Reads an uncompressed 24bpp BGR BMP and exposes top-down RGB pixels,
         // matching JxrImage's documented channel order.
         public static JxrError ReadRgb24(byte[] bitmap, out JxrImage image)

@@ -122,6 +122,20 @@ namespace Jxr.Managed.Core
         Yuv420 = 1
     }
 
+    public enum JxrAlphaMode
+    {
+        None = 0,
+        Planar = 2,
+        Interleaved = 3
+    }
+
+    public enum JxrAlphaDecodeMode
+    {
+        ColorOnly = 0,
+        AlphaOnly = 1,
+        ColorAndAlpha = 2
+    }
+
     public sealed class JxrEncoderOptions
     {
         private int qualityIndex = 1;
@@ -135,6 +149,8 @@ namespace Jxr.Managed.Core
         private JxrGraySubbandMode subbands = JxrGraySubbandMode.All;
         private JxrChromaSubsampling chromaSubsampling = JxrChromaSubsampling.Yuv444;
         private JxrTileLayout tileLayout;
+        private int alphaQualityIndex = 1;
+        private JxrAlphaMode alphaMode = JxrAlphaMode.Planar;
 
         public int QualityIndex { get { return qualityIndex; } set { qualityIndex = value; } }
         public int Overlap { get { return overlap; } set { overlap = value; } }
@@ -152,16 +168,25 @@ namespace Jxr.Managed.Core
         { get { return chromaSubsampling; } set { chromaSubsampling = value; } }
         public JxrTileLayout TileLayout
         { get { return tileLayout; } set { tileLayout = value; } }
+        // Used only by 32-bit RGBA/BGRA input. Native alpha QP is independent
+        // from the color QP; 0 and 1 both select lossless coding.
+        public int AlphaQualityIndex
+        { get { return alphaQualityIndex; } set { alphaQualityIndex = value; } }
+        public JxrAlphaMode AlphaMode
+        { get { return alphaMode; } set { alphaMode = value; } }
     }
 
     public sealed class JxrDecoderOptions
     {
         private JxrPixelFormat outputFormat = JxrPixelFormat.Gray8;
+        private JxrAlphaDecodeMode alphaMode = JxrAlphaDecodeMode.ColorAndAlpha;
 
         public JxrPixelFormat OutputFormat
         {
             get { return outputFormat; }
             set { outputFormat = value; }
         }
+        public JxrAlphaDecodeMode AlphaMode
+        { get { return alphaMode; } set { alphaMode = value; } }
     }
 }

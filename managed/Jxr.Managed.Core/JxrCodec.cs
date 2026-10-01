@@ -23,6 +23,10 @@ namespace Jxr.Managed.Core
                 options.LowpassQuantizerIndex < -1 || options.LowpassQuantizerIndex > 255 ||
                 options.HighpassQuantizerIndex < -1 || options.HighpassQuantizerIndex > 255 ||
                 options.TrimFlexbits < 0 || options.TrimFlexbits > 15 ||
+                options.AlphaQualityIndex < 1 || options.AlphaQualityIndex > 255 ||
+                (options.AlphaMode != JxrAlphaMode.None &&
+                 options.AlphaMode != JxrAlphaMode.Planar &&
+                 options.AlphaMode != JxrAlphaMode.Interleaved) ||
                 (int)options.Subbands < 0 || (int)options.Subbands > 3 ||
                 (int)options.ChromaSubsampling < 1 ||
                 (int)options.ChromaSubsampling > 3 ||
@@ -50,6 +54,16 @@ namespace Jxr.Managed.Core
                 if (trace != null) return JxrError.UnsupportedFeature;
                 return JxrMinimalColorEncoder.Encode(image, options, out jxr);
             }
+            if (image.Format == JxrPixelFormat.Rgba32 ||
+                image.Format == JxrPixelFormat.Bgra32)
+            {
+                if (options.AlphaMode == JxrAlphaMode.Interleaved)
+                    return JxrError.UnsupportedFeature;
+                if (options.AlphaMode != JxrAlphaMode.Planar)
+                    return JxrError.InvalidArgument;
+                if (trace != null) return JxrError.UnsupportedFeature;
+                return EncodePlanarAlpha(image, options, out jxr);
+            }
             return JxrError.UnsupportedFeature;
         }
 
@@ -60,8 +74,41 @@ namespace Jxr.Managed.Core
             if (jxr == null || options == null) return JxrError.InvalidArgument;
             if (options.OutputFormat != JxrPixelFormat.Gray8 &&
                 options.OutputFormat != JxrPixelFormat.Rgb24 &&
-                options.OutputFormat != JxrPixelFormat.Bgr24)
+                options.OutputFormat != JxrPixelFormat.Bgr24 &&
+                options.OutputFormat != JxrPixelFormat.Rgba32 &&
+                options.OutputFormat != JxrPixelFormat.Bgra32)
                 return JxrError.InvalidArgument;
+            if (options.AlphaMode != JxrAlphaDecodeMode.ColorOnly &&
+                options.AlphaMode != JxrAlphaDecodeMode.AlphaOnly &&
+                options.AlphaMode != JxrAlphaDecodeMode.ColorAndAlpha)
+                return JxrError.InvalidArgument;
+            JxrHeaders headers;
+            JxrError headerError = JxrHeaders.Read(jxr, out headers);
+            if (headerError != JxrError.None) return headerError;
+            if (headers.HasPlanarAlpha)
+            {
+                if (options.AlphaMode == JxrAlphaDecodeMode.AlphaOnly)
+                {
+                    if (options.OutputFormat != JxrPixelFormat.Gray8)
+                        return JxrError.InvalidArgument;
+                    return DecodePlanarAlpha(jxr, headers, out image);
+                }
+                if (options.AlphaMode == JxrAlphaDecodeMode.ColorAndAlpha)
+                {
+                    if (options.OutputFormat != JxrPixelFormat.Rgba32 &&
+                        options.OutputFormat != JxrPixelFormat.Bgra32)
+                        return JxrError.InvalidArgument;
+                    return DecodePlanarRgba(jxr, headers,
+                        options.OutputFormat == JxrPixelFormat.Rgba32, out image);
+                }
+                if (options.OutputFormat == JxrPixelFormat.Rgba32 ||
+                    options.OutputFormat == JxrPixelFormat.Bgra32)
+                    return JxrError.InvalidArgument;
+            }
+            else if (options.AlphaMode == JxrAlphaDecodeMode.AlphaOnly ||
+                options.OutputFormat == JxrPixelFormat.Rgba32 ||
+                options.OutputFormat == JxrPixelFormat.Bgra32)
+                return JxrError.UnsupportedFeature;
             if (options.OutputFormat == JxrPixelFormat.Rgb24 ||
                 options.OutputFormat == JxrPixelFormat.Bgr24)
             {
@@ -81,6 +128,147 @@ namespace Jxr.Managed.Core
                 out width, out height);
             if (error != JxrError.None) return error;
             image = new JxrImage(width, height, JxrPixelFormat.Gray8, pixels, width);
+            return JxrError.None;
+        }
+
+        private static JxrError EncodePlanarAlpha(JxrImage image,
+            JxrEncoderOptions options, out byte[] jxr)
+        {
+            jxr = null;
+            if ((long)image.Width * image.Height > Int32.MaxValue / 4)
+                return JxrError.UnsupportedFeature;
+            bool rgba = image.Format == JxrPixelFormat.Rgba32;
+            byte[] colorPixels = new byte[image.Width * image.Height * 3];
+            byte[] alphaPixels = new byte[image.Width * image.Height];
+            for (int y = 0; y < image.Height; y++)
+                for (int x = 0; x < image.Width; x++)
+                {
+                    int source = y * image.Stride + x * 4;
+                    int color = (y * image.Width + x) * 3;
+                    int alpha = y * image.Width + x;
+                    if (rgba)
+                    {
+                        colorPixels[color] = image.Pixels[source];
+                        colorPixels[color + 1] = image.Pixels[source + 1];
+                        colorPixels[color + 2] = image.Pixels[source + 2];
+                    }
+                    else
+                    {
+                        colorPixels[color] = image.Pixels[source + 2];
+                        colorPixels[color + 1] = image.Pixels[source + 1];
+                        colorPixels[color + 2] = image.Pixels[source];
+                    }
+                    alphaPixels[alpha] = image.Pixels[source + 3];
+                }
+            JxrImage colorImage = new JxrImage(image.Width, image.Height,
+                JxrPixelFormat.Rgb24, colorPixels, image.Width * 3);
+            byte[] colorContainer;
+            JxrError error = JxrMinimalColorEncoder.Encode(colorImage, options,
+                out colorContainer);
+            if (error != JxrError.None) return error;
+            JxrEncoderOptions alphaOptions = CopyOptions(options);
+            alphaOptions.QualityIndex = options.AlphaQualityIndex;
+            alphaOptions.ChromaSubsampling = JxrChromaSubsampling.Yuv444;
+            alphaOptions.DcQuantizerIndex = -1;
+            alphaOptions.LowpassQuantizerIndex = -1;
+            alphaOptions.HighpassQuantizerIndex = -1;
+            byte[] alphaContainer;
+            error = JxrMinimalEncoder.EncodeGrayPixels(alphaPixels, image.Width,
+                image.Width, image.Height, alphaOptions, null, out alphaContainer);
+            if (error != JxrError.None) return error;
+            JxrHeaders colorHeaders, alphaHeaders;
+            error = JxrHeaders.Read(colorContainer, out colorHeaders);
+            if (error != JxrError.None) return error;
+            error = JxrHeaders.Read(alphaContainer, out alphaHeaders);
+            if (error != JxrError.None) return error;
+            byte[] colorStream = Slice(colorContainer, colorHeaders.CodestreamOffset,
+                colorHeaders.CodestreamLength);
+            byte[] alphaStream = Slice(alphaContainer, alphaHeaders.CodestreamOffset,
+                alphaHeaders.CodestreamLength);
+            return JxrContainerWriter.WriteRgbaPlanar(colorStream, alphaStream,
+                image.Width, image.Height, !rgba, 96.012f, 96.012f, out jxr);
+        }
+
+        private static JxrEncoderOptions CopyOptions(JxrEncoderOptions source)
+        {
+            JxrEncoderOptions result = new JxrEncoderOptions();
+            result.QualityIndex = source.QualityIndex;
+            result.Overlap = source.Overlap;
+            result.Layout = source.Layout;
+            result.Progressive = source.Progressive;
+            result.DcQuantizerIndex = source.DcQuantizerIndex;
+            result.LowpassQuantizerIndex = source.LowpassQuantizerIndex;
+            result.HighpassQuantizerIndex = source.HighpassQuantizerIndex;
+            result.TrimFlexbits = source.TrimFlexbits;
+            result.Subbands = source.Subbands;
+            result.ChromaSubsampling = source.ChromaSubsampling;
+            result.TileLayout = source.TileLayout;
+            result.AlphaQualityIndex = source.AlphaQualityIndex;
+            result.AlphaMode = source.AlphaMode;
+            return result;
+        }
+
+        private static byte[] Slice(byte[] source, int offset, int length)
+        {
+            byte[] result = new byte[length];
+            Array.Copy(source, offset, result, 0, length);
+            return result;
+        }
+
+        private static JxrError DecodePlanarAlpha(byte[] source,
+            JxrHeaders headers, out JxrImage image)
+        {
+            image = null;
+            byte[] alphaStream = Slice(source, headers.AlphaOffset,
+                headers.AlphaByteCount - headers.AlphaOffset);
+            byte[] pixels;
+            int width, height;
+            JxrError error = JxrMinimalDecoder.DecodeGrayPixels(alphaStream,
+                out pixels, out width, out height);
+            if (error != JxrError.None) return error;
+            if (width != headers.Main.Width || height != headers.Main.Height)
+                return JxrError.InvalidBitstream;
+            image = new JxrImage(width, height, JxrPixelFormat.Gray8, pixels, width);
+            return JxrError.None;
+        }
+
+        private static JxrError DecodePlanarRgba(byte[] source,
+            JxrHeaders headers, bool rgba, out JxrImage image)
+        {
+            image = null;
+            byte[] colorPixels, alphaPixels;
+            int width, height, alphaWidth, alphaHeight;
+            JxrError error = JxrMinimalDecoder.DecodeRgbPixels(source,
+                true, out colorPixels, out width, out height);
+            if (error != JxrError.None) return error;
+            JxrImage alphaImage;
+            error = DecodePlanarAlpha(source, headers, out alphaImage);
+            if (error != JxrError.None) return error;
+            alphaPixels = alphaImage.Pixels;
+            alphaWidth = alphaImage.Width;
+            alphaHeight = alphaImage.Height;
+            if (width != alphaWidth || height != alphaHeight)
+                return JxrError.InvalidBitstream;
+            byte[] pixels = new byte[width * height * 4];
+            for (int index = 0; index < width * height; index++)
+            {
+                int sourceColor = index * 3, target = index * 4;
+                if (rgba)
+                {
+                    pixels[target] = colorPixels[sourceColor];
+                    pixels[target + 1] = colorPixels[sourceColor + 1];
+                    pixels[target + 2] = colorPixels[sourceColor + 2];
+                }
+                else
+                {
+                    pixels[target] = colorPixels[sourceColor + 2];
+                    pixels[target + 1] = colorPixels[sourceColor + 1];
+                    pixels[target + 2] = colorPixels[sourceColor];
+                }
+                pixels[target + 3] = alphaPixels[index];
+            }
+            JxrPixelFormat format = rgba ? JxrPixelFormat.Rgba32 : JxrPixelFormat.Bgra32;
+            image = new JxrImage(width, height, format, pixels, width * 4);
             return JxrError.None;
         }
 

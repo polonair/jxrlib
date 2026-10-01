@@ -61,6 +61,7 @@ namespace Jxr.Managed.Tests
             new TestCase("gray_quality_native_fixtures", TestGrayQualityNativeFixtures),
             new TestCase("gray_mixed_qp_options", TestGrayMixedQpOptions),
             new TestCase("public_pixel_api", TestPublicPixelApi),
+            new TestCase("planar_alpha_native_fixtures", TestPlanarAlphaNativeFixtures),
             new TestCase("public_stream_api", TestPublicStreamApi),
             new TestCase("image_pipeline_reference_vectors", TestImagePipelineReferenceVectors),
             new TestCase("image_pipeline_bitmap_fixtures", TestImagePipelineBitmapFixtures),
@@ -783,6 +784,267 @@ namespace Jxr.Managed.Tests
             if (JxrVariableLengthWordWriter.Write(writer, 0xfb00) !=
                 JxrError.None || !EqualBytes(writer.ToArray(),
                 new byte[] { 0xfb, 0, 0, 0xfb, 0 })) return false;
+            return true;
+        }
+
+        private static bool TestPlanarAlphaNativeFixtures()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "managed\\fixtures\\alpha-planar-q1-32x32.jxr")))
+                directory = directory.Parent;
+            if (directory == null) return false;
+            string fixtures = Path.Combine(directory.FullName, "managed\\fixtures");
+            byte[] sourceBitmap = File.ReadAllBytes(Path.Combine(fixtures,
+                "alpha-bgra-32x32.bmp"));
+            byte[] sourcePixels;
+            int width, height;
+            JxrImage source;
+            if (JxrBmpAdapter.ReadBgra32(sourceBitmap, out source) != JxrError.None ||
+                source.Width != 32 || source.Height != 32) return false;
+            sourcePixels = source.Pixels;
+            width = source.Width;
+            height = source.Height;
+            byte[] rewrittenBmp;
+            JxrImage bmpRoundTrip;
+            if (JxrBmpAdapter.WriteBgra32(source, out rewrittenBmp) != JxrError.None ||
+                JxrBmpAdapter.ReadBgra32(rewrittenBmp, out bmpRoundTrip) != JxrError.None ||
+                !EqualBytes(source.Pixels, bmpRoundTrip.Pixels)) return false;
+            int[] alphaQualities = { 1, 16 };
+            for (int item = 0; item < alphaQualities.Length; item++)
+            {
+                string name = "alpha-planar-q" + alphaQualities[item] + "-32x32";
+                byte[] native = File.ReadAllBytes(Path.Combine(fixtures, name + ".jxr"));
+                JxrHeaders headers;
+                if (JxrHeaders.Read(native, out headers) != JxrError.None ||
+                    !headers.HasPlanarAlpha || headers.AlphaOffset <
+                    headers.CodestreamOffset + headers.CodestreamLength ||
+                    headers.AlphaByteCount != native.Length) return false;
+                JxrEncoderOptions encodeOptions = new JxrEncoderOptions();
+                encodeOptions.QualityIndex = 16;
+                encodeOptions.AlphaQualityIndex = alphaQualities[item];
+                byte[] encoded;
+                JxrError error = JxrCodec.Encode(source, encodeOptions, out encoded);
+                if (error != JxrError.None || !EqualBytes(encoded, native))
+                {
+                    Console.WriteLine("Planar alpha encode differs for " + name +
+                        ": " + error + " managed=" + (encoded == null ? -1 : encoded.Length) +
+                        " native=" + native.Length);
+                    if (encoded != null)
+                        for (int index = 0; index < Math.Min(encoded.Length, native.Length); index++)
+                            if (encoded[index] != native[index])
+                            {
+                                Console.WriteLine("First alpha JXR mismatch at " + index +
+                                    ": " + encoded[index] + "/" + native[index]);
+                                break;
+                            }
+                    return false;
+                }
+
+                JxrDecoderOptions alphaOptions = new JxrDecoderOptions();
+                alphaOptions.OutputFormat = JxrPixelFormat.Gray8;
+                alphaOptions.AlphaMode = JxrAlphaDecodeMode.AlphaOnly;
+                JxrImage alpha;
+                error = JxrCodec.Decode(native, alphaOptions, out alpha);
+                JxrImage nativeAlpha = null;
+                byte[] alphaBitmap = File.ReadAllBytes(Path.Combine(fixtures,
+                    name + "-only.bmp"));
+                Array.Copy(BitConverter.GetBytes(3779), 0, alphaBitmap, 38, 4);
+                Array.Copy(BitConverter.GetBytes(3779), 0, alphaBitmap, 42, 4);
+                if (error != JxrError.None || alpha == null ||
+                    JxrBmpAdapter.ReadGray8(alphaBitmap, out nativeAlpha) != JxrError.None ||
+                    !EqualBytes(alpha.Pixels, nativeAlpha.Pixels))
+                {
+                    Console.WriteLine("Planar alpha-only decode differs for " + name +
+                        ": " + error);
+                    if (alpha != null && nativeAlpha != null)
+                        for (int pixel = 0; pixel < Math.Min(alpha.Pixels.Length,
+                            nativeAlpha.Pixels.Length); pixel++)
+                            if (alpha.Pixels[pixel] != nativeAlpha.Pixels[pixel])
+                            {
+                                Console.WriteLine("First alpha pixel mismatch at " + pixel +
+                                    ": " + alpha.Pixels[pixel] + "/" +
+                                    nativeAlpha.Pixels[pixel]);
+                                break;
+                            }
+                    return false;
+                }
+
+                JxrDecoderOptions fullOptions = new JxrDecoderOptions();
+                fullOptions.OutputFormat = JxrPixelFormat.Bgra32;
+                JxrImage full;
+                error = JxrCodec.Decode(native, fullOptions, out full);
+                byte[] nativeFull;
+                int fullWidth, fullHeight;
+                if (error != JxrError.None || full == null ||
+                    !ReadBgra32(File.ReadAllBytes(Path.Combine(fixtures,
+                        name + "-restored.bmp")), out nativeFull,
+                        out fullWidth, out fullHeight) || fullWidth != width ||
+                    fullHeight != height || !EqualBytes(full.Pixels, nativeFull))
+                {
+                    Console.WriteLine("Planar alpha full decode differs for " + name +
+                        ": " + error);
+                    return false;
+                }
+                if (item == 0)
+                {
+                    byte[] rgbaPixels = new byte[sourcePixels.Length];
+                    for (int pixel = 0; pixel < width * height; pixel++)
+                    {
+                        rgbaPixels[pixel * 4] = sourcePixels[pixel * 4 + 2];
+                        rgbaPixels[pixel * 4 + 1] = sourcePixels[pixel * 4 + 1];
+                        rgbaPixels[pixel * 4 + 2] = sourcePixels[pixel * 4];
+                        rgbaPixels[pixel * 4 + 3] = sourcePixels[pixel * 4 + 3];
+                    }
+                    JxrImage rgbaSource = new JxrImage(width, height,
+                        JxrPixelFormat.Rgba32, rgbaPixels, width * 4);
+                    byte[] rgbaJxr;
+                    if (JxrCodec.Encode(rgbaSource, encodeOptions, out rgbaJxr) !=
+                        JxrError.None) return false;
+                    JxrDecoderOptions rgbaOptions = new JxrDecoderOptions();
+                    rgbaOptions.OutputFormat = JxrPixelFormat.Rgba32;
+                    JxrImage rgbaRestored;
+                    if (JxrCodec.Decode(rgbaJxr, rgbaOptions, out rgbaRestored) !=
+                        JxrError.None || rgbaRestored == null) return false;
+                    for (int pixel = 0; pixel < width * height; pixel++)
+                        if (rgbaRestored.Pixels[pixel * 4] != full.Pixels[pixel * 4 + 2] ||
+                            rgbaRestored.Pixels[pixel * 4 + 1] != full.Pixels[pixel * 4 + 1] ||
+                            rgbaRestored.Pixels[pixel * 4 + 2] != full.Pixels[pixel * 4] ||
+                            rgbaRestored.Pixels[pixel * 4 + 3] != full.Pixels[pixel * 4 + 3])
+                            return false;
+                }
+
+                JxrDecoderOptions colorOptions = new JxrDecoderOptions();
+                colorOptions.OutputFormat = JxrPixelFormat.Bgr24;
+                colorOptions.AlphaMode = JxrAlphaDecodeMode.ColorOnly;
+                JxrImage color;
+                error = JxrCodec.Decode(native, colorOptions, out color);
+                byte[] nativeColor;
+                int colorWidth, colorHeight;
+                if (error != JxrError.None || color == null ||
+                    !ReadBgra32(File.ReadAllBytes(Path.Combine(fixtures,
+                        name + "-color.bmp")), out nativeColor,
+                        out colorWidth, out colorHeight) || colorWidth != width ||
+                    colorHeight != height)
+                {
+                    Console.WriteLine("Planar alpha color-only decode failed for " +
+                        name + ": " + error);
+                    return false;
+                }
+                for (int pixel = 0; pixel < width * height; pixel++)
+                    if (color.Pixels[pixel * 3] != nativeColor[pixel * 4] ||
+                        color.Pixels[pixel * 3 + 1] != nativeColor[pixel * 4 + 1] ||
+                        color.Pixels[pixel * 3 + 2] != nativeColor[pixel * 4 + 2])
+                    {
+                        Console.WriteLine("Planar alpha color-only pixels differ for " +
+                            name + " at " + pixel);
+                        return false;
+                    }
+            }
+
+            JxrEncoderOptions frequencyTiles = new JxrEncoderOptions();
+            frequencyTiles.QualityIndex = 16;
+            frequencyTiles.AlphaQualityIndex = 1;
+            frequencyTiles.Layout = JxrBitstreamLayout.Frequency;
+            frequencyTiles.TileLayout = new JxrTileLayout(
+                new int[] { 1, 1 }, new int[] { 1, 1 });
+            byte[] tiled;
+            if (JxrCodec.Encode(source, frequencyTiles, out tiled) !=
+                JxrError.None) return false;
+            JxrHeaders tiledHeaders;
+            if (JxrHeaders.Read(tiled, out tiledHeaders) != JxrError.None ||
+                !tiledHeaders.HasPlanarAlpha ||
+                tiledHeaders.AlphaByteCount != tiled.Length) return false;
+            JxrImage tiledRestored;
+            JxrDecoderOptions tiledDecodeOptions = new JxrDecoderOptions();
+            tiledDecodeOptions.OutputFormat = JxrPixelFormat.Bgra32;
+            if (JxrCodec.Decode(tiled, tiledDecodeOptions, out tiledRestored) !=
+                JxrError.None || tiledRestored == null || tiledRestored.Width != width ||
+                tiledRestored.Height != height) return false;
+            for (int pixel = 0; pixel < width * height; pixel++)
+                if (tiledRestored.Pixels[pixel * 4 + 3] != sourcePixels[pixel * 4 + 3])
+                    return false;
+
+            byte[] q1 = File.ReadAllBytes(Path.Combine(fixtures,
+                "alpha-planar-q1-32x32.jxr"));
+            uint directoryOffset = BitConverter.ToUInt32(q1, 4);
+            int directoryPosition = (int)directoryOffset;
+            int entries = BitConverter.ToUInt16(q1, directoryPosition);
+            byte[] badOffset = (byte[])q1.Clone();
+            bool changed = false;
+            for (int index = 0; index < entries; index++)
+            {
+                int entry = directoryPosition + 2 + index * 12;
+                if (BitConverter.ToUInt16(badOffset, entry) == 0xbcc2)
+                {
+                    Array.Copy(BitConverter.GetBytes((uint)(q1.Length - 1)), 0,
+                        badOffset, entry + 8, 4);
+                    changed = true;
+                }
+            }
+            JxrHeaders ignored;
+            if (!changed || JxrHeaders.Read(badOffset, out ignored) == JxrError.None)
+                return false;
+            byte[] badEnd = (byte[])q1.Clone();
+            changed = false;
+            for (int index = 0; index < entries; index++)
+            {
+                int entry = directoryPosition + 2 + index * 12;
+                if (BitConverter.ToUInt16(badEnd, entry) == 0xbcc3)
+                {
+                    Array.Copy(BitConverter.GetBytes((uint)(q1.Length + 1)), 0,
+                        badEnd, entry + 8, 4);
+                    changed = true;
+                }
+            }
+            if (!changed || JxrHeaders.Read(badEnd, out ignored) == JxrError.None)
+                return false;
+            byte[] truncated = new byte[q1.Length - 1];
+            Array.Copy(q1, truncated, truncated.Length);
+            if (JxrHeaders.Read(truncated, out ignored) == JxrError.None)
+                return false;
+
+            JxrEncoderOptions unsupported = new JxrEncoderOptions();
+            unsupported.AlphaMode = JxrAlphaMode.Interleaved;
+            byte[] rejected;
+            if (JxrCodec.Encode(source, unsupported, out rejected) !=
+                JxrError.UnsupportedFeature || rejected != null) return false;
+            byte[] interleaved = File.ReadAllBytes(Path.Combine(fixtures,
+                "alpha-interleaved-q1-32x32.jxr"));
+            JxrDecoderOptions interleavedOptions = new JxrDecoderOptions();
+            interleavedOptions.OutputFormat = JxrPixelFormat.Bgra32;
+            JxrImage interleavedImage;
+            return JxrCodec.Decode(interleaved, interleavedOptions,
+                out interleavedImage) != JxrError.None && interleavedImage == null;
+        }
+
+        private static bool ReadBgra32(byte[] bitmap, out byte[] pixels,
+            out int width, out int height)
+        {
+            pixels = null;
+            width = height = 0;
+            if (bitmap == null || bitmap.Length < 54 || bitmap[0] != 'B' ||
+                bitmap[1] != 'M' || BitConverter.ToInt32(bitmap, 14) != 40 ||
+                BitConverter.ToUInt16(bitmap, 26) != 1 ||
+                BitConverter.ToUInt16(bitmap, 28) != 32 ||
+                BitConverter.ToUInt32(bitmap, 30) != 0) return false;
+            width = BitConverter.ToInt32(bitmap, 18);
+            int signedHeight = BitConverter.ToInt32(bitmap, 22);
+            if (signedHeight == Int32.MinValue) return false;
+            height = signedHeight < 0 ? -signedHeight : signedHeight;
+            int offset = BitConverter.ToInt32(bitmap, 10);
+            if (width < 1 || height < 1 || offset < 54 ||
+                (long)width * height > Int32.MaxValue / 4 ||
+                (long)offset + (long)width * height * 4 != bitmap.Length)
+                return false;
+            pixels = new byte[width * height * 4];
+            bool topDown = signedHeight < 0;
+            for (int row = 0; row < height; row++)
+            {
+                int sourceRow = topDown ? row : height - 1 - row;
+                Array.Copy(bitmap, offset + sourceRow * width * 4,
+                    pixels, row * width * 4, width * 4);
+            }
             return true;
         }
 

@@ -68,3 +68,13 @@ sequential 2×2 tiled Gray stream and QP16 references for all subbands, includin
 DC-only, no-highpass, skipped flexbits and trimmed flexbits. Each stream is paired with the native decoder's
 restored BMP. `frequency_layout_native_fixtures` checks byte-identical JXR
 encoding and compares managed decoded pixels with those native BMPs.
+
+`create-alpha.ps1` creates a deterministic 32×32 BGRA image and C-reference
+planar-alpha streams at color QP 16 and alpha QP 1/16 (`-a 2 -Q`). The managed
+`planar_alpha_native_fixtures` test requires byte-identical JXR output, checks
+the container's absolute `AlphaOffset`/`AlphaByteCount`, compares alpha-only,
+color-only and BGRA decode results to native BMPs, and rejects truncated or
+out-of-range alpha streams. It also exercises a managed frequency-layout
+stream with a 2×2 tile grid. Interleaved alpha (`-a 3`) is not implemented and
+is reserved for a future step: its second plane shares the primary packet
+pipeline and cannot be represented as the separate planar codestream used here.

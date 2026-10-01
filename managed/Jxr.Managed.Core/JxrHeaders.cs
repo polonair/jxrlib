@@ -85,10 +85,13 @@ namespace Jxr.Managed.Core
         private readonly int byteCount;
         private readonly int codestreamOffset;
         private readonly int codestreamLength;
+        private readonly int alphaOffset;
+        private readonly int alphaByteCount;
 
         private JxrHeaders(JxrMainHeader main, JxrImagePlaneHeader plane,
             JxrImagePlaneQuantizerHeader quantizers, int byteCount,
-            int codestreamOffset, int codestreamLength)
+            int codestreamOffset, int codestreamLength, int alphaOffset,
+            int alphaByteCount)
         {
             this.main = main;
             this.plane = plane;
@@ -96,6 +99,8 @@ namespace Jxr.Managed.Core
             this.byteCount = byteCount;
             this.codestreamOffset = codestreamOffset;
             this.codestreamLength = codestreamLength;
+            this.alphaOffset = alphaOffset;
+            this.alphaByteCount = alphaByteCount;
         }
 
         public JxrMainHeader Main { get { return main; } }
@@ -104,6 +109,10 @@ namespace Jxr.Managed.Core
         public int ByteCount { get { return byteCount; } }
         public int CodestreamOffset { get { return codestreamOffset; } }
         public int CodestreamLength { get { return codestreamLength; } }
+        public int AlphaOffset { get { return alphaOffset; } }
+        // This TIFF-like tag stores the absolute end offset, matching the C writer.
+        public int AlphaByteCount { get { return alphaByteCount; } }
+        public bool HasPlanarAlpha { get { return alphaOffset != 0; } }
 
         // Syntax-level entry points mirror the three native descriptor readers.
         // The reader remains at the first bit after the parsed descriptor.
@@ -151,10 +160,12 @@ namespace Jxr.Managed.Core
             if (source == null) return JxrError.InvalidArgument;
             int codestreamOffset = 0;
             int codestreamLength = source.Length;
+            int alphaOffset = 0, alphaByteCount = 0;
             if (source.Length >= 4 && source[0] == (byte)'I' &&
                 source[1] == (byte)'I' && source[2] == 0xbc && source[3] == 1)
             {
-                if (!LocateCodestream(source, out codestreamOffset, out codestreamLength))
+                if (!LocateCodestream(source, out codestreamOffset,
+                    out codestreamLength, out alphaOffset, out alphaByteCount))
                     return JxrError.InvalidBitstream;
             }
             else if (source.Length >= 1 && source[0] != (byte)'W')
@@ -190,14 +201,17 @@ namespace Jxr.Managed.Core
             cursor.Align();
             if (cursor.Error != JxrError.None) return cursor.Error;
             result = new JxrHeaders(main, plane, quantizers,
-                cursor.BitPosition / 8, codestreamOffset, codestreamLength);
+                cursor.BitPosition / 8, codestreamOffset, codestreamLength,
+                alphaOffset, alphaByteCount);
             return JxrError.None;
         }
 
-        private static bool LocateCodestream(byte[] source, out int offset, out int length)
+        private static bool LocateCodestream(byte[] source, out int offset,
+            out int length, out int alphaOffset, out int alphaByteCount)
         {
             offset = 0;
             length = 0;
+            alphaOffset = alphaByteCount = 0;
             if (source.Length < 10) return false;
             uint directoryOffset = ReadU32(source, 4);
             if (directoryOffset > (uint)(source.Length - 2)) return false;
@@ -206,21 +220,33 @@ namespace Jxr.Managed.Core
             if ((long)directory + 2 + (long)entryCount * 12 > source.Length)
                 return false;
             bool foundOffset = false, foundLength = false;
+            bool foundAlphaOffset = false, foundAlphaByteCount = false;
             for (int index = 0; index < entryCount; index++)
             {
                 int entry = directory + 2 + index * 12;
                 int tag = ReadU16(source, entry);
-                if ((tag == 0xbcc0 || tag == 0xbcc1) &&
+                if ((tag == 0xbcc0 || tag == 0xbcc1 || tag == 0xbcc2 ||
+                    tag == 0xbcc3) &&
                     ReadU16(source, entry + 2) == 4 && ReadU32(source, entry + 4) == 1)
                 {
                     uint value = ReadU32(source, entry + 8);
                     if (value > Int32.MaxValue) return false;
                     if (tag == 0xbcc0) { offset = (int)value; foundOffset = true; }
-                    else { length = (int)value; foundLength = true; }
+                    else if (tag == 0xbcc1) { length = (int)value; foundLength = true; }
+                    else if (tag == 0xbcc2) { alphaOffset = (int)value; foundAlphaOffset = true; }
+                    else { alphaByteCount = (int)value; foundAlphaByteCount = true; }
                 }
             }
-            return foundOffset && foundLength && offset >= 0 && length >= 8 &&
-                offset <= source.Length - length;
+            if (!foundOffset || !foundLength || offset < 0 || length < 8 ||
+                offset > source.Length - length) return false;
+            if (!foundAlphaOffset && !foundAlphaByteCount) return true;
+            return foundAlphaOffset && foundAlphaByteCount && alphaOffset > 0 &&
+                alphaByteCount > alphaOffset && alphaOffset >= offset + length &&
+                alphaByteCount <= source.Length && alphaByteCount - alphaOffset >= 8 &&
+                source[alphaOffset] == (byte)'W' &&
+                source[alphaOffset + 1] == (byte)'M' &&
+                source[alphaOffset + 2] == (byte)'P' &&
+                source[alphaOffset + 3] == (byte)'H';
         }
 
         private static int ReadU16(byte[] data, int index)
