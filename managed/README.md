@@ -135,8 +135,14 @@ prediction rows and HP CBP neighbours. Spatial Gray/RGB decoding also
 supports indexed soft-boundary tiles, including 4:2:2/4:2:0 and overlap.
 `spatial_tile_encode_native_fixtures` compares tiled output byte-for-byte with
 the C encoder across Gray/RGB formats, quality levels, overlap modes, uneven
-tile widths and partial edge macroblocks. Frequency-layout decoding remains
-unsupported.
+tile widths and partial edge macroblocks. Frequency mode now emits separate
+DC/LP/HP/flexbits packets and an index table; packet order can be progressive
+(the default) or sequential. `frequency_layout_native_fixtures` compares full
+JXR files byte-for-byte with C references for Gray and RGB 4:4:4/4:2:2/4:2:0,
+single- and multi-tile streams, QP16, DC-only/no-highpass profiles, skipped
+flexbits, flexbit trimming and sequential ordering. The managed decoder reads those frequency packets and
+matches native-decoded pixels. Frequency-layout context reset and general
+final flushing remain outside the integrated session executor.
 `gray_sizes_native_fixtures` compares native and managed output for eight
 dimensions, including a 17-macroblock-wide image that crosses an adaptive
 scan reset boundary. The [fixture generator](fixtures/README.md) documents the
@@ -157,9 +163,9 @@ plans reproduce the native decoder/encoder layout formulas, including the
 32-bit safety decisions, while actual managed allocations are `int[]` rather
 than a native struct-and-pointer slab. Sessions can be configured from parsed
 JXR headers and release their buffers through `Dispose`. The minimal decoder
-and encoder now execute spatial tiles through those coefficient and packet
-paths; frequency-layout session execution and general final flushing remain
-outside this integration.
+and encoder now execute spatial tiles and frequency packets through those
+coefficient and packet paths; general final flushing remains outside this
+integration.
 
 `JxrTranscoder` ports the coefficient-domain core: all eight orientations,
 DC/AC sign and position changes for 4:4:4, 4:2:2 and 4:2:0, and ROI expansion

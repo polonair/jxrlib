@@ -49,11 +49,12 @@ has been conformance-tested.
 | 8bpp Gray, 16×16, Y_ONLY, lossless, spatial, no overlap, one tile | Reference fixture | **End-to-end** encode/decode | Minimal fixture and managed `minimal_*_end_to_end` tests |
 | Gray at other dimensions / multiple macroblocks / partial edge blocks | Native Gray fixtures | **Managed end-to-end** | Gray 1×1 through 257×17; managed encoder byte-matches native fixtures and decoder matches native restored pixels |
 | 24bpp BGR/RGB 4:4:4, spatial | Reference and tiled fixtures | **Managed end-to-end** | Encoder and decoder cover one tile and indexed 2×2 soft-boundary tiles |
-| Native default RGB encode/decode, including frequency layout and overlap | Reference fixture | Component only | Default-image fixture; managed header parser handles its header, not its full packet/frame pipeline |
-| Quantization/quality other than minimal QP 1; skipped subbands and flexbit trimming | C encoder options `-q`, `-s`, `-F` | Component only | Quantization vectors and entropy primitives; no general mode orchestration or JXR writer |
+| Native default RGB encode/decode, including frequency layout and overlap | Reference fixture | Partially integrated | Frequency packets are covered for current 8-bit formats, but the full default city profile and frequency+overlap combinations are not yet fixture-backed |
+| Gray quantization/quality, skipped subbands and flexbit trimming in frequency layout | C encoder options `-q`, `-s`, `-F` | **Managed end-to-end** for fixture profiles | QP16 all-subband, no-highpass, DC-only, no-flexbit and trim=2 Gray streams match C bytes and native-decoded pixels |
 | YUV 4:2:0 / 4:2:2, 8-bit RGB output | C pixel-format and `-d` options | **Managed end-to-end decode** | Native fixtures cover 4:2:2/4:2:0 and spatial tiles; other depths and CMYK/RGBE remain unintegrated |
-| Overlap levels 0/1/2, spatial progression | C options `-l`, `-p`, `-f` | **Managed end-to-end decode** for Gray/RGB spatial profiles | Native fixture-backed coverage includes tiled OL_NONE/OL_TWO and earlier untiled OL_NONE/ONE/TWO; frequency layout remains unintegrated |
+| Overlap levels 0/1/2, spatial progression | C options `-l`, `-p`, `-f` | **Managed end-to-end decode** for Gray/RGB spatial profiles | Native fixture-backed coverage includes tiled OL_NONE/OL_TWO and earlier untiled OL_NONE/ONE/TWO; frequency+overlap still needs fixtures |
 | Spatial tiles and index table | C options `-U`, `-V`, `-H` | **Managed end-to-end encode/decode** | Gray/RGB fixtures exercise uniform and variable soft-boundary tile layouts. Hard-boundary encoding/decoding has no reference fixture yet. |
+| Frequency packets (DC/LP/HP/flexbits), progressive and sequential order | C default and `-p` | **Managed end-to-end encode/decode** for current 8-bit Gray/RGB profiles | `frequency_layout_native_fixtures` checks byte-identical C streams for Gray, RGB/YUV 4:4:4/4:2:2/4:2:0, QP16 trim/skip, progressive and sequential 2×2 tiles |
 | Alpha channel / planar or interleaved alpha | C `-a` and `-Q` | Component only | Session and image-plane helpers; no managed alpha file conversion |
 | Decode ROI, thumbnail, orientation, post-processing | C decoder `-r`, `-T`, `-O`, `-p` | Component only | Transcoder ROI/orientation and other stage vectors do not constitute a decoder entry point |
 | JXR-to-JXR compressed-domain transcode | C decoder output `.jxr` and `-s` | Component only | `JxrTranscoder` handles coefficient/ROI operations, not file-to-file packet decode/write |
@@ -78,5 +79,6 @@ standard coverage by either implementation.
    Do not promote a row from component to end-to-end based on isolated vectors.
 4. Check `git diff --check` and commit only after the applicable gates pass.
 
-The next integration boundary is frequency-layout packets and general packet
-ordering; the current managed tiled executor covers spatial streams only.
+The next integration boundary is more complex packet/index structures,
+frequency-plus-overlap combinations, and general session flushing; the current
+frequency tests cover the frozen 8-bit profiles listed above.

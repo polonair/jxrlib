@@ -29,7 +29,7 @@ namespace Jxr.Managed.Core
                 (options.Layout != JxrBitstreamLayout.Spatial &&
                  options.Layout != JxrBitstreamLayout.Frequency))
                 return JxrError.InvalidArgument;
-            if (options.Layout != JxrBitstreamLayout.Spatial)
+            if (trace != null && options.Layout == JxrBitstreamLayout.Frequency)
                 return JxrError.UnsupportedFeature;
             JxrTileGeometry tileGeometry;
             JxrError tileError = JxrTileGeometry.Create(image.Width,

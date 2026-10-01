@@ -3,7 +3,7 @@ using System;
 namespace Jxr.Managed.Core
 {
     // Full-resolution RGB/BGR input, reversible RGB-to-YUV transform and
-    // one spatial YUV444 packet. Three coefficient planes share the adaptive
+    // per-tile spatial or frequency packets. Three coefficient planes share the adaptive
     // entropy context, prediction rows and macroblock position.
     internal static class JxrMinimalColorEncoder
     {
@@ -91,6 +91,15 @@ namespace Jxr.Managed.Core
                 JxrBitReader unused = new JxrBitReader(new byte[0]);
                 byte[][] entropyPackets = new byte[tiles.Columns * tiles.Rows][];
                 int[] entropyBitCounts = new int[entropyPackets.Length];
+            bool frequency = options.Layout == JxrBitstreamLayout.Frequency;
+            byte[][][] frequencyPackets = frequency ? new byte[4][][] : null;
+            int[][] frequencyBitCounts = frequency ? new int[4][] : null;
+            if (frequency)
+                for (int band = 0; band < 4; band++)
+                {
+                    frequencyPackets[band] = new byte[entropyPackets.Length][];
+                    frequencyBitCounts[band] = new int[entropyPackets.Length];
+                }
                 for (int tileY = 0; tileY < tiles.Rows; tileY++)
                     for (int tileX = 0; tileX < tiles.Columns; tileX++)
                     {
@@ -99,7 +108,7 @@ namespace Jxr.Managed.Core
                         int tileWidth = tiles.GetX(tileX + 1) - startMbX;
                         int tileHeight = tiles.GetY(tileY + 1) - startMbY;
                         JxrCodecConfiguration format = new JxrCodecConfiguration(
-                            colorFormat, 3, true,
+                            colorFormat, 3, !frequency,
                             options.Subbands == JxrGraySubbandMode.DcOnly,
                             (int)options.Subbands < (int)JxrGraySubbandMode.NoHighpass,
                             options.Subbands != JxrGraySubbandMode.NoFlexbits,
@@ -118,6 +127,9 @@ namespace Jxr.Managed.Core
                             state.CoefficientPlanes.GetPlane(channel,
                                 out coefficients[channel]);
                         JxrBitWriter writer = new JxrBitWriter();
+                        JxrBitWriter lpWriter = frequency ? new JxrBitWriter() : writer;
+                        JxrBitWriter hpWriter = frequency ? new JxrBitWriter() : writer;
+                        JxrBitWriter flexWriter = frequency ? new JxrBitWriter() : writer;
                         for (int localY = 0; localY < tileHeight; localY++)
                         {
                             if (localY != 0) rows.AdvanceRow();
@@ -182,12 +194,14 @@ namespace Jxr.Managed.Core
                                         state, coefficients, dcCoefficients,
                                         state.Macroblock.Orientation,
                                         (int)options.Subbands,
-                                        options.TrimFlexbits, writer) :
+                                        options.TrimFlexbits, writer, lpWriter,
+                                        hpWriter, flexWriter) :
                                     JxrMinimalEntropyEncoder.EncodeYuv444Macroblock(
                                         state, coefficients, dcCoefficients,
                                         state.Macroblock.Orientation,
                                         (int)options.Subbands,
-                                        options.TrimFlexbits, writer);
+                                        options.TrimFlexbits, writer, lpWriter,
+                                        hpWriter, flexWriter);
                                 if (error != JxrError.None) return error;
                                 for (int channel = 0; channel < 3; channel++)
                                 {
@@ -199,12 +213,37 @@ namespace Jxr.Managed.Core
                             }
                         }
                         int packetIndex = tileY * tiles.Columns + tileX;
-                        entropyBitCounts[packetIndex] = writer.BitCount;
-                        writer.AlignByte();
-                        entropyPackets[packetIndex] = writer.ToArray();
+                        if (frequency)
+                        {
+                            JxrBitWriter[] writers = { writer, lpWriter,
+                                hpWriter, flexWriter };
+                            for (int band = 0; band < 4; band++)
+                            {
+                                frequencyBitCounts[band][packetIndex] =
+                                    writers[band].BitCount;
+                                writers[band].AlignByte();
+                                frequencyPackets[band][packetIndex] =
+                                    writers[band].ToArray();
+                            }
+                        }
+                        else
+                        {
+                            entropyBitCounts[packetIndex] = writer.BitCount;
+                            writer.AlignByte();
+                            entropyPackets[packetIndex] = writer.ToArray();
+                        }
                     }
                 byte[] codestream;
-                error = JxrCodestreamWriter.WriteRgbSpatialTiles(entropyPackets,
+                if (frequency)
+                    error = JxrFrequencyCodestreamWriter.WriteRgb(
+                        frequencyPackets, frequencyBitCounts, width, height,
+                        dcIndex, lpIndex, hpIndex, options.Subbands, scaled,
+                        options.TrimFlexbits, options.Overlap,
+                        options.ChromaSubsampling, options.TileLayout == null ?
+                            new JxrTileLayout(new int[] { columns },
+                                new int[] { rowsCount }) : options.TileLayout,
+                        options.Progressive, out codestream);
+                else error = JxrCodestreamWriter.WriteRgbSpatialTiles(entropyPackets,
                     entropyBitCounts, width, height, dcIndex, lpIndex, hpIndex,
                     options.Subbands, scaled, options.TrimFlexbits,
                     options.Overlap, options.ChromaSubsampling,

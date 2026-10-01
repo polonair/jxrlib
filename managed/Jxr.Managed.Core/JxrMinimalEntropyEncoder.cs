@@ -59,27 +59,42 @@ namespace Jxr.Managed.Core
             int trimFlexbits, JxrBitWriter writer,
             out int dcEnd, out int lpEnd, out int hpEnd)
         {
+            return EncodeMacroblock(state, coefficients, dc, orientation,
+                subbands, trimFlexbits, writer, writer, writer, writer,
+                out dcEnd, out lpEnd, out hpEnd);
+        }
+
+        // Frequency layout keeps the same macroblock visitation/adaptation
+        // order, but routes each subband to its own packet writer.
+        internal static JxrError EncodeMacroblock(JxrCodecState state,
+            int[] coefficients, int[] dc, int orientation, int subbands,
+            int trimFlexbits, JxrBitWriter dcWriter, JxrBitWriter lpWriter,
+            JxrBitWriter hpWriter, JxrBitWriter flexWriter,
+            out int dcEnd, out int lpEnd, out int hpEnd)
+        {
             dcEnd = lpEnd = hpEnd = 0;
             if (state == null || coefficients == null || coefficients.Length != 256 ||
-                dc == null || dc.Length != 16 || writer == null ||
+                dc == null || dc.Length != 16 || dcWriter == null ||
+                lpWriter == null || hpWriter == null || flexWriter == null ||
                 orientation < 0 || orientation > 2 || subbands < 0 || subbands > 3 ||
                 trimFlexbits < 0 || trimFlexbits > 15) return JxrError.InvalidArgument;
-            JxrError error = EncodeDc(state, dc, writer);
+            JxrError error = EncodeDc(state, dc, dcWriter);
             if (error != JxrError.None) return error;
-            dcEnd = writer.BitCount;
+            dcEnd = dcWriter.BitCount;
             if (subbands != (int)JxrGraySubbandMode.DcOnly)
             {
-                error = EncodeLp(state, dc, writer);
+                error = EncodeLp(state, dc, lpWriter);
                 if (error != JxrError.None) return error;
             }
-            lpEnd = writer.BitCount;
+            lpEnd = lpWriter.BitCount;
             if (subbands < (int)JxrGraySubbandMode.NoHighpass)
             {
                 state.Entropy.TrimFlexBits = trimFlexbits;
-                error = EncodeHp(state, coefficients, orientation, writer, subbands);
+                error = EncodeHp(state, coefficients, orientation, hpWriter,
+                    flexWriter, subbands);
                 if (error != JxrError.None) return error;
             }
-            hpEnd = writer.BitCount;
+            hpEnd = hpWriter.BitCount;
             return JxrError.None;
         }
 
@@ -87,27 +102,37 @@ namespace Jxr.Managed.Core
             int[][] coefficients, int[][] dc, int orientation, int subbands,
             int trimFlexbits, JxrBitWriter writer)
         {
+            return EncodeYuv444Macroblock(state, coefficients, dc, orientation,
+                subbands, trimFlexbits, writer, writer, writer, writer);
+        }
+
+        internal static JxrError EncodeYuv444Macroblock(JxrCodecState state,
+            int[][] coefficients, int[][] dc, int orientation, int subbands,
+            int trimFlexbits, JxrBitWriter dcWriter, JxrBitWriter lpWriter,
+            JxrBitWriter hpWriter, JxrBitWriter flexWriter)
+        {
             if (state == null || state.Configuration.ColorFormat != JxrCodecColorFormat.Yuv444 ||
                 coefficients == null || coefficients.Length != 3 || dc == null ||
-                dc.Length != 3 || writer == null || orientation < 0 || orientation > 2 ||
+                dc.Length != 3 || dcWriter == null || lpWriter == null ||
+                hpWriter == null || flexWriter == null || orientation < 0 || orientation > 2 ||
                 subbands < 0 || subbands > 3 || trimFlexbits < 0 || trimFlexbits > 15)
                 return JxrError.InvalidArgument;
             for (int channel = 0; channel < 3; channel++)
                 if (coefficients[channel] == null || coefficients[channel].Length != 256 ||
                     dc[channel] == null || dc[channel].Length != 16)
                     return JxrError.InvalidArgument;
-            JxrError error = EncodeYuv444Dc(state, dc, writer);
+            JxrError error = EncodeYuv444Dc(state, dc, dcWriter);
             if (error != JxrError.None) return error;
             if (subbands != 3)
             {
-                error = EncodeYuv444Lp(state, dc, writer);
+                error = EncodeYuv444Lp(state, dc, lpWriter);
                 if (error != JxrError.None) return error;
             }
             if (subbands < 2)
             {
                 state.Entropy.TrimFlexBits = trimFlexbits;
                 error = EncodeYuv444Hp(state, coefficients, orientation,
-                    subbands, writer);
+                    subbands, hpWriter, flexWriter);
                 if (error != JxrError.None) return error;
             }
             return JxrError.None;
@@ -117,22 +142,31 @@ namespace Jxr.Managed.Core
             int[][] coefficients, int[][] dc, int orientation, int subbands,
             int trimFlexbits, JxrBitWriter writer)
         {
+            return EncodeSubsampledMacroblock(state, coefficients, dc, orientation,
+                subbands, trimFlexbits, writer, writer, writer, writer);
+        }
+
+        internal static JxrError EncodeSubsampledMacroblock(JxrCodecState state,
+            int[][] coefficients, int[][] dc, int orientation, int subbands,
+            int trimFlexbits, JxrBitWriter dcWriter, JxrBitWriter lpWriter,
+            JxrBitWriter hpWriter, JxrBitWriter flexWriter)
+        {
             JxrCodecColorFormat color = state.Configuration.ColorFormat;
             if (color != JxrCodecColorFormat.Yuv420 &&
                 color != JxrCodecColorFormat.Yuv422)
                 return JxrError.InvalidArgument;
-            JxrError error = EncodeYuv444Dc(state, dc, writer);
+            JxrError error = EncodeYuv444Dc(state, dc, dcWriter);
             if (error != JxrError.None) return error;
             if (subbands != 3)
             {
-                error = EncodeSubsampledLp(state, dc, writer);
+                error = EncodeSubsampledLp(state, dc, lpWriter);
                 if (error != JxrError.None) return error;
             }
             if (subbands < 2)
             {
                 state.Entropy.TrimFlexBits = trimFlexbits;
                 error = EncodeSubsampledHp(state, coefficients, orientation,
-                    subbands, writer);
+                    subbands, hpWriter, flexWriter);
                 if (error != JxrError.None) return error;
             }
             return JxrError.None;
@@ -528,7 +562,7 @@ namespace Jxr.Managed.Core
 
         private static JxrError EncodeYuv444Hp(JxrCodecState state,
             int[][] coefficients, int orientation, int subbands,
-            JxrBitWriter writer)
+            JxrBitWriter writer, JxrBitWriter flexWriter)
         {
             JxrAdaptiveScan scan = orientation == 1 ?
                 state.Entropy.VerticalScan : state.Entropy.HorizontalScan;
@@ -582,7 +616,7 @@ namespace Jxr.Managed.Core
                                 residuals[coefficientIndex] :
                                 TrimmedResidual(coefficients[channel][offset +
                                     coefficientIndex], trim);
-                            error = writer.Write((uint)(residual >> 1),
+                            error = flexWriter.Write((uint)(residual >> 1),
                                 flex + (residual & 1));
                             if (error != JxrError.None) return error;
                         }
@@ -606,7 +640,7 @@ namespace Jxr.Managed.Core
 
         private static JxrError EncodeSubsampledHp(JxrCodecState state,
             int[][] coefficients, int orientation, int subbands,
-            JxrBitWriter writer)
+            JxrBitWriter writer, JxrBitWriter flexWriter)
         {
             JxrCodecColorFormat color = state.Configuration.ColorFormat;
             bool is420 = color == JxrCodecColorFormat.Yuv420;
@@ -671,7 +705,7 @@ namespace Jxr.Managed.Core
                                 residuals[coefficientIndex] :
                                 TrimmedResidual(coefficients[channel][offset +
                                     coefficientIndex], trim);
-                            error = writer.Write((uint)(residual >> 1),
+                            error = flexWriter.Write((uint)(residual >> 1),
                                 flex + (residual & 1));
                             if (error != JxrError.None) return error;
                         }
@@ -977,7 +1011,8 @@ namespace Jxr.Managed.Core
         }
 
         private static JxrError EncodeHp(JxrCodecState state, int[] coefficients,
-            int orientation, JxrBitWriter writer, int subbands)
+            int orientation, JxrBitWriter writer, JxrBitWriter flexWriter,
+            int subbands)
         {
             JxrAdaptiveScan scan = orientation == 1 ?
                 state.Entropy.VerticalScan : state.Entropy.HorizontalScan;
@@ -1022,7 +1057,7 @@ namespace Jxr.Managed.Core
                         int residual = (cbp & (1 << block)) != 0 ?
                             residuals[coefficientIndex] :
                             TrimmedResidual(coefficients[offset + coefficientIndex], trimBits);
-                        writer.Write((uint)(residual >> 1), flexBits + (residual & 1));
+                        flexWriter.Write((uint)(residual >> 1), flexBits + (residual & 1));
                     }
             }
             error = state.Entropy.AcModel.UpdateForMacroblock(

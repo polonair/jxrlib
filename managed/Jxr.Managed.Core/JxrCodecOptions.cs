@@ -127,6 +127,7 @@ namespace Jxr.Managed.Core
         private int qualityIndex = 1;
         private int overlap = 0;
         private JxrBitstreamLayout layout = JxrBitstreamLayout.Spatial;
+        private bool progressive = true;
         private int dcQuantizerIndex = -1;
         private int lowpassQuantizerIndex = -1;
         private int highpassQuantizerIndex = -1;
@@ -138,6 +139,9 @@ namespace Jxr.Managed.Core
         public int QualityIndex { get { return qualityIndex; } set { qualityIndex = value; } }
         public int Overlap { get { return overlap; } set { overlap = value; } }
         public JxrBitstreamLayout Layout { get { return layout; } set { layout = value; } }
+        // Frequency streams default to progressive packet ordering; false
+        // writes packets tile-by-tile (sequential ordering).
+        public bool Progressive { get { return progressive; } set { progressive = value; } }
         // -1 inherits QualityIndex. Native QP indexes 0 and 1 both mean lossless.
         public int DcQuantizerIndex { get { return dcQuantizerIndex; } set { dcQuantizerIndex = value; } }
         public int LowpassQuantizerIndex { get { return lowpassQuantizerIndex; } set { lowpassQuantizerIndex = value; } }

@@ -39,7 +39,7 @@ namespace Jxr.Managed.Core
                 main.Height > Int32.MaxValue - 15 ||
                 (long)main.Width * main.Height > Int32.MaxValue ||
                 main.Overlap > 2 ||
-                main.BitstreamFormat != 0 || main.Orientation != 0 ||
+                main.BitstreamFormat > 1 || main.Orientation != 0 ||
                 main.CodedBitDepth != 1 || main.SourceColorFormat != 0 ||
                 main.HasAlpha || main.BlackWhite ||
                 main.ExtraTop != 0 || main.ExtraLeft != 0 ||
@@ -204,8 +204,8 @@ namespace Jxr.Managed.Core
             JxrMainHeader main = headers.Main;
             JxrImagePlaneHeader plane = headers.Plane;
             JxrImagePlaneQuantizerHeader q = headers.Quantizers;
-            JxrSpatialIndexTable index;
-            JxrError error = JxrSpatialIndexTable.Read(source, headers, out index);
+            JxrPacketIndexTable index;
+            JxrError error = JxrPacketIndexTable.Read(source, headers, out index);
             if (error != JxrError.None) return error;
             int imageWidth = (int)main.Width;
             int imageHeight = (int)main.Height;
@@ -217,7 +217,11 @@ namespace Jxr.Managed.Core
             error = BuildTileBoundaries(main, columns, rowsCount,
                 out tileX, out tileY);
             if (error != JxrError.None) return error;
-            if (index.PacketCount != tileColumns * tileRows)
+            bool frequency = main.BitstreamFormat == 1;
+            int packetBandCount = plane.Subband == 3 ? 1 :
+                plane.Subband == 2 ? 2 : plane.Subband == 1 ? 3 : 4;
+            if (index.PacketCount != tileColumns * tileRows *
+                (frequency ? packetBandCount : 1))
                 return JxrError.InvalidBitstream;
 
             bool dcOnly = plane.Subband == (int)JxrGraySubbandMode.DcOnly;
@@ -247,34 +251,70 @@ namespace Jxr.Managed.Core
                     int startMbY = tileY[tileRow];
                     int tileWidth = tileX[tileColumn + 1] - startMbX;
                     int tileHeight = tileY[tileRow + 1] - startMbY;
-                    byte[] packetBytes;
-                    error = index.ReadPacket(source, headers, tileRow,
-                        tileColumn, out packetBytes);
-                    if (error != JxrError.None) return error;
-                    JxrBitReader reader = new JxrBitReader(packetBytes);
-                    JxrPacketHeader packet;
-                    error = JxrPacketReader.ReadHeader(reader, out packet);
-                    if (error != JxrError.None) return error;
                     int tileId = (tileRow * tileColumns + tileColumn) & 31;
-                    if (!packet.IsValid || packet.TileId != tileId ||
-                        packet.PacketType != 0)
-                        return JxrError.InvalidBitstream;
                     int trimFlexbits = 0;
-                    if (main.TrimFlexbits)
+                    JxrBitReader dcReader, lpReader, hpReader, flexReader;
+                    if (frequency)
                     {
-                        uint trim;
-                        error = reader.ReadBits(4, out trim);
+                        error = ReadFrequencyReader(index, source, headers,
+                            tileRow, tileColumn, 0, tileId, out dcReader);
                         if (error != JxrError.None) return error;
-                        trimFlexbits = (int)trim;
+                        lpReader = dcReader; hpReader = dcReader; flexReader = dcReader;
+                        if (packetBandCount > 1)
+                        {
+                            error = ReadFrequencyReader(index, source, headers,
+                                tileRow, tileColumn, 1, tileId, out lpReader);
+                            if (error != JxrError.None) return error;
+                        }
+                        if (packetBandCount > 2)
+                        {
+                            error = ReadFrequencyReader(index, source, headers,
+                                tileRow, tileColumn, 2, tileId, out hpReader);
+                            if (error != JxrError.None) return error;
+                        }
+                        if (packetBandCount > 3)
+                        {
+                            error = ReadFrequencyReader(index, source, headers,
+                                tileRow, tileColumn, 3, tileId, out flexReader);
+                            if (error != JxrError.None) return error;
+                            if (main.TrimFlexbits)
+                            {
+                                uint trim;
+                                error = flexReader.ReadBits(4, out trim);
+                                if (error != JxrError.None) return error;
+                                trimFlexbits = (int)trim;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        byte[] packetBytes;
+                        error = index.ReadPacket(source, headers, tileRow,
+                            tileColumn, out packetBytes);
+                        if (error != JxrError.None) return error;
+                        dcReader = new JxrBitReader(packetBytes);
+                        JxrPacketHeader packet;
+                        error = JxrPacketReader.ReadHeader(dcReader, out packet);
+                        if (error != JxrError.None) return error;
+                        if (!packet.IsValid || packet.TileId != tileId ||
+                            packet.PacketType != 0) return JxrError.InvalidBitstream;
+                        lpReader = hpReader = flexReader = dcReader;
+                        if (main.TrimFlexbits)
+                        {
+                            uint trim;
+                            error = dcReader.ReadBits(4, out trim);
+                            if (error != JxrError.None) return error;
+                            trimFlexbits = (int)trim;
+                        }
                     }
 
                     JxrCodecConfiguration format = new JxrCodecConfiguration(
-                        JxrCodecColorFormat.YOnly, 1, true, dcOnly, hasHighpass,
+                        JxrCodecColorFormat.YOnly, 1, !frequency, dcOnly, hasHighpass,
                         !skipFlexbits, skipFlexbits, true, true, false, false,
                         0, 0, 1, 1,
                         new int[][] { new int[] { hpQuantizer.Parameter } });
                     JxrCodecState state = new JxrCodecState(format,
-                        reader, reader, reader, reader);
+                        dcReader, lpReader, hpReader, flexReader);
                     state.Entropy.TrimFlexBits = trimFlexbits;
                     JxrCoefficientPredictionRows coefficientRows =
                         new JxrCoefficientPredictionRows(tileWidth, 1);
@@ -380,6 +420,33 @@ namespace Jxr.Managed.Core
             return JxrError.None;
         }
 
+        private static JxrError ReadFrequencyReader(JxrPacketIndexTable index,
+            byte[] source, JxrHeaders headers, int tileRow, int tileColumn,
+            int band, int expectedTileId, out JxrBitReader reader)
+        {
+            reader = null;
+            byte[] packet;
+            JxrError error = index.ReadFrequencyPacket(source, headers,
+                tileRow, tileColumn, band, out packet);
+            if (error != JxrError.None) return error;
+            if (packet == null && band == 3)
+            {
+                reader = new JxrBitReader(new byte[8]);
+                return JxrError.None;
+            }
+            if (packet.Length < 4) return JxrError.InvalidBitstream;
+            if (packet.Length == Int32.MaxValue) return JxrError.UnsupportedFeature;
+            byte[] paddedPacket = new byte[packet.Length + 1];
+            Array.Copy(packet, paddedPacket, packet.Length);
+            reader = new JxrBitReader(paddedPacket);
+            JxrPacketHeader header;
+            error = JxrPacketReader.ReadHeader(reader, out header);
+            if (error != JxrError.None) return error;
+            if (!header.IsValid || header.TileId != expectedTileId ||
+                header.PacketType != band + 1) return JxrError.InvalidBitstream;
+            return JxrError.None;
+        }
+
         // Full-resolution three-plane path used by RGB24 images encoded as
         // YUV444.  All three component planes share one spatial entropy
         // stream, prediction state and macroblock position.
@@ -398,7 +465,7 @@ namespace Jxr.Managed.Core
             if (main.Width < 1 || main.Height < 1 ||
                 main.Width > Int32.MaxValue - 15 || main.Height > Int32.MaxValue - 15 ||
                 (long)main.Width * main.Height > Int32.MaxValue ||
-                main.Overlap > 2 || main.BitstreamFormat != 0 || main.Orientation != 0 ||
+                main.Overlap > 2 || main.BitstreamFormat > 1 || main.Orientation != 0 ||
                 main.CodedBitDepth != 1 || main.HasAlpha || main.BlackWhite ||
                 main.ExtraTop != 0 || main.ExtraLeft != 0 ||
                 main.ExtraBottom != ((16 - ((int)main.Height & 15)) & 15) ||
@@ -634,8 +701,8 @@ namespace Jxr.Managed.Core
             JxrMainHeader main = headers.Main;
             JxrImagePlaneHeader plane = headers.Plane;
             JxrImagePlaneQuantizerHeader q = headers.Quantizers;
-            JxrSpatialIndexTable index;
-            JxrError error = JxrSpatialIndexTable.Read(source, headers, out index);
+            JxrPacketIndexTable index;
+            JxrError error = JxrPacketIndexTable.Read(source, headers, out index);
             if (error != JxrError.None) return error;
             int imageWidth = (int)main.Width;
             int imageHeight = (int)main.Height;
@@ -647,7 +714,11 @@ namespace Jxr.Managed.Core
             error = BuildTileBoundaries(main, columns, rowsCount,
                 out tileX, out tileY);
             if (error != JxrError.None) return error;
-            if (index.PacketCount != tileColumns * tileRows)
+            bool frequency = main.BitstreamFormat == 1;
+            int packetBandCount = plane.Subband == 3 ? 1 :
+                plane.Subband == 2 ? 2 : plane.Subband == 1 ? 3 : 4;
+            if (index.PacketCount != tileColumns * tileRows *
+                (frequency ? packetBandCount : 1))
                 return JxrError.InvalidBitstream;
 
             JxrCodecColorFormat colorFormat =
@@ -698,37 +769,73 @@ namespace Jxr.Managed.Core
                     int startMbY = tileY[tileRow];
                     int tileWidth = tileX[tileColumn + 1] - startMbX;
                     int tileHeight = tileY[tileRow + 1] - startMbY;
-                    byte[] packetBytes;
-                    error = index.ReadPacket(source, headers, tileRow,
-                        tileColumn, out packetBytes);
-                    if (error != JxrError.None) return error;
-                    if (packetBytes.Length == Int32.MaxValue)
-                        return JxrError.UnsupportedFeature;
-                    byte[] paddedPacket = new byte[packetBytes.Length + 1];
-                    Array.Copy(packetBytes, paddedPacket, packetBytes.Length);
-                    JxrBitReader reader = new JxrBitReader(paddedPacket);
-                    JxrPacketHeader packet;
-                    error = JxrPacketReader.ReadHeader(reader, out packet);
-                    if (error != JxrError.None) return error;
                     int tileId = (tileRow * tileColumns + tileColumn) & 31;
-                    if (!packet.IsValid || packet.TileId != tileId ||
-                        packet.PacketType != 0)
-                        return JxrError.InvalidBitstream;
                     int trimFlexbits = 0;
-                    if (main.TrimFlexbits)
+                    JxrBitReader dcReader, lpReader, hpReader, flexReader;
+                    if (frequency)
                     {
-                        uint trim;
-                        error = reader.ReadBits(4, out trim);
+                        error = ReadFrequencyReader(index, source, headers,
+                            tileRow, tileColumn, 0, tileId, out dcReader);
                         if (error != JxrError.None) return error;
-                        trimFlexbits = (int)trim;
+                        lpReader = dcReader; hpReader = dcReader; flexReader = dcReader;
+                        if (packetBandCount > 1)
+                        {
+                            error = ReadFrequencyReader(index, source, headers,
+                                tileRow, tileColumn, 1, tileId, out lpReader);
+                            if (error != JxrError.None) return error;
+                        }
+                        if (packetBandCount > 2)
+                        {
+                            error = ReadFrequencyReader(index, source, headers,
+                                tileRow, tileColumn, 2, tileId, out hpReader);
+                            if (error != JxrError.None) return error;
+                        }
+                        if (packetBandCount > 3)
+                        {
+                            error = ReadFrequencyReader(index, source, headers,
+                                tileRow, tileColumn, 3, tileId, out flexReader);
+                            if (error != JxrError.None) return error;
+                            if (main.TrimFlexbits)
+                            {
+                                uint trim;
+                                error = flexReader.ReadBits(4, out trim);
+                                if (error != JxrError.None) return error;
+                                trimFlexbits = (int)trim;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        byte[] packetBytes;
+                        error = index.ReadPacket(source, headers, tileRow,
+                            tileColumn, out packetBytes);
+                        if (error != JxrError.None) return error;
+                        if (packetBytes.Length == Int32.MaxValue)
+                            return JxrError.UnsupportedFeature;
+                        byte[] paddedPacket = new byte[packetBytes.Length + 1];
+                        Array.Copy(packetBytes, paddedPacket, packetBytes.Length);
+                        dcReader = new JxrBitReader(paddedPacket);
+                        JxrPacketHeader packet;
+                        error = JxrPacketReader.ReadHeader(dcReader, out packet);
+                        if (error != JxrError.None) return error;
+                        if (!packet.IsValid || packet.TileId != tileId ||
+                            packet.PacketType != 0) return JxrError.InvalidBitstream;
+                        lpReader = hpReader = flexReader = dcReader;
+                        if (main.TrimFlexbits)
+                        {
+                            uint trim;
+                            error = dcReader.ReadBits(4, out trim);
+                            if (error != JxrError.None) return error;
+                            trimFlexbits = (int)trim;
+                        }
                     }
 
                     JxrCodecConfiguration format = new JxrCodecConfiguration(
-                        colorFormat, 3, true, dcOnly, hasHighpass,
+                        colorFormat, 3, !frequency, dcOnly, hasHighpass,
                         !skipFlexbits, skipFlexbits, true, true, false, false,
                         0, 0, 1, 1, hpParameters);
                     JxrCodecState state = new JxrCodecState(format,
-                        reader, reader, reader, reader);
+                        dcReader, lpReader, hpReader, flexReader);
                     state.Entropy.TrimFlexBits = trimFlexbits;
                     JxrCoefficientPredictionRows coefficientRows =
                         new JxrCoefficientPredictionRows(tileWidth, 3);
@@ -823,8 +930,6 @@ namespace Jxr.Managed.Core
                             }
                         }
                     }
-                    if (reader.BitPosition > (long)packetBytes.Length * 8)
-                        return JxrError.UnexpectedEndOfStream;
                     if (tileCoefficients != null)
                         for (int channel = 0; channel < 3; channel++)
                         {

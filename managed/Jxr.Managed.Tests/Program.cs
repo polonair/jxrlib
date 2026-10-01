@@ -51,6 +51,7 @@ namespace Jxr.Managed.Tests
             new TestCase("real_subsampled_native_fixtures", TestRealSubsampledNativeFixtures),
             new TestCase("spatial_tile_native_fixtures", TestSpatialTileNativeFixtures),
             new TestCase("spatial_tile_encode_native_fixtures", TestSpatialTileEncodeNativeFixtures),
+            new TestCase("frequency_layout_native_fixtures", TestFrequencyLayoutNativeFixtures),
             new TestCase("spatial_tile_layout_validation", TestSpatialTileLayoutValidation),
             new TestCase("spatial_tile_invalid_tables", TestSpatialTileInvalidTables),
             new TestCase("minimal_decoder_end_to_end", TestMinimalDecoderEndToEnd),
@@ -830,8 +831,15 @@ namespace Jxr.Managed.Tests
                 JxrError.InvalidArgument || encoded != null) return false;
             options.QualityIndex = 1;
             options.Layout = JxrBitstreamLayout.Frequency;
-            if (JxrCodec.Encode(image, options, out encoded) !=
-                JxrError.UnsupportedFeature || encoded != null) return false;
+            JxrError frequencyEncodeError = JxrCodec.Encode(image, options, out encoded);
+            if (frequencyEncodeError != JxrError.None || encoded == null) return false;
+            JxrError frequencyDecodeError = JxrCodec.Decode(encoded,
+                new JxrDecoderOptions(), out decoded);
+            if (frequencyDecodeError != JxrError.None ||
+                !EqualBytes(decoded.Pixels, pixels)) return false;
+            if (JxrCodec.Encode(image, options, out encoded,
+                new JxrGrayEncodingTrace()) != JxrError.UnsupportedFeature ||
+                encoded != null) return false;
             JxrImage rgb = new JxrImage(16, 16, JxrPixelFormat.Rgb24,
                 new byte[16 * 16 * 3], 48);
             if (JxrCodec.Encode(rgb, new JxrEncoderOptions(), out encoded) !=
@@ -2509,6 +2517,83 @@ namespace Jxr.Managed.Tests
                             if (actual[index] != expected[index])
                             { Console.WriteLine("first difference " + index); break; }
                     }
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static bool TestFrequencyLayoutNativeFixtures()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "managed\\fixtures\\frequency-gray-16x16.jxr")))
+                directory = directory.Parent;
+            if (directory == null) return false;
+            string fixtureDir = Path.Combine(directory.FullName, "managed\\fixtures");
+            string[] names = { "frequency-gray-16x16", "frequency-gray32-tile2x2",
+                "frequency-gray32-tile2x2-sequential", "frequency-rgb444-tile2x2",
+                "frequency-rgb422-tile2x2", "frequency-rgb420-tile2x2",
+                "frequency-gray32-q16", "frequency-gray32-q16-trim2",
+                "frequency-gray32-q16-noflex", "frequency-gray32-q16-nohp",
+                "frequency-gray32-q16-dconly" };
+            string[] sourceNames = { null, "gray-32x32.bmp", "gray-32x32.bmp",
+                "rgb-overlap-32x32.bmp", "rgb-overlap-32x32.bmp",
+                "rgb-overlap-32x32.bmp", "gray-32x32.bmp", "gray-32x32.bmp",
+                "gray-32x32.bmp", "gray-32x32.bmp", "gray-32x32.bmp" };
+            JxrChromaSubsampling[] chroma = { JxrChromaSubsampling.Yuv444,
+                JxrChromaSubsampling.Yuv444, JxrChromaSubsampling.Yuv444,
+                JxrChromaSubsampling.Yuv444, JxrChromaSubsampling.Yuv422,
+                JxrChromaSubsampling.Yuv420 };
+            for (int item = 0; item < names.Length; item++)
+            {
+                bool gray = item < 3 || item >= 6;
+                JxrImage input;
+                byte[] sourceBmp = File.ReadAllBytes(item == 0 ?
+                    Path.Combine(directory.FullName,
+                        "minimal-profile\\minimal-gray-16x16.bmp") :
+                    Path.Combine(fixtureDir, sourceNames[item]));
+                JxrError error = gray ?
+                    JxrBmpAdapter.ReadGray8(sourceBmp, out input) :
+                    JxrBmpAdapter.ReadRgb24(sourceBmp, out input);
+                if (error != JxrError.None) return false;
+                JxrEncoderOptions options = new JxrEncoderOptions();
+                options.Layout = JxrBitstreamLayout.Frequency;
+                options.ChromaSubsampling = chroma[item < 6 ? item : 0];
+                if (item >= 6) options.QualityIndex = 16;
+                if (item == 7) options.TrimFlexbits = 2;
+                if (item == 8) options.Subbands = JxrGraySubbandMode.NoFlexbits;
+                if (item == 9) options.Subbands = JxrGraySubbandMode.NoHighpass;
+                if (item == 10) options.Subbands = JxrGraySubbandMode.DcOnly;
+                if (item >= 1 && item <= 5)
+                    options.TileLayout = new JxrTileLayout(
+                        new int[] { 1, 1 }, new int[] { 1, 1 });
+                if (item == 2) options.Progressive = false;
+                byte[] actual;
+                error = JxrCodec.Encode(input, options, out actual);
+                byte[] expected = File.ReadAllBytes(Path.Combine(fixtureDir,
+                    names[item] + ".jxr"));
+                if (error != JxrError.None || !EqualBytes(actual, expected))
+                {
+                    Console.WriteLine(names[item] + " encode parity: " + error);
+                    return false;
+                }
+                JxrDecoderOptions decodeOptions = new JxrDecoderOptions();
+                decodeOptions.OutputFormat = gray ? JxrPixelFormat.Gray8 :
+                    JxrPixelFormat.Rgb24;
+                JxrImage actualImage;
+                error = JxrCodec.Decode(expected, decodeOptions, out actualImage);
+                if (error != JxrError.None) return false;
+                byte[] restoredBmp = File.ReadAllBytes(Path.Combine(fixtureDir,
+                    names[item] + "-restored.bmp"));
+                JxrImage expectedImage;
+                error = gray ? JxrBmpAdapter.ReadGray8(restoredBmp,
+                    out expectedImage) : JxrBmpAdapter.ReadRgb24(restoredBmp,
+                    out expectedImage);
+                if (error != JxrError.None ||
+                    !EqualBytes(actualImage.Pixels, expectedImage.Pixels))
+                {
+                    Console.WriteLine(names[item] + " decode parity: " + error);
                     return false;
                 }
             }

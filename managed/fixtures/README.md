@@ -61,3 +61,10 @@ all ten JXR files byte-for-byte and `spatial_tile_invalid_tables` verifies
 rejection of malformed index markers, out-of-range packet offsets and
 incorrect tile IDs. The native CLI fixtures use soft tile boundaries;
 hard-boundary encoding/decoding does not yet have a native reference fixture.
+
+`create-frequency-layout.ps1` generates native progressive frequency-layout
+references for Gray, RGB/YUV 4:4:4, 4:2:2 and 4:2:0. It also creates a
+sequential 2×2 tiled Gray stream and QP16 references for all subbands, including
+DC-only, no-highpass, skipped flexbits and trimmed flexbits. Each stream is paired with the native decoder's
+restored BMP. `frequency_layout_native_fixtures` checks byte-identical JXR
+encoding and compares managed decoded pixels with those native BMPs.

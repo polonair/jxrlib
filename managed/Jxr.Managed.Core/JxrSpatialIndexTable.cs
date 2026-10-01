@@ -2,33 +2,40 @@ using System;
 
 namespace Jxr.Managed.Core
 {
-    // Resolves the byte positions of spatial packets from the JPEG XR index
-    // table. Offsets are relative to the byte immediately after the table.
-    internal sealed class JxrSpatialIndexTable
+    // Resolves packet positions from the JPEG XR index table. Spatial offsets
+    // are tile-ordered; frequency offsets are mapped by packet tile/type.
+    internal sealed class JxrPacketIndexTable
     {
         private readonly int packetBase;
         private readonly long[] offsets;
+        private readonly byte[][] frequencyPackets;
 
-        private JxrSpatialIndexTable(int packetBase, long[] offsets)
+        private JxrPacketIndexTable(int packetBase, long[] offsets,
+            byte[][] frequencyPackets)
         {
             this.packetBase = packetBase;
             this.offsets = offsets;
+            this.frequencyPackets = frequencyPackets;
         }
 
         internal int PacketCount { get { return offsets.Length; } }
 
         internal static JxrError Read(byte[] source, JxrHeaders headers,
-            out JxrSpatialIndexTable table)
+            out JxrPacketIndexTable table)
         {
             table = null;
             if (source == null || headers == null) return JxrError.InvalidArgument;
             JxrMainHeader main = headers.Main;
-            if (!main.HasIndexTable || main.BitstreamFormat != 0)
+            if (!main.HasIndexTable || main.BitstreamFormat > 1)
                 return JxrError.UnsupportedFeature;
 
             long columns = (long)main.VerticalSliceCountMinusOne + 1;
             long rows = (long)main.HorizontalSliceCountMinusOne + 1;
-            long entryCountLong = columns * rows;
+            long tileCountLong = columns * rows;
+            int bandCount = main.BitstreamFormat == 0 ? 1 :
+                headers.Plane.Subband == 3 ? 1 : headers.Plane.Subband == 2 ? 2 :
+                headers.Plane.Subband == 1 ? 3 : 4;
+            long entryCountLong = tileCountLong * bandCount;
             long positionLong = (long)headers.CodestreamOffset + headers.ByteCount;
             long codestreamEndLong = (long)headers.CodestreamOffset +
                 headers.CodestreamLength;
@@ -59,9 +66,10 @@ namespace Jxr.Managed.Core
                     JxrError error = ReadVariableLengthWord(source,
                         codestreamEnd, ref position, out value, out escaped);
                     if (error != JxrError.None) return error;
-                    if (escaped || value > Int32.MaxValue)
+                    if ((escaped && main.BitstreamFormat == 0) ||
+                        value > Int32.MaxValue)
                         return JxrError.UnsupportedFeature;
-                    offsets[index] = (long)value;
+                    offsets[index] = escaped ? -1 : (long)value;
                 }
             }
 
@@ -78,6 +86,51 @@ namespace Jxr.Managed.Core
                 return JxrError.InvalidBitstream;
             int packetBase = (int)packetBaseLong;
 
+            if (main.BitstreamFormat == 1)
+            {
+                if (tileCountLong > Int32.MaxValue / 4)
+                    return JxrError.UnsupportedFeature;
+                byte[][] packets = new byte[(int)tileCountLong * 4][];
+                long[] starts = new long[offsets.Length];
+                int realCount = 0;
+                for (int index = 0; index < offsets.Length; index++)
+                {
+                    if (offsets[index] < 0) continue;
+                    long start = (long)packetBase + offsets[index];
+                    if (start < packetBase || start > codestreamEnd - 4)
+                        return JxrError.InvalidBitstream;
+                    starts[realCount++] = start;
+                }
+                Array.Sort(starts, 0, realCount);
+                for (int entry = 0; entry < offsets.Length; entry++)
+                {
+                    if (offsets[entry] < 0) continue;
+                    long start = (long)packetBase + offsets[entry];
+                    int next = 0;
+                    while (next < realCount && starts[next] <= start) next++;
+                    long end = next < realCount ? starts[next] : codestreamEnd;
+                    if (end <= start || end - start > Int32.MaxValue)
+                        return JxrError.InvalidBitstream;
+                    int packetPosition = (int)start;
+                    if (source[packetPosition] != 0 || source[packetPosition + 1] != 0 ||
+                        source[packetPosition + 2] != 1) return JxrError.InvalidBitstream;
+                    int tile = entry / bandCount;
+                    int band = entry % bandCount;
+                    int packetTileId = source[packetPosition + 3] >> 3;
+                    int type = source[packetPosition + 3] & 7;
+                    if (tile >= tileCountLong || type != band + 1 ||
+                        packetTileId != (tile & 31))
+                        return JxrError.InvalidBitstream;
+                    int target = tile * 4 + band;
+                    if (packets[target] != null) return JxrError.InvalidBitstream;
+                    packets[target] = new byte[(int)(end - start)];
+                    Array.Copy(source, packetPosition, packets[target], 0,
+                        (int)(end - start));
+                }
+                table = new JxrPacketIndexTable(packetBase, offsets, packets);
+                return JxrError.None;
+            }
+
             long previous = -1;
             for (int index = 0; index < offsets.Length; index++)
             {
@@ -89,7 +142,7 @@ namespace Jxr.Managed.Core
                 previous = offsets[index];
             }
 
-            table = new JxrSpatialIndexTable(packetBase, offsets);
+            table = new JxrPacketIndexTable(packetBase, offsets, null);
             return JxrError.None;
         }
 
@@ -97,6 +150,7 @@ namespace Jxr.Managed.Core
             int tileRow, int tileColumn, out byte[] packet)
         {
             packet = null;
+            if (frequencyPackets != null) return JxrError.UnsupportedFeature;
             if (source == null || headers == null || tileRow < 0 || tileColumn < 0)
                 return JxrError.InvalidArgument;
             int tileColumns = headers.Main.VerticalSliceCountMinusOne + 1;
@@ -118,6 +172,25 @@ namespace Jxr.Managed.Core
             packet = new byte[length];
             Array.Copy(source, start, packet, 0, length);
             return JxrError.None;
+        }
+
+        internal JxrError ReadFrequencyPacket(byte[] source, JxrHeaders headers,
+            int tileRow, int tileColumn, int band, out byte[] packet)
+        {
+            packet = null;
+            if (frequencyPackets == null || source == null || headers == null ||
+                tileRow < 0 || tileColumn < 0 || band < 0 || band > 3)
+                return JxrError.InvalidArgument;
+            int columns = headers.Main.VerticalSliceCountMinusOne + 1;
+            int rows = headers.Main.HorizontalSliceCountMinusOne + 1;
+            if (tileColumn >= columns || tileRow >= rows)
+                return JxrError.InvalidArgument;
+            int tile = tileRow * columns + tileColumn;
+            if (tile < 0 || tile >= frequencyPackets.Length / 4)
+                return JxrError.InvalidBitstream;
+            packet = frequencyPackets[tile * 4 + band];
+            if (packet == null && band == 3) return JxrError.None;
+            return packet == null ? JxrError.InvalidBitstream : JxrError.None;
         }
 
         private static JxrError ReadVariableLengthWord(byte[] source,

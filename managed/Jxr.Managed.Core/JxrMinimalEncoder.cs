@@ -87,6 +87,16 @@ namespace Jxr.Managed.Core
             if (error != JxrError.None) return error;
             byte[][] entropyPackets = new byte[tiles.Columns * tiles.Rows][];
             int[] entropyBitCounts = new int[entropyPackets.Length];
+            bool frequency = options.Layout == JxrBitstreamLayout.Frequency;
+            byte[][][] frequencyPackets = frequency ?
+                new byte[4][][] : null;
+            int[][] frequencyBitCounts = frequency ? new int[4][] : null;
+            if (frequency)
+                for (int band = 0; band < 4; band++)
+                {
+                    frequencyPackets[band] = new byte[entropyPackets.Length][];
+                    frequencyBitCounts[band] = new int[entropyPackets.Length];
+                }
             JxrBitReader unused = new JxrBitReader(new byte[0]);
             for (int tileY = 0; tileY < tiles.Rows; tileY++)
                 for (int tileX = 0; tileX < tiles.Columns; tileX++)
@@ -103,7 +113,7 @@ namespace Jxr.Managed.Core
                     JxrCoefficientPredictionRows rows =
                         new JxrCoefficientPredictionRows(tileWidth, 1);
                     JxrCodecConfiguration format = new JxrCodecConfiguration(
-                        JxrCodecColorFormat.YOnly, 1, true,
+                        JxrCodecColorFormat.YOnly, 1, !frequency,
                         options.Subbands == JxrGraySubbandMode.DcOnly,
                         (int)options.Subbands < (int)JxrGraySubbandMode.NoHighpass,
                         options.Subbands != JxrGraySubbandMode.NoFlexbits,
@@ -115,6 +125,9 @@ namespace Jxr.Managed.Core
                     int[] dc = new int[16];
                     int[] topCbp = new int[tileWidth];
                     JxrBitWriter writer = new JxrBitWriter();
+                    JxrBitWriter lpWriter = frequency ? new JxrBitWriter() : writer;
+                    JxrBitWriter hpWriter = frequency ? new JxrBitWriter() : writer;
+                    JxrBitWriter flexWriter = frequency ? new JxrBitWriter() : writer;
                     for (int localY = 0; localY < tileHeight; localY++)
                     {
                         if (localY != 0) rows.AdvanceRow();
@@ -171,6 +184,7 @@ namespace Jxr.Managed.Core
                             error = JxrMinimalEntropyEncoder.EncodeMacroblock(state,
                                 tileCoefficients, dc, tileMacroblock.Orientation,
                                 (int)options.Subbands, options.TrimFlexbits, writer,
+                                lpWriter, hpWriter, flexWriter,
                                 out dcEnd, out lpEnd, out hpEnd);
                             if (error != JxrError.None) return error;
                             if (trace != null)
@@ -184,12 +198,37 @@ namespace Jxr.Managed.Core
                         }
                     }
                     int packetIndex = tileY * tiles.Columns + tileX;
-                    entropyBitCounts[packetIndex] = writer.BitCount;
-                    writer.AlignByte();
-                    entropyPackets[packetIndex] = writer.ToArray();
+                    if (frequency)
+                    {
+                        JxrBitWriter[] writers = { writer, lpWriter, hpWriter,
+                            flexWriter };
+                        for (int band = 0; band < 4; band++)
+                        {
+                            frequencyBitCounts[band][packetIndex] =
+                                writers[band].BitCount;
+                            writers[band].AlignByte();
+                            frequencyPackets[band][packetIndex] =
+                                writers[band].ToArray();
+                        }
+                    }
+                    else
+                    {
+                        entropyBitCounts[packetIndex] = writer.BitCount;
+                        writer.AlignByte();
+                        entropyPackets[packetIndex] = writer.ToArray();
+                    }
                 }
             byte[] codestream;
-            error = JxrCodestreamWriter.WriteGraySpatialTiles(entropyPackets,
+            if (frequency)
+                error = JxrFrequencyCodestreamWriter.WriteGray(frequencyPackets,
+                    frequencyBitCounts, width, height, dcIndex, lpIndex,
+                    hpIndex, options.Subbands, scaledArithmetic,
+                    options.TrimFlexbits, options.Overlap,
+                    options.TileLayout == null ?
+                        new JxrTileLayout(new int[] { columns },
+                            new int[] { rowsCount }) : options.TileLayout,
+                    options.Progressive, out codestream);
+            else error = JxrCodestreamWriter.WriteGraySpatialTiles(entropyPackets,
                 entropyBitCounts, width, height, dcIndex, lpIndex, hpIndex,
                 options.Subbands, scaledArithmetic, options.TrimFlexbits,
                 options.Overlap, options.TileLayout == null ?
