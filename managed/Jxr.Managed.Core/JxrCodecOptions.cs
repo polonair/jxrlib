@@ -2,6 +2,65 @@ using System.Collections.Generic;
 
 namespace Jxr.Managed.Core
 {
+    // Tile sizes are expressed in macroblocks. The final tile in each axis
+    // ends at the coded image boundary and may therefore contain a partial
+    // pixel macroblock at the bottom or right edge.
+    public sealed class JxrTileLayout
+    {
+        private readonly int[] columnWidths;
+        private readonly int[] rowHeights;
+
+        public JxrTileLayout(int[] columnWidthsInMacroblocks,
+            int[] rowHeightsInMacroblocks)
+        {
+            if (columnWidthsInMacroblocks == null)
+                throw new System.ArgumentNullException("columnWidthsInMacroblocks");
+            if (rowHeightsInMacroblocks == null)
+                throw new System.ArgumentNullException("rowHeightsInMacroblocks");
+            columnWidths = (int[])columnWidthsInMacroblocks.Clone();
+            rowHeights = (int[])rowHeightsInMacroblocks.Clone();
+        }
+
+        public int[] TileColumnWidthsInMacroblocks
+        { get { return (int[])columnWidths.Clone(); } }
+        public int[] TileRowHeightsInMacroblocks
+        { get { return (int[])rowHeights.Clone(); } }
+
+        internal bool GetBoundaries(int width, int height, out int[] x,
+            out int[] y)
+        {
+            x = null;
+            y = null;
+            int columns = (int)(((long)width + 15) / 16);
+            int rows = (int)(((long)height + 15) / 16);
+            if (columnWidths.Length < 1 || rowHeights.Length < 1 ||
+                columnWidths.Length > 4096 || rowHeights.Length > 4096 ||
+                columnWidths.Length > columns || rowHeights.Length > rows)
+                return false;
+            x = new int[columnWidths.Length + 1];
+            y = new int[rowHeights.Length + 1];
+            for (int index = 0; index < columnWidths.Length; index++)
+            {
+                int size = columnWidths[index];
+                if (size < 1 || (long)x[index] + size > columns ||
+                    size > 65535) return false;
+                x[index + 1] = x[index] + size;
+            }
+            for (int index = 0; index < rowHeights.Length; index++)
+            {
+                int size = rowHeights[index];
+                if (size < 1 || (long)y[index] + size > rows ||
+                    size > 65535) return false;
+                y[index + 1] = y[index] + size;
+            }
+            return x[columnWidths.Length] == columns &&
+                y[rowHeights.Length] == rows;
+        }
+
+        internal bool IsSingleTile
+        { get { return columnWidths.Length == 1 && rowHeights.Length == 1; } }
+    }
+
     public sealed class JxrGrayMacroblockTrace
     {
         private readonly int x, y, dcStart, dcEnd, lpStart, lpEnd, hpStart, hpEnd;
@@ -74,6 +133,7 @@ namespace Jxr.Managed.Core
         private int trimFlexbits;
         private JxrGraySubbandMode subbands = JxrGraySubbandMode.All;
         private JxrChromaSubsampling chromaSubsampling = JxrChromaSubsampling.Yuv444;
+        private JxrTileLayout tileLayout;
 
         public int QualityIndex { get { return qualityIndex; } set { qualityIndex = value; } }
         public int Overlap { get { return overlap; } set { overlap = value; } }
@@ -86,6 +146,8 @@ namespace Jxr.Managed.Core
         public JxrGraySubbandMode Subbands { get { return subbands; } set { subbands = value; } }
         public JxrChromaSubsampling ChromaSubsampling
         { get { return chromaSubsampling; } set { chromaSubsampling = value; } }
+        public JxrTileLayout TileLayout
+        { get { return tileLayout; } set { tileLayout = value; } }
     }
 
     public sealed class JxrDecoderOptions

@@ -56,7 +56,8 @@ table for tiled decoding. The set includes Gray 32×32, RGB 4:4:4/4:2:2/4:2:0
 variable tile widths of one and two macroblocks, and a 31×19 4:2:0 edge case
 at QP 1/OL_TWO. Each JXR is paired with the native decoder's restored BMP.
 `spatial_tile_native_fixtures` compares managed output pixels with those BMPs;
-`spatial_tile_invalid_tables` verifies rejection of malformed index markers,
-out-of-range packet offsets and incorrect tile IDs. The native CLI fixtures
-use soft tile boundaries; hard-boundary decoding does not yet have a native
-reference fixture.
+`spatial_tile_encode_native_fixtures` requires the managed encoder to reproduce
+all ten JXR files byte-for-byte and `spatial_tile_invalid_tables` verifies
+rejection of malformed index markers, out-of-range packet offsets and
+incorrect tile IDs. The native CLI fixtures use soft tile boundaries;
+hard-boundary encoding/decoding does not yet have a native reference fixture.

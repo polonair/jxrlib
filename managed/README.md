@@ -39,9 +39,13 @@ green alongside the managed runner.
 `JxrImage` describes top-down, row-major pixels with explicit width, height,
 format and byte stride. `Gray8` is integrated end-to-end. `Rgb24` and `Bgr24`
 select R-G-B and B-G-R byte order respectively. Both encode and decode support
-8-bit YUV 4:4:4, 4:2:2 and 4:2:0 in one spatial packet with overlap levels
-0, 1 and 2. The
-caller owns the image's `byte[]` buffer, which is not copied by the constructor.
+8-bit YUV 4:4:4, 4:2:2 and 4:2:0 in spatial packets with overlap levels
+0, 1 and 2. The encoder can split the macroblock grid into soft-boundary
+tiles through `JxrEncoderOptions.TileLayout`; column widths and row heights
+are supplied in macroblocks, and packets are emitted in row-major tile order.
+With no layout (or a one-tile layout), the existing untiled stream is retained.
+The caller owns the image's `byte[]` buffer, which is not copied by the
+constructor.
 
 `JxrCodec.Encode(image, options, out byte[])` and
 `JxrCodec.Decode(byte[], options, out image)` are BMP-independent. Matching
@@ -91,22 +95,23 @@ padded image stride and non-seekable streams.
 
 `JxrMinimalDecoder.DecodeGrayBmp` connects the ported modules into a
 fully managed decoder for the supported 8-bit Y-only profile.
-It accepts a JXR container or raw codestream, locates the single spatial
-packet from the header, decodes DC/LP/HP, applies prediction, dequantization
+It accepts a JXR container or raw codestream, locates spatial packets from the
+header and index table, decodes each tile with independent adaptive and
+prediction state, applies dequantization
 and inverse transform, and emits an 8-bit grayscale BMP. The
 `minimal_decoder_end_to_end` test compares the entire BMP byte-for-byte with
 both the source and native-decoded fixture. The RGB24 decode path additionally
-handles spatial 8-bit YUV 4:4:4/4:2:2/4:2:0 streams with one packet, sharing
-DC/LP/HP entropy and prediction state across Y, U and V. It inverse-transforms
+handles spatial 8-bit YUV 4:4:4/4:2:2/4:2:0 streams, sharing DC/LP/HP entropy
+and prediction state across Y, U and V within each tile. It inverse-transforms
 the luma and full-resolution or subsampled chroma planes, then applies the
 reversible color transform.
 `real_rgb444_decode` checks the 334x330 real-image fixture against its source
 BGR BMP. `rgb444_quality_native_fixtures` also compares native-restored RGB
 pixels for QP=16 and four subband/trim variants of the sign image plus the
 605x478 city image. The scaled-arithmetic chroma DC/LP values are doubled
-after inverse transform stage 2, as in the native decoder. Tiles, alpha and
-non-spatial layouts
-remain unsupported; this is not yet a general-purpose JPEG XR decoder.
+after inverse transform stage 2, as in the native decoder. Alpha and
+non-spatial layouts remain unsupported; this is not yet a general-purpose
+JPEG XR decoder.
 
 `JxrMinimalEncoder.EncodeGrayBmp` now connects the managed forward transform,
 quantization, coefficient prediction, adaptive entropy state and bit writer.
@@ -118,16 +123,20 @@ record, spatial packet header and TIFF-like container field by field using
 `JxrBitWriter`. The container's codestream length is calculated from the
 actual encoded packet. All coefficient and entropy data are computed from the
 input pixels.
-The single spatial packet has no separate length field: the null index-table
-record contains its own variable-length marker size, while the container's
-`ImageByteCount` gives the codestream length.
+The single-tile spatial packet has no separate length field: the null
+index-table record contains its own variable-length marker size, while the
+container's `ImageByteCount` gives the codestream length. Tiled output instead
+uses the index table to locate each packet.
 The fixture JXR is reproduced byte-for-byte, and eighteen additional sample
 patterns round-trip through the managed encoder and decoder. Image dimensions
 need not be multiples of 16: border samples are replicated for encoding and
 cropped after decoding. Consecutive macroblocks share entropy state, DC/LP
 prediction rows and HP CBP neighbours. Spatial Gray/RGB decoding also
-supports indexed tiles, including 4:2:2/4:2:0 and overlap; the managed encoder
-still emits one tile, and frequency-layout decoding remains unsupported.
+supports indexed soft-boundary tiles, including 4:2:2/4:2:0 and overlap.
+`spatial_tile_encode_native_fixtures` compares tiled output byte-for-byte with
+the C encoder across Gray/RGB formats, quality levels, overlap modes, uneven
+tile widths and partial edge macroblocks. Frequency-layout decoding remains
+unsupported.
 `gray_sizes_native_fixtures` compares native and managed output for eight
 dimensions, including a 17-macroblock-wide image that crosses an adaptive
 scan reset boundary. The [fixture generator](fixtures/README.md) documents the
@@ -148,8 +157,9 @@ plans reproduce the native decoder/encoder layout formulas, including the
 32-bit safety decisions, while actual managed allocations are `int[]` rather
 than a native struct-and-pointer slab. Sessions can be configured from parsed
 JXR headers and release their buffers through `Dispose`. The minimal decoder
-now executes one session and packet; general session execution and final
-encoder flushing are not wired up yet.
+and encoder now execute spatial tiles through those coefficient and packet
+paths; frequency-layout session execution and general final flushing remain
+outside this integration.
 
 `JxrTranscoder` ports the coefficient-domain core: all eight orientations,
 DC/AC sign and position changes for 4:4:4, 4:2:2 and 4:2:0, and ROI expansion

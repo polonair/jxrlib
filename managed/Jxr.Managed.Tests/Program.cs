@@ -50,6 +50,8 @@ namespace Jxr.Managed.Tests
             new TestCase("subsampled_edge_native_fixtures", TestSubsampledEdgeNativeFixtures),
             new TestCase("real_subsampled_native_fixtures", TestRealSubsampledNativeFixtures),
             new TestCase("spatial_tile_native_fixtures", TestSpatialTileNativeFixtures),
+            new TestCase("spatial_tile_encode_native_fixtures", TestSpatialTileEncodeNativeFixtures),
+            new TestCase("spatial_tile_layout_validation", TestSpatialTileLayoutValidation),
             new TestCase("spatial_tile_invalid_tables", TestSpatialTileInvalidTables),
             new TestCase("minimal_decoder_end_to_end", TestMinimalDecoderEndToEnd),
             new TestCase("minimal_entropy_encoder_fixture", TestMinimalEntropyEncoderFixture),
@@ -2097,6 +2099,32 @@ namespace Jxr.Managed.Tests
                     return false;
                 }
             }
+            JxrImage blank = new JxrImage(32, 32, JxrPixelFormat.Gray8,
+                new byte[32 * 32], 32);
+            for (int pixel = 0; pixel < blank.Pixels.Length; pixel++)
+                blank.Pixels[pixel] = 128;
+            JxrEncoderOptions blankOptions = new JxrEncoderOptions();
+            blankOptions.TileLayout = new JxrTileLayout(new int[] { 1, 1 },
+                new int[] { 1, 1 });
+            byte[] blankJxr;
+            if (JxrCodec.Encode(blank, blankOptions, out blankJxr) != JxrError.None)
+                return false;
+            JxrDecoderOptions blankDecodeOptions = new JxrDecoderOptions();
+            blankDecodeOptions.OutputFormat = JxrPixelFormat.Gray8;
+            JxrImage blankDecoded;
+            JxrError blankDecodeError = JxrCodec.Decode(blankJxr,
+                blankDecodeOptions, out blankDecoded);
+            if (blankDecodeError != JxrError.None || blankDecoded == null)
+            {
+                Console.WriteLine("empty tile packets decode: " + blankDecodeError);
+                return false;
+            }
+            for (int pixel = 0; pixel < blankDecoded.Pixels.Length; pixel++)
+                if (blankDecoded.Pixels[pixel] != 128)
+                {
+                    Console.WriteLine("empty tile output differs at " + pixel);
+                    return false;
+                }
             return true;
         }
 
@@ -2427,6 +2455,84 @@ namespace Jxr.Managed.Tests
                 }
             }
             return true;
+        }
+
+        private static bool TestSpatialTileEncodeNativeFixtures()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "managed\\fixtures\\gray32-tiles2x2-q1-ol0.jxr")))
+                directory = directory.Parent;
+            if (directory == null) return false;
+            string fixtures = Path.Combine(directory.FullName, "managed\\fixtures");
+            string[] names = { "gray32-tiles2x2-q1-ol0",
+                "gray32-tiles2x2-q16-ol2", "rgb444-tiles2x2-q16-ol0",
+                "rgb444-tiles2x2-q16-ol2", "rgb422-tiles2x2-q16-ol0",
+                "rgb422-tiles2x2-q16-ol2", "rgb420-tiles2x2-q16-ol0",
+                "rgb420-tiles2x2-q16-ol2", "rgb422-tiles-v1-2-q16-ol2",
+                "rgb420-tiles31x19-q1-ol2" };
+            for (int item = 0; item < names.Length; item++)
+            {
+                string name = names[item];
+                bool gray = name.StartsWith("gray");
+                string sourceName = gray ? "gray-32x32.bmp" :
+                    name.StartsWith("rgb422-tiles-v1") ? "rgb-48x32-tiles.bmp" :
+                    name.StartsWith("rgb420-tiles31x19") ? "rgb-overlap-31x19.bmp" :
+                    "rgb-overlap-32x32.bmp";
+                JxrImage image;
+                byte[] source = File.ReadAllBytes(Path.Combine(fixtures, sourceName));
+                JxrError error = gray ? JxrBmpAdapter.ReadGray8(source, out image) :
+                    JxrBmpAdapter.ReadRgb24(source, out image);
+                if (error != JxrError.None) return false;
+
+                JxrEncoderOptions options = new JxrEncoderOptions();
+                options.QualityIndex = name.Contains("q1-") ? 1 : 16;
+                options.Overlap = name.Contains("ol0") ? 0 : 2;
+                options.ChromaSubsampling = gray || name.StartsWith("rgb444") ?
+                    JxrChromaSubsampling.Yuv444 :
+                    name.StartsWith("rgb422") ? JxrChromaSubsampling.Yuv422 :
+                    JxrChromaSubsampling.Yuv420;
+                options.TileLayout = name.StartsWith("rgb422-tiles-v1") ?
+                    new JxrTileLayout(new int[] { 1, 2 }, new int[] { 2 }) :
+                    new JxrTileLayout(new int[] { 1, 1 }, new int[] { 1, 1 });
+                byte[] actual;
+                error = JxrCodec.Encode(image, options, out actual);
+                byte[] expected = File.ReadAllBytes(Path.Combine(fixtures, name + ".jxr"));
+                if (error != JxrError.None || !EqualBytes(actual, expected))
+                {
+                    Console.WriteLine(name + " encode parity: " + error);
+                    if (actual != null)
+                    {
+                        Console.WriteLine("length " + actual.Length + " vs " + expected.Length);
+                        for (int index = 0; index < Math.Min(actual.Length,
+                            expected.Length); index++)
+                            if (actual[index] != expected[index])
+                            { Console.WriteLine("first difference " + index); break; }
+                    }
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static bool TestSpatialTileLayoutValidation()
+        {
+            JxrImage image = new JxrImage(32, 32, JxrPixelFormat.Gray8,
+                new byte[32 * 32], 32);
+            JxrEncoderOptions options = new JxrEncoderOptions();
+            byte[] encoded;
+            options.TileLayout = new JxrTileLayout(new int[] { 1 },
+                new int[] { 1, 1 });
+            if (JxrCodec.Encode(image, options, out encoded) !=
+                JxrError.InvalidArgument || encoded != null) return false;
+            options.TileLayout = new JxrTileLayout(new int[] { 0, 2 },
+                new int[] { 1, 1 });
+            if (JxrCodec.Encode(image, options, out encoded) !=
+                JxrError.InvalidArgument || encoded != null) return false;
+            options.TileLayout = new JxrTileLayout(new int[] { 1, 1 },
+                new int[] { 1, 1 });
+            return JxrCodec.Encode(image, options, out encoded) == JxrError.None &&
+                encoded != null;
         }
 
         private static bool TestSpatialTileInvalidTables()

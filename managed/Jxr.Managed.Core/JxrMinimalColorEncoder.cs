@@ -64,6 +64,10 @@ namespace Jxr.Managed.Core
                             channel != 0 && scaled);
             }
             int columns = (width + 15) / 16, rowsCount = (height + 15) / 16;
+            JxrTileGeometry tiles;
+            error = JxrTileGeometry.Create(width, height, options.TileLayout,
+                out tiles);
+            if (error != JxrError.None) return error;
             JxrSessionConfiguration sessionConfig = new JxrSessionConfiguration(
                 width, height, (int)colorFormat, 3, 4, false);
             using (JxrEncoderSession session = JxrEncoderSession.Create(
@@ -84,106 +88,130 @@ namespace Jxr.Managed.Core
                     hpParameters[channel] = new int[] { hp[channel][0].Parameter };
                 }
                 JxrQuantizerSet quantizers = new JxrQuantizerSet(dc, lp, hp);
-                JxrCodecConfiguration format = new JxrCodecConfiguration(
-                    colorFormat, 3, true,
-                    options.Subbands == JxrGraySubbandMode.DcOnly,
-                    (int)options.Subbands < (int)JxrGraySubbandMode.NoHighpass,
-                    options.Subbands != JxrGraySubbandMode.NoFlexbits,
-                    options.Subbands == JxrGraySubbandMode.NoFlexbits,
-                    true, true, false, false, 0, 0, 1, 1, hpParameters);
                 JxrBitReader unused = new JxrBitReader(new byte[0]);
-                JxrCodecState state = new JxrCodecState(format,
-                    unused, unused, unused, unused);
-                JxrCoefficientPredictionRows rows =
-                    new JxrCoefficientPredictionRows(columns, 3);
-                int[][] topCbp = { new int[columns], new int[columns],
-                    new int[columns] };
-                int[][] coefficients = new int[3][];
-                int[][] dcCoefficients = { new int[16], new int[16], new int[16] };
-                for (int channel = 0; channel < 3; channel++)
-                    state.CoefficientPlanes.GetPlane(channel, out coefficients[channel]);
-                JxrBitWriter writer = new JxrBitWriter();
-                for (int mbY = 0; mbY < rowsCount; mbY++)
-                {
-                    if (mbY != 0) rows.AdvanceRow();
-                    int[] leftCbp = new int[3];
-                    for (int mbX = 0; mbX < columns; mbX++)
+                byte[][] entropyPackets = new byte[tiles.Columns * tiles.Rows][];
+                int[] entropyBitCounts = new int[entropyPackets.Length];
+                for (int tileY = 0; tileY < tiles.Rows; tileY++)
+                    for (int tileX = 0; tileX < tiles.Columns; tileX++)
                     {
-                        state.SetMacroblockPosition(mbX, mbY, columns);
-                        for (int channel = 0; channel < 3; channel++)
-                        {
-                            state.SetNeighborCbp(channel, topCbp[channel][mbX],
-                                leftCbp[channel]);
-                            int[] values = coefficients[channel];
-                            int[] source = sourcePlanes[channel];
-                            if (overlapped != null)
-                                Array.Copy(overlapped[channel][mbY * columns + mbX],
-                                    values, Math.Min(values.Length,
-                                        overlapped[channel][mbY * columns + mbX].Length));
-                            else if (subsampled && channel != 0)
-                                JxrChromaForward.LoadAndTransform(source,
-                                    columns * 8, mbX, mbY, colorFormat,
-                                    scaled, values);
-                            else
-                            {
-                                for (int y = 0; y < 16; y++)
-                                    for (int x = 0; x < 16; x++)
-                                    {
-                                        int pixelX = Math.Min(width - 1, mbX * 16 + x);
-                                        int pixelY = Math.Min(height - 1, mbY * 16 + y);
-                                        int block = (x >> 2) * 64 + (y >> 2) * 16;
-                                        int local = LocalSampleOrder[(y & 3) * 4 + (x & 3)];
-                                        values[block + local] =
-                                            source[pixelY * width + pixelX];
-                                    }
-                                JxrMinimalEncoder.ForwardMacroblock(values,
-                                    channel != 0 && scaled);
-                            }
-                        }
-                        error = JxrQuantization.QuantizeMacroblock(
-                            state.CoefficientPlanes, state.Macroblock, quantizers,
-                            colorFormat, 3,
+                        int startMbX = tiles.GetX(tileX);
+                        int startMbY = tiles.GetY(tileY);
+                        int tileWidth = tiles.GetX(tileX + 1) - startMbX;
+                        int tileHeight = tiles.GetY(tileY + 1) - startMbY;
+                        JxrCodecConfiguration format = new JxrCodecConfiguration(
+                            colorFormat, 3, true,
                             options.Subbands == JxrGraySubbandMode.DcOnly,
-                            (int)options.Subbands >= (int)JxrGraySubbandMode.NoHighpass,
-                            false);
-                        if (error != JxrError.None) return error;
-                        error = JxrCoefficientPrediction.Encode(state.Macroblock,
-                            state.CoefficientPlanes, rows,
-                            colorFormat, mbX, mbX == 0, mbY == 0);
-                        if (error != JxrError.None) return error;
+                            (int)options.Subbands < (int)JxrGraySubbandMode.NoHighpass,
+                            options.Subbands != JxrGraySubbandMode.NoFlexbits,
+                            options.Subbands == JxrGraySubbandMode.NoFlexbits,
+                            true, true, false, false, 0, 0, 1, 1, hpParameters);
+                        JxrCodecState state = new JxrCodecState(format,
+                            unused, unused, unused, unused);
+                        JxrCoefficientPredictionRows rows =
+                            new JxrCoefficientPredictionRows(tileWidth, 3);
+                        int[][] topCbp = { new int[tileWidth], new int[tileWidth],
+                            new int[tileWidth] };
+                        int[][] coefficients = new int[3][];
+                        int[][] dcCoefficients = { new int[16],
+                            new int[16], new int[16] };
                         for (int channel = 0; channel < 3; channel++)
-                            for (int index = 0; index < 16; index++)
-                            {
-                                error = state.Macroblock.GetDcCoefficient(channel,
-                                    index, out dcCoefficients[channel][index]);
-                                if (error != JxrError.None) return error;
-                            }
-                        error = subsampled ?
-                            JxrMinimalEntropyEncoder.EncodeSubsampledMacroblock(
-                                state, coefficients, dcCoefficients,
-                                state.Macroblock.Orientation, (int)options.Subbands,
-                                options.TrimFlexbits, writer) :
-                            JxrMinimalEntropyEncoder.EncodeYuv444Macroblock(
-                                state, coefficients, dcCoefficients,
-                                state.Macroblock.Orientation, (int)options.Subbands,
-                                options.TrimFlexbits, writer);
-                        if (error != JxrError.None) return error;
-                        for (int channel = 0; channel < 3; channel++)
+                            state.CoefficientPlanes.GetPlane(channel,
+                                out coefficients[channel]);
+                        JxrBitWriter writer = new JxrBitWriter();
+                        for (int localY = 0; localY < tileHeight; localY++)
                         {
-                            int previousTop;
-                            state.GetNeighborCbp(channel, out previousTop,
-                                out leftCbp[channel]);
-                            topCbp[channel][mbX] = leftCbp[channel];
+                            if (localY != 0) rows.AdvanceRow();
+                            int mbY = startMbY + localY;
+                            int[] leftCbp = new int[3];
+                            for (int localX = 0; localX < tileWidth; localX++)
+                            {
+                                int mbX = startMbX + localX;
+                                state.SetMacroblockPosition(localX, localY, tileWidth);
+                                for (int channel = 0; channel < 3; channel++)
+                                {
+                                    state.SetNeighborCbp(channel,
+                                        topCbp[channel][localX], leftCbp[channel]);
+                                    int[] values = coefficients[channel];
+                                    int[] source = sourcePlanes[channel];
+                                    if (overlapped != null)
+                                        Array.Copy(overlapped[channel][mbY * columns + mbX],
+                                            values, Math.Min(values.Length,
+                                                overlapped[channel][mbY * columns + mbX].Length));
+                                    else if (subsampled && channel != 0)
+                                        JxrChromaForward.LoadAndTransform(source,
+                                            columns * 8, mbX, mbY, colorFormat,
+                                            scaled, values);
+                                    else
+                                    {
+                                        for (int y = 0; y < 16; y++)
+                                            for (int x = 0; x < 16; x++)
+                                            {
+                                                int pixelX = Math.Min(width - 1, mbX * 16 + x);
+                                                int pixelY = Math.Min(height - 1, mbY * 16 + y);
+                                                int block = (x >> 2) * 64 + (y >> 2) * 16;
+                                                int local = LocalSampleOrder[(y & 3) * 4 + (x & 3)];
+                                                values[block + local] =
+                                                    source[pixelY * width + pixelX];
+                                            }
+                                        JxrMinimalEncoder.ForwardMacroblock(values,
+                                            channel != 0 && scaled);
+                                    }
+                                }
+                                error = JxrQuantization.QuantizeMacroblock(
+                                    state.CoefficientPlanes, state.Macroblock,
+                                    quantizers, colorFormat, 3,
+                                    options.Subbands == JxrGraySubbandMode.DcOnly,
+                                    (int)options.Subbands >=
+                                        (int)JxrGraySubbandMode.NoHighpass, false);
+                                if (error != JxrError.None) return error;
+                                error = JxrCoefficientPrediction.Encode(
+                                    state.Macroblock, state.CoefficientPlanes,
+                                    rows, colorFormat, localX,
+                                    localX == 0, localY == 0);
+                                if (error != JxrError.None) return error;
+                                for (int channel = 0; channel < 3; channel++)
+                                    for (int index = 0; index < 16; index++)
+                                    {
+                                        error = state.Macroblock.GetDcCoefficient(
+                                            channel, index,
+                                            out dcCoefficients[channel][index]);
+                                        if (error != JxrError.None) return error;
+                                    }
+                                error = subsampled ?
+                                    JxrMinimalEntropyEncoder.EncodeSubsampledMacroblock(
+                                        state, coefficients, dcCoefficients,
+                                        state.Macroblock.Orientation,
+                                        (int)options.Subbands,
+                                        options.TrimFlexbits, writer) :
+                                    JxrMinimalEntropyEncoder.EncodeYuv444Macroblock(
+                                        state, coefficients, dcCoefficients,
+                                        state.Macroblock.Orientation,
+                                        (int)options.Subbands,
+                                        options.TrimFlexbits, writer);
+                                if (error != JxrError.None) return error;
+                                for (int channel = 0; channel < 3; channel++)
+                                {
+                                    int previousTop;
+                                    state.GetNeighborCbp(channel, out previousTop,
+                                        out leftCbp[channel]);
+                                    topCbp[channel][localX] = leftCbp[channel];
+                                }
+                            }
                         }
+                        int packetIndex = tileY * tiles.Columns + tileX;
+                        entropyBitCounts[packetIndex] = writer.BitCount;
+                        writer.AlignByte();
+                        entropyPackets[packetIndex] = writer.ToArray();
                     }
-                }
-                int bitCount = writer.BitCount;
-                writer.AlignByte();
                 byte[] codestream;
-                error = JxrCodestreamWriter.WriteRgbSpatial(writer.ToArray(),
-                    width, height, dcIndex, lpIndex, hpIndex, options.Subbands,
-                    scaled, options.TrimFlexbits, bitCount, options.Overlap,
-                    options.ChromaSubsampling, out codestream);
+                error = JxrCodestreamWriter.WriteRgbSpatialTiles(entropyPackets,
+                    entropyBitCounts, width, height, dcIndex, lpIndex, hpIndex,
+                    options.Subbands, scaled, options.TrimFlexbits,
+                    options.Overlap, options.ChromaSubsampling,
+                    options.TileLayout == null ?
+                        new JxrTileLayout(new int[] { columns },
+                            new int[] { rowsCount }) : options.TileLayout,
+                    out codestream);
                 if (error != JxrError.None) return error;
                 return JxrContainerWriter.WriteRgb24(codestream,
                     width, height, 96.012f, 96.012f, out jxr);

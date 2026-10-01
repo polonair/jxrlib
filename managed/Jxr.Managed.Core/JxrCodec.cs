@@ -31,12 +31,18 @@ namespace Jxr.Managed.Core
                 return JxrError.InvalidArgument;
             if (options.Layout != JxrBitstreamLayout.Spatial)
                 return JxrError.UnsupportedFeature;
+            JxrTileGeometry tileGeometry;
+            JxrError tileError = JxrTileGeometry.Create(image.Width,
+                image.Height, options.TileLayout, out tileGeometry);
+            if (tileError != JxrError.None) return tileError;
             if (image.Format == JxrPixelFormat.Gray8)
             {
                 if (options.ChromaSubsampling != JxrChromaSubsampling.Yuv444)
                     return JxrError.InvalidArgument;
+            {
                 return JxrMinimalEncoder.EncodeGrayPixels(image.Pixels,
                     image.Stride, image.Width, image.Height, options, trace, out jxr);
+            }
             }
             if (image.Format == JxrPixelFormat.Rgb24 ||
                 image.Format == JxrPixelFormat.Bgr24)

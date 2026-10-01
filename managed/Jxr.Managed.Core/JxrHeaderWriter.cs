@@ -34,20 +34,38 @@ namespace Jxr.Managed.Core
             JxrGraySubbandMode subbands, bool scaledArithmetic, int trimFlexbits,
             int overlap, JxrChromaSubsampling chromaSubsampling)
         {
+            return WriteRgbSpatial(writer, width, height, dcQuantizerIndex,
+                lowpassQuantizerIndex, highpassQuantizerIndex, subbands,
+                scaledArithmetic, trimFlexbits, overlap, chromaSubsampling,
+                null);
+        }
+
+        public static JxrError WriteRgbSpatial(JxrBitWriter writer,
+            int width, int height, byte dcQuantizerIndex,
+            byte lowpassQuantizerIndex, byte highpassQuantizerIndex,
+            JxrGraySubbandMode subbands, bool scaledArithmetic, int trimFlexbits,
+            int overlap, JxrChromaSubsampling chromaSubsampling,
+            JxrTileLayout tileLayout)
+        {
             if (writer == null || width < 1 || height < 1 ||
                 writer.BitCount != 0 || (int)subbands < 0 || (int)subbands > 3 ||
                 trimFlexbits < 0 || trimFlexbits > 15 || overlap < 0 || overlap > 2 ||
                 (int)chromaSubsampling < 1 || (int)chromaSubsampling > 3)
                 return JxrError.InvalidArgument;
+            JxrTileGeometry tiles;
+            JxrError tileError = JxrTileGeometry.Create(width, height,
+                tileLayout, out tiles);
+            if (tileError != JxrError.None) return tileError;
+            bool tiled = !tiles.IsSingleTile;
             bool abbreviated = ((long)width + 15) / 16 <= 255 &&
                 ((long)height + 15) / 16 <= 255;
             byte[] signature = { (byte)'W', (byte)'M', (byte)'P', (byte)'H',
                 (byte)'O', (byte)'T', (byte)'O', 0 };
             for (int index = 0; index < signature.Length; index++)
                 writer.Write(signature[index], 8);
-            writer.Write(1, 4); writer.Write(1, 4); // version, subversion
-            writer.Write(0, 1); writer.Write(0, 1); // no tiles, spatial
-            writer.Write(0, 3); writer.Write(0, 1); // orientation, index
+            writer.Write(1, 4); writer.Write(1, 4); // version, soft-tile subversion
+            writer.Write(tiled ? 1U : 0U, 1); writer.Write(0, 1); // tiling, spatial
+            writer.Write(0, 3); writer.Write(tiled ? 1U : 0U, 1); // orientation, index
             writer.Write((uint)overlap, 2); writer.Write(abbreviated ? 1U : 0U, 1);
             writer.Write(1, 1); writer.Write(0, 1); // short header, no window
             writer.Write(trimFlexbits != 0 ? 1U : 0U, 1);
@@ -55,6 +73,18 @@ namespace Jxr.Managed.Core
             writer.Write(7, 4); writer.Write(1, 4); // CF_RGB, BD_8
             writer.Write((uint)(width - 1), abbreviated ? 16 : 32);
             writer.Write((uint)(height - 1), abbreviated ? 16 : 32);
+            if (tiled)
+            {
+                writer.Write((uint)(tiles.Columns - 1), 12);
+                writer.Write((uint)(tiles.Rows - 1), 12);
+                int[] columnWidths = tiles.CopyColumnWidths();
+                int[] rowHeights = tiles.CopyRowHeights();
+                int tileSizeBits = abbreviated ? 8 : 16;
+                for (int index = 0; index < columnWidths.Length - 1; index++)
+                    writer.Write((uint)columnWidths[index], tileSizeBits);
+                for (int index = 0; index < rowHeights.Length - 1; index++)
+                    writer.Write((uint)rowHeights[index], tileSizeBits);
+            }
             writer.AlignByte();
 
             writer.Write((uint)chromaSubsampling, 3);
@@ -106,10 +136,26 @@ namespace Jxr.Managed.Core
             JxrGraySubbandMode subbands, bool scaledArithmetic, int trimFlexbits,
             int overlap)
         {
+            return WriteGraySpatial(writer, width, height, dcQuantizerIndex,
+                lowpassQuantizerIndex, highpassQuantizerIndex, subbands,
+                scaledArithmetic, trimFlexbits, overlap, null);
+        }
+
+        public static JxrError WriteGraySpatial(JxrBitWriter writer,
+            int width, int height, byte dcQuantizerIndex,
+            byte lowpassQuantizerIndex, byte highpassQuantizerIndex,
+            JxrGraySubbandMode subbands, bool scaledArithmetic, int trimFlexbits,
+            int overlap, JxrTileLayout tileLayout)
+        {
             if (writer == null || width < 1 || height < 1 ||
                 writer.BitCount != 0 || (int)subbands < 0 || (int)subbands > 3 ||
                 trimFlexbits < 0 || trimFlexbits > 15 || overlap < 0 || overlap > 2)
                 return JxrError.InvalidArgument;
+            JxrTileGeometry tiles;
+            JxrError tileError = JxrTileGeometry.Create(width, height,
+                tileLayout, out tiles);
+            if (tileError != JxrError.None) return tileError;
+            bool tiled = !tiles.IsSingleTile;
             bool abbreviated = ((long)width + 15) / 16 <= 255 &&
                 ((long)height + 15) / 16 <= 255;
             byte[] signature = { (byte)'W', (byte)'M', (byte)'P', (byte)'H',
@@ -119,10 +165,10 @@ namespace Jxr.Managed.Core
 
             writer.Write(1, 4);  // version
             writer.Write(1, 4);  // new-scaling, soft-tile subversion
-            writer.Write(0, 1);  // no tiling
+            writer.Write(tiled ? 1U : 0U, 1);
             writer.Write(0, 1);  // spatial layout
             writer.Write(0, 3);  // orientation
-            writer.Write(0, 1);  // no index table
+            writer.Write(tiled ? 1U : 0U, 1);
             writer.Write((uint)overlap, 2);
             writer.Write(abbreviated ? 1U : 0U, 1);
             writer.Write(1, 1);  // short header flag used by native encoder
@@ -135,6 +181,18 @@ namespace Jxr.Managed.Core
             writer.Write(1, 4);  // 8-bit source depth
             writer.Write((uint)(width - 1), abbreviated ? 16 : 32);
             writer.Write((uint)(height - 1), abbreviated ? 16 : 32);
+            if (tiled)
+            {
+                writer.Write((uint)(tiles.Columns - 1), 12);
+                writer.Write((uint)(tiles.Rows - 1), 12);
+                int[] columnWidths = tiles.CopyColumnWidths();
+                int[] rowHeights = tiles.CopyRowHeights();
+                int tileSizeBits = abbreviated ? 8 : 16;
+                for (int index = 0; index < columnWidths.Length - 1; index++)
+                    writer.Write((uint)columnWidths[index], tileSizeBits);
+                for (int index = 0; index < rowHeights.Length - 1; index++)
+                    writer.Write((uint)rowHeights[index], tileSizeBits);
+            }
             writer.AlignByte();
 
             writer.Write(0, 3);  // Y_ONLY plane
@@ -174,6 +232,142 @@ namespace Jxr.Managed.Core
 
     public static class JxrCodestreamWriter
     {
+        internal static JxrError WriteGraySpatialTiles(byte[][] entropyPackets,
+            int[] entropyBitCounts, int width, int height,
+            byte dcQuantizerIndex, byte lowpassQuantizerIndex,
+            byte highpassQuantizerIndex, JxrGraySubbandMode subbands,
+            bool scaledArithmetic, int trimFlexbits, int overlap,
+            JxrTileLayout tileLayout, out byte[] codestream)
+        {
+            return WriteSpatialTiles(entropyPackets, entropyBitCounts, width,
+                height, dcQuantizerIndex, lowpassQuantizerIndex,
+                highpassQuantizerIndex, subbands, scaledArithmetic,
+                trimFlexbits, overlap, JxrChromaSubsampling.Yuv444,
+                tileLayout, false, out codestream);
+        }
+
+        internal static JxrError WriteRgbSpatialTiles(byte[][] entropyPackets,
+            int[] entropyBitCounts, int width, int height,
+            byte dcQuantizerIndex, byte lowpassQuantizerIndex,
+            byte highpassQuantizerIndex, JxrGraySubbandMode subbands,
+            bool scaledArithmetic, int trimFlexbits, int overlap,
+            JxrChromaSubsampling chromaSubsampling,
+            JxrTileLayout tileLayout, out byte[] codestream)
+        {
+            return WriteSpatialTiles(entropyPackets, entropyBitCounts, width,
+                height, dcQuantizerIndex, lowpassQuantizerIndex,
+                highpassQuantizerIndex, subbands, scaledArithmetic,
+                trimFlexbits, overlap, chromaSubsampling, tileLayout,
+                true, out codestream);
+        }
+
+        private static JxrError WriteSpatialTiles(byte[][] entropyPackets,
+            int[] entropyBitCounts, int width, int height,
+            byte dcQuantizerIndex, byte lowpassQuantizerIndex,
+            byte highpassQuantizerIndex, JxrGraySubbandMode subbands,
+            bool scaledArithmetic, int trimFlexbits, int overlap,
+            JxrChromaSubsampling chromaSubsampling,
+            JxrTileLayout tileLayout, bool rgb, out byte[] codestream)
+        {
+            codestream = null;
+            if (entropyPackets == null || entropyBitCounts == null ||
+                entropyPackets.Length != entropyBitCounts.Length ||
+                tileLayout == null) return JxrError.InvalidArgument;
+            JxrTileGeometry tiles;
+            JxrError error = JxrTileGeometry.Create(width, height,
+                tileLayout, out tiles);
+            if (error != JxrError.None) return error;
+            if (tiles.IsSingleTile)
+            {
+                if (entropyPackets.Length != 1) return JxrError.InvalidArgument;
+                return rgb ? WriteRgbSpatial(entropyPackets[0], width, height,
+                    dcQuantizerIndex, lowpassQuantizerIndex,
+                    highpassQuantizerIndex, subbands, scaledArithmetic,
+                    trimFlexbits, entropyBitCounts[0], overlap,
+                    chromaSubsampling, out codestream) :
+                    WriteGraySpatial(entropyPackets[0], width, height,
+                        dcQuantizerIndex, lowpassQuantizerIndex,
+                        highpassQuantizerIndex, subbands, scaledArithmetic,
+                        trimFlexbits, entropyBitCounts[0], overlap,
+                        out codestream);
+            }
+            if (entropyPackets.Length != tiles.Columns * tiles.Rows)
+                return JxrError.InvalidArgument;
+            if (trimFlexbits < 0 || trimFlexbits > 15)
+                return JxrError.InvalidArgument;
+
+            int count = entropyPackets.Length;
+            int[] lengths = new int[count];
+            long totalPacketBytes = 0;
+            for (int index = 0; index < count; index++)
+            {
+                if (entropyPackets[index] == null || entropyBitCounts[index] < 0 ||
+                    entropyBitCounts[index] > (long)entropyPackets[index].Length * 8)
+                    return JxrError.InvalidArgument;
+                long packetBits = 32L + (trimFlexbits == 0 ? 0 : 4) +
+                    entropyBitCounts[index];
+                long packetLength = (packetBits + 7) / 8;
+                if (packetLength > Int32.MaxValue) return JxrError.UnsupportedFeature;
+                lengths[index] = (int)packetLength;
+                if (lengths[index] > 4) totalPacketBytes += lengths[index];
+            }
+
+            JxrBitWriter writer = new JxrBitWriter();
+            error = rgb ? JxrHeaderWriter.WriteRgbSpatial(writer, width, height,
+                dcQuantizerIndex, lowpassQuantizerIndex, highpassQuantizerIndex,
+                subbands, scaledArithmetic, trimFlexbits, overlap,
+                chromaSubsampling, tileLayout) :
+                JxrHeaderWriter.WriteGraySpatial(writer, width, height,
+                    dcQuantizerIndex, lowpassQuantizerIndex,
+                    highpassQuantizerIndex, subbands, scaledArithmetic,
+                    trimFlexbits, overlap, tileLayout);
+            if (error != JxrError.None) return error;
+
+            // The index-table offsets point from the byte after the table to
+            // each packet. Native encoding omits packets of four bytes or less
+            // and marks their repeated offsets with 0xff.
+            writer.Write(1, 16);
+            uint packetOffset = 0;
+            for (int index = 0; index < count; index++)
+            {
+                if (lengths[index] <= 4)
+                    JxrVariableLengthWordWriter.WriteEscape(writer, 0xff);
+                else
+                {
+                    error = JxrVariableLengthWordWriter.Write(writer, packetOffset);
+                    if (error != JxrError.None) return error;
+                    if ((ulong)packetOffset + (uint)lengths[index] > UInt32.MaxValue)
+                        return JxrError.UnsupportedFeature;
+                    packetOffset += (uint)lengths[index];
+                }
+            }
+            JxrVariableLengthWordWriter.WriteEscape(writer, 0xff);
+
+            if ((long)writer.BitCount / 8 + totalPacketBytes > Int32.MaxValue)
+                return JxrError.UnsupportedFeature;
+            for (int index = 0; index < count; index++)
+            {
+                if (lengths[index] <= 4) continue;
+                error = JxrPacketWriter.WriteHeader(writer, index & 31, 0);
+                if (error != JxrError.None) return error;
+                if (trimFlexbits != 0) writer.Write((uint)trimFlexbits, 4);
+                JxrBitReader entropyReader = new JxrBitReader(entropyPackets[index]);
+                int remainingBits = entropyBitCounts[index];
+                while (remainingBits > 0)
+                {
+                    uint bit;
+                    error = entropyReader.ReadBits(1, out bit);
+                    if (error != JxrError.None) return error;
+                    error = writer.Write(bit, 1);
+                    if (error != JxrError.None) return error;
+                    remainingBits--;
+                }
+                writer.AlignByte();
+            }
+            codestream = writer.ToArray();
+            return JxrError.None;
+        }
+
         public static JxrError WriteRgbSpatial(byte[] entropyPacket,
             int width, int height, byte dcQuantizerIndex,
             byte lowpassQuantizerIndex, byte highpassQuantizerIndex,
@@ -332,6 +526,11 @@ namespace Jxr.Managed.Core
                 writer.Write(value & 0xffff, 16);
             }
             return JxrError.None;
+        }
+
+        internal static void WriteEscape(JxrBitWriter writer, int marker)
+        {
+            writer.Write((uint)marker, 8);
         }
     }
 }
