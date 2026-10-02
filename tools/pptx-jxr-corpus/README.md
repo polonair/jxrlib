@@ -72,6 +72,58 @@ decode failure still returns nonzero because that sample has no C pixel oracle.
 Without `--diagnostic`, any managed mismatch or decode failure also returns a
 nonzero exit code.
 
+To exercise the common frequency-coded, no-alpha family independently of
+spatial images and planar-alpha files, add
+`--profile-filter frequency-no-alpha`. This filter requires both
+`bitstream_layout == "frequency"` and `alpha_mode == "none"`; the older
+`has_alpha` profile bit alone does not distinguish planar-alpha assets.
+
+The 2026-10-02 frequency/no-alpha corpus check is currently **95/128
+pixel-identical**. The other 33 unique images are pre-existing differences in
+the legacy `codestream_subversion=0`, `OL_ONE` branch; they are recorded by
+input SHA-256 in `known-mismatches-frequency-no-alpha.jsonl`. This is a known
+compatibility gap, not a completed decoder mode. Run the strict baseline gate
+with:
+
+```powershell
+python .\tools\pptx-jxr-corpus\corpus.py `
+  --root 'D:\ASPOSE\SLIDESNET\TestData' `
+  --report-dir 'D:\JxrReports\TestData' `
+  --native-decoder '.\jxrencoderdecoder\Release\JXRDecApp\x64\JXRDecApp.exe' `
+  --managed-runner '.\managed\Jxr.Managed.CorpusRunner\bin\Release\Jxr.Managed.CorpusRunner.exe' `
+  --suite all --profile-filter frequency-no-alpha `
+  --corpus-manifest '.\tools\pptx-jxr-corpus\corpus-manifest.jsonl' `
+  --corpus-manifest-content-only `
+  --known-mismatches '.\tools\pptx-jxr-corpus\known-mismatches-frequency-no-alpha.jsonl'
+```
+
+The report retains `pixel_mismatch` for these assets and marks only the
+allowlisted rows with `known_mismatch`. A new mismatch, decode error, changed
+profile, or changed corpus inventory fails the gate. A formerly mismatching
+asset becoming pixel-identical is allowed and counted as resolved; remove its
+SHA from the allowlist once the fix is reviewed. The committed corpus index
+predates a profiler metadata correction, so this command compares input SHA,
+locations and parse status but not the profiler's derived profile fields;
+the 33 allowed mismatches still require their pinned profile fields. Do not
+use this baseline to claim full parity or to suppress failures in unrelated
+profiles.
+
+For a single extracted JXR, the managed bridge can also capture decoder state
+for one macroblock without changing the normal decode path:
+
+```powershell
+Jxr.Managed.CorpusRunner.exe decode-trace input.jxr 0 0 trace.json
+```
+
+The trace contains DC/LP/HP bit ranges, coefficient snapshots after entropy,
+prediction and dequantization, reconstructed Y/U/V samples, and final BGR
+pixels for the requested macroblock. The native decoder's `-X <directory>`
+trace uses the same stages; native reconstructed samples are captured when the
+output row is consumed and converted from its internal `idxCC` ordering to
+row-major pixel order. These traces are diagnostic output, not golden corpus
+assets; matching stage names do not yet establish identical intermediate
+semantics on the unresolved legacy overlap profile.
+
 To save the full corpus index without running either decoder:
 
 ```powershell

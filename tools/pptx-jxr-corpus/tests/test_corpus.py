@@ -43,9 +43,70 @@ class CorpusUtilityTests(unittest.TestCase):
         self.assertEqual(["a", "c"], [item["sha256"] for item in reps])
         self.assertEqual(["a", "b", "c", "e"], [item["sha256"] for item in
                                                corpus.select_assets(
-                                                   [duplicate_profile, first,
+                                               [duplicate_profile, first,
                                                     second_profile, range_variant,
                                                     invalid], "all")])
+
+    def test_frequency_no_alpha_filter(self):
+        frequency = {"sha256": "a", "parse_status": "parsed",
+                     "profile": {"bitstream_layout": "frequency",
+                                 "has_alpha": False}}
+        spatial = {"sha256": "b", "parse_status": "parsed",
+                   "profile": {"bitstream_layout": "spatial",
+                               "has_alpha": False}}
+        alpha = {"sha256": "c", "parse_status": "parsed",
+                 "profile": {"bitstream_layout": "frequency",
+                             "has_alpha": False, "alpha_mode": "planar"}}
+        no_alpha = dict(frequency)
+        no_alpha["profile"] = dict(frequency["profile"], alpha_mode="none")
+        selected = corpus.filter_assets([no_alpha, spatial, alpha],
+                                        "frequency-no-alpha")
+        self.assertEqual(["a"], [item["sha256"] for item in selected])
+
+    def test_known_mismatch_baseline_is_exact_and_does_not_hide_errors(self):
+        path = Path(__file__).resolve().parents[1] / \
+            "known-mismatches-frequency-no-alpha.jsonl"
+        known = corpus.load_known_mismatches(path)
+        self.assertEqual(33, len(known))
+        sha = next(iter(known))
+        profile = {key: known[sha][key] for key in
+                   ("bitstream_layout", "alpha_mode",
+                    "codestream_subversion", "overlap")}
+        results = [{"sha256": sha, "profile": profile,
+                    "status": "pixel_mismatch"},
+                   {"sha256": "b" * 64, "profile": profile,
+                    "status": "pixel_mismatch"}]
+        counts = corpus.classify_known_mismatches(results, {sha: known[sha]})
+        self.assertEqual({"known_mismatches": 1,
+                          "known_mismatches_resolved": 0,
+                          "unexpected_mismatches": 1}, counts)
+        self.assertTrue(results[0]["known_mismatch"])
+        self.assertEqual("pixel_mismatch", results[0]["status"])
+        self.assertNotIn("known_mismatch", results[1])
+        results[0]["status"] = "match"
+        self.assertEqual(1, corpus.classify_known_mismatches(
+            results, {sha: known[sha]})["known_mismatches_resolved"])
+        results[0]["status"] = "managed_decode_error"
+        self.assertEqual(0, corpus.classify_known_mismatches(
+            results, {sha: known[sha]})["known_mismatches"])
+        self.assertNotIn("known_mismatch", results[0])
+        with self.assertRaises(ValueError):
+            corpus.classify_known_mismatches(results,
+                {"c" * 64: dict(known[sha], sha256="c" * 64)})
+        results[0]["profile"] = dict(profile, overlap=2)
+        with self.assertRaises(ValueError):
+            corpus.classify_known_mismatches(results, {sha: known[sha]})
+
+    def test_known_mismatch_manifest_rejects_duplicates(self):
+        row = {"sha256": "a" * 64, "bitstream_layout": "frequency",
+               "alpha_mode": "none", "codestream_subversion": 0,
+               "overlap": 1}
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "known.jsonl"
+            path.write_text(json.dumps(row) + "\n" + json.dumps(row) + "\n",
+                            encoding="utf-8")
+            with self.assertRaises(ValueError):
+                corpus.load_known_mismatches(path)
 
     def test_write_corpus_manifest_contains_index_not_asset_data(self):
         asset = {"sha256": "abc", "pptx": "folder/sample.pptx",
@@ -62,6 +123,8 @@ class CorpusUtilityTests(unittest.TestCase):
             same = corpus.compare_corpus_manifest(path, [asset], occurrences)
             modified = dict(asset, profile={"width": 17})
             changed = corpus.compare_corpus_manifest(path, [modified], occurrences)
+            unchanged_content = corpus.compare_corpus_manifest(
+                path, [modified], occurrences, True)
         self.assertEqual("abc", row["sha256"])
         self.assertEqual("folder/sample.pptx", row["pptx"])
         self.assertEqual(2, row["occurrences"])
@@ -71,6 +134,9 @@ class CorpusUtilityTests(unittest.TestCase):
         self.assertEqual({"assets_removed": 0, "assets_added": 0,
                           "assets_changed": 0}, same)
         self.assertEqual(1, changed["assets_changed"])
+        self.assertEqual({"assets_removed": 0, "assets_added": 0,
+                          "assets_changed": 0},
+                         unchanged_content)
 
     def test_read_bottom_up_bgr24_and_padding(self):
         bmp = make_bmp(1, 2, 24, [bytes((1, 2, 3)), bytes((4, 5, 6))])

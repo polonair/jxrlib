@@ -70,6 +70,23 @@ namespace Jxr.Managed.Core
         public static JxrError Decode(byte[] jxr, JxrDecoderOptions options,
             out JxrImage image)
         {
+            return DecodeInternal(jxr, options, out image, null);
+        }
+
+        // Diagnostic counterpart used by the corpus runner. It records only
+        // the selected macroblock and must not be used as a normal decode API.
+        public static JxrError DecodeWithTrace(byte[] jxr,
+            JxrDecoderOptions options, out JxrImage image,
+            JxrDecoderTrace trace)
+        {
+            if (trace == null) { image = null; return JxrError.InvalidArgument; }
+            return DecodeInternal(jxr, options, out image, trace);
+        }
+
+        private static JxrError DecodeInternal(byte[] jxr,
+            JxrDecoderOptions options, out JxrImage image,
+            JxrDecoderTrace trace)
+        {
             image = null;
             if (jxr == null || options == null) return JxrError.InvalidArgument;
             if (options.OutputFormat != JxrPixelFormat.Gray8 &&
@@ -112,16 +129,20 @@ namespace Jxr.Managed.Core
             if (options.OutputFormat == JxrPixelFormat.Rgb24 ||
                 options.OutputFormat == JxrPixelFormat.Bgr24)
             {
+                if (trace != null && (headers.Main.HasAlpha ||
+                    headers.Main.BitstreamFormat != 1))
+                    return JxrError.UnsupportedFeature;
                 byte[] rgb;
                 int rgbWidth, rgbHeight;
                 JxrError rgbError = JxrMinimalDecoder.DecodeRgbPixels(jxr,
                     options.OutputFormat == JxrPixelFormat.Rgb24,
-                    out rgb, out rgbWidth, out rgbHeight);
+                    out rgb, out rgbWidth, out rgbHeight, trace);
                 if (rgbError != JxrError.None) return rgbError;
                 image = new JxrImage(rgbWidth, rgbHeight,
                     options.OutputFormat, rgb, rgbWidth * 3);
                 return JxrError.None;
             }
+            if (trace != null) return JxrError.UnsupportedFeature;
             byte[] pixels;
             int width, height;
             JxrError error = JxrMinimalDecoder.DecodeGrayPixels(jxr, out pixels,

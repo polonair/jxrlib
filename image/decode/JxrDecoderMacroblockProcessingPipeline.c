@@ -113,11 +113,6 @@ Int JxrDecoderMacroblockProcessingPipelineProcess(CWMImageStrCodec* codec)
         if (JxrMacroblockRegionStateShouldTransform(&region,
             currentCodec->m_Dparam->bDecodeFullFrame)) {
             JxrDecoderTransformPipelineApply(currentCodec);
-            if (currentCodec->cColumn < currentCodec->cmbWidth &&
-                currentCodec->cRow < currentCodec->cmbHeight) {
-                JXRTraceDumpStage("decoder", "reconstructed_samples", currentCodec,
-                    (Int)currentCodec->cColumn, (Int)currentCodec->cRow, JXRTraceOutput);
-            }
         }
 
         if (planeIndex < hasSecondaryCodec) {

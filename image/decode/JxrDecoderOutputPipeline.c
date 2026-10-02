@@ -13,6 +13,7 @@
 #include "JxrDecoderThumbnailColorOutputWriter.h"
 #include "JxrDecoderAlphaOutputWriter.h"
 #include "JxrDecoderThumbnailAlphaOutputWriter.h"
+#include "JXRTrace.h"
 
 Void JxrDecoderOutputPipelinePlanInitialize(JxrDecoderOutputPipelinePlan* plan,
     Bool hasOptimizedLoadOverride)
@@ -49,6 +50,29 @@ Int JxrDecoderOutputPipelineWriteStandardRow(CWMImageStrCodec * pSC)
 
     if(pSC->m_bUVResolutionChange)
         JxrDecoderUvInterpolatorInterpolate(pSC);
+
+    /* Trace the actual overlap-reconstructed macroblock row, after it is
+     * available to the output writer. The transform callback runs one row
+     * earlier and observes stale a0MBbuffer contents at the top edge. */
+    if (JXRTraceEnabled() && pSC->cRow > 0 &&
+        pSC->WMISCP.cfColorFormat == YUV_444 &&
+        !pSC->m_bUVResolutionChange && pSC->m_param.cNumChannels >= 3)
+    {
+        size_t macroblockX;
+        for (macroblockX = 0; macroblockX < pSC->cmbWidth; ++macroblockX)
+        {
+            size_t offset = macroblockX * 256;
+            JXRTraceDumpValues("decoder", "reconstructed_samples",
+                (Int)macroblockX, (Int)(pSC->cRow - 1), "Y",
+                pSC->a0MBbuffer[0] + offset);
+            JXRTraceDumpValues("decoder", "reconstructed_samples",
+                (Int)macroblockX, (Int)(pSC->cRow - 1), "U",
+                pSC->a0MBbuffer[1] + offset);
+            JXRTraceDumpValues("decoder", "reconstructed_samples",
+                (Int)macroblockX, (Int)(pSC->cRow - 1), "V",
+                pSC->a0MBbuffer[2] + offset);
+        }
+    }
 
     JxrDecoderStandardColorOutputWriterWrite(pSC, &outputPlan, iShift);
 

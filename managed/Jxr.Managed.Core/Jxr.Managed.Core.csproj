@@ -15,7 +15,7 @@
     <DebugType>pdbonly</DebugType><Optimize>true</Optimize><OutputPath>bin\Release\</OutputPath>
   </PropertyGroup>
   <ItemGroup><Reference Include="System" /></ItemGroup>
-  <ItemGroup><Compile Include="JxrSpatialIndexTable.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="JxrSpatialIndexTable.cs" /><Compile Include="JxrDecoderTrace.cs" /></ItemGroup>
   <ItemGroup><Compile Include="JxrSourceProfile.cs" /></ItemGroup>
   <ItemGroup><Compile Include="JxrFrequencyCodestreamWriter.cs" /></ItemGroup>
   <ItemGroup><Compile Include="JxrChromaForward.cs" /></ItemGroup>

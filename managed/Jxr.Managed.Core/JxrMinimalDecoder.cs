@@ -183,7 +183,8 @@ namespace Jxr.Managed.Core
                 {
                     int[][] overlapSamples = JxrOverlapInverse.Transform(
                         overlapCoefficients, imageWidth, imageHeight,
-                        main.Overlap, false, hpQuantizer.Parameter, !hasHighpass);
+                        main.Overlap, false, hpQuantizer.Parameter, !hasHighpass,
+                        main.Subversion != 0);
                     for (int mbY = 0; mbY < rowsCount; mbY++)
                         for (int mbX = 0; mbX < columns; mbX++)
                             CopyGrayMacroblock(overlapSamples[mbY * columns + mbX],
@@ -394,7 +395,7 @@ namespace Jxr.Managed.Core
                         int[][] tileSamples = JxrOverlapInverse.Transform(
                             tileCoefficients, tilePixelWidth, tilePixelHeight,
                             main.Overlap, false, hpQuantizer.Parameter,
-                            !hasHighpass);
+                            !hasHighpass, main.Subversion != 0);
                         for (int localY = 0; localY < tileHeight; localY++)
                             for (int localX = 0; localX < tileWidth; localX++)
                                 CopyGrayMacroblock(
@@ -408,7 +409,8 @@ namespace Jxr.Managed.Core
             {
                 int[][] overlapSamples = JxrOverlapInverse.Transform(
                     globalCoefficients, imageWidth, imageHeight, main.Overlap,
-                    false, hpQuantizer.Parameter, !hasHighpass);
+                    false, hpQuantizer.Parameter, !hasHighpass,
+                    main.Subversion != 0);
                 for (int mbY = 0; mbY < rowsCount; mbY++)
                     for (int mbX = 0; mbX < columns; mbX++)
                         CopyGrayMacroblock(overlapSamples[mbY * columns + mbX],
@@ -454,6 +456,14 @@ namespace Jxr.Managed.Core
             out byte[] pixels,
             out int width, out int height)
         {
+            return DecodeRgbPixels(source, rgbOrder, out pixels, out width,
+                out height, null);
+        }
+
+        internal static JxrError DecodeRgbPixels(byte[] source, bool rgbOrder,
+            out byte[] pixels, out int width, out int height,
+            JxrDecoderTrace trace)
+        {
             pixels = null;
             width = height = 0;
             JxrHeaders headers;
@@ -482,7 +492,8 @@ namespace Jxr.Managed.Core
             if (main.HasIndexTable || main.VerticalSliceCountMinusOne != 0 ||
                 main.HorizontalSliceCountMinusOne != 0)
                 return DecodeRgbTiles(source, headers, rgbOrder, out pixels,
-                    out width, out height);
+                    out width, out height, trace);
+            if (trace != null) return JxrError.UnsupportedFeature;
 
             int packetOffset;
             error = LocateSingleSpatialPacket(source, headers, out packetOffset);
@@ -658,7 +669,8 @@ namespace Jxr.Managed.Core
                             JxrOverlapInverse.Transform(
                                 overlapCoefficients[channel], imageWidth, imageHeight,
                                 main.Overlap, channel != 0 && scaledArithmetic,
-                                hp[channel][0].Parameter, !hasHighpass);
+                                hp[channel][0].Parameter, !hasHighpass,
+                                main.Subversion != 0);
                         for (int mbY = 0; mbY < rowsCount; mbY++)
                             for (int mbX = 0; mbX < columns; mbX++)
                                 CopyColorMacroblock(
@@ -694,7 +706,8 @@ namespace Jxr.Managed.Core
         }
 
         private static JxrError DecodeRgbTiles(byte[] source, JxrHeaders headers,
-            bool rgbOrder, out byte[] pixels, out int width, out int height)
+            bool rgbOrder, out byte[] pixels, out int width, out int height,
+            JxrDecoderTrace trace)
         {
             pixels = null;
             width = height = 0;
@@ -772,20 +785,46 @@ namespace Jxr.Managed.Core
                     int tileId = (tileRow * tileColumns + tileColumn) & 31;
                     int trimFlexbits = 0;
                     JxrBitReader dcReader, lpReader, hpReader, flexReader;
+                    int dcPacketOffset = -1, lpPacketOffset = -1,
+                        hpPacketOffset = -1;
                     if (frequency)
                     {
+                        if (trace != null)
+                        {
+                            int packetLength;
+                            error = index.GetPacketSpan(headers, tileRow,
+                                tileColumn, 0, out dcPacketOffset,
+                                out packetLength);
+                            if (error != JxrError.None) return error;
+                        }
                         error = ReadFrequencyReader(index, source, headers,
                             tileRow, tileColumn, 0, tileId, out dcReader);
                         if (error != JxrError.None) return error;
                         lpReader = dcReader; hpReader = dcReader; flexReader = dcReader;
                         if (packetBandCount > 1)
                         {
+                            if (trace != null)
+                            {
+                                int packetLength;
+                                error = index.GetPacketSpan(headers, tileRow,
+                                    tileColumn, 1, out lpPacketOffset,
+                                    out packetLength);
+                                if (error != JxrError.None) return error;
+                            }
                             error = ReadFrequencyReader(index, source, headers,
                                 tileRow, tileColumn, 1, tileId, out lpReader);
                             if (error != JxrError.None) return error;
                         }
                         if (packetBandCount > 2)
                         {
+                            if (trace != null)
+                            {
+                                int packetLength;
+                                error = index.GetPacketSpan(headers, tileRow,
+                                    tileColumn, 2, out hpPacketOffset,
+                                    out packetLength);
+                                if (error != JxrError.None) return error;
+                            }
                             error = ReadFrequencyReader(index, source, headers,
                                 tileRow, tileColumn, 2, tileId, out hpReader);
                             if (error != JxrError.None) return error;
@@ -869,17 +908,43 @@ namespace Jxr.Managed.Core
                                 Array.Clear(planeCoefficients, 0,
                                     planeCoefficients.Length);
                             }
+                            int bitStart = trace != null && trace.Selects(
+                                startMbX + localX, startMbY + localY) ?
+                                dcReader.BitPosition : 0;
                             error = JxrDcCodec.Decode(state);
                             if (error != JxrError.None) return error;
+                            int globalX = startMbX + localX;
+                            int globalY = startMbY + localY;
+                            RecordDecoderStage(state, trace, "after_dc",
+                                globalX, globalY);
+                            if (trace != null && trace.Selects(globalX, globalY))
+                                trace.RecordBitRange("dc", globalX, globalY,
+                                    tileRow, tileColumn, dcPacketOffset,
+                                    dcPacketOffset * 8 + bitStart,
+                                    dcPacketOffset * 8 + dcReader.BitPosition);
                             if (!dcOnly)
                             {
+                                bitStart = trace != null && trace.Selects(
+                                    globalX, globalY) ? lpReader.BitPosition : 0;
                                 error = JxrLpCodec.Decode(state);
                                 if (error != JxrError.None) return error;
+                                RecordDecoderStage(state, trace, "after_lp",
+                                    globalX, globalY);
+                                if (trace != null && trace.Selects(globalX, globalY))
+                                    trace.RecordBitRange("lp", globalX, globalY,
+                                        tileRow, tileColumn, lpPacketOffset,
+                                        lpPacketOffset * 8 + bitStart,
+                                        lpPacketOffset * 8 + lpReader.BitPosition);
                             }
+                            else
+                                RecordDecoderStage(state, trace, "after_lp",
+                                    globalX, globalY);
                             error = JxrCoefficientPrediction.DecodeDcLp(
                                 state.Macroblock, coefficientRows, colorFormat,
                                 localX, localX == 0, localY == 0);
                             if (error != JxrError.None) return error;
+                            RecordDecoderStage(state, trace,
+                                "after_dc_lp_prediction", globalX, globalY);
                             error = JxrCoefficientPrediction.StoreCurrent(
                                 state.Macroblock, coefficientRows, colorFormat,
                                 localX);
@@ -888,10 +953,21 @@ namespace Jxr.Managed.Core
                                 state.CoefficientPlanes, state.Macroblock,
                                 quantizers, colorFormat, 3, dcOnly);
                             if (error != JxrError.None) return error;
+                            RecordDecoderStage(state, trace,
+                                "after_dequantization", globalX, globalY);
                             if (hasHighpass)
                             {
+                                bitStart = trace != null && trace.Selects(
+                                    globalX, globalY) ? hpReader.BitPosition : 0;
                                 error = JxrHpCodec.Decode(state);
                                 if (error != JxrError.None) return error;
+                                RecordDecoderStage(state, trace, "after_hp",
+                                    globalX, globalY);
+                                if (trace != null && trace.Selects(globalX, globalY))
+                                    trace.RecordBitRange("hp", globalX, globalY,
+                                        tileRow, tileColumn, hpPacketOffset,
+                                        hpPacketOffset * 8 + bitStart,
+                                        hpPacketOffset * 8 + hpReader.BitPosition);
                                 for (int channel = 0; channel < 3; channel++)
                                 {
                                     error = state.MacroblockCbp.GetCbp(channel,
@@ -904,8 +980,8 @@ namespace Jxr.Managed.Core
                                 state.Macroblock, state.CoefficientPlanes,
                                 colorFormat);
                             if (error != JxrError.None) return error;
-                            int globalX = startMbX + localX;
-                            int globalY = startMbY + localY;
+                            RecordDecoderStage(state, trace,
+                                "after_ac_prediction", globalX, globalY);
                             for (int channel = 0; channel < 3; channel++)
                             {
                                 int[] planeCoefficients;
@@ -937,7 +1013,8 @@ namespace Jxr.Managed.Core
                                 tileCoefficients[channel], tileWidth, tileHeight,
                                 tilePixelWidth, tilePixelHeight, channel,
                                 subsampled, colorFormat, main.Overlap, scaled,
-                                hp[channel][0].Parameter, !hasHighpass);
+                                hp[channel][0].Parameter, !hasHighpass,
+                                main.Subversion != 0);
                             for (int localY = 0; localY < tileHeight; localY++)
                                 for (int localX = 0; localX < tileWidth; localX++)
                                     CopyColorMacroblock(
@@ -959,9 +1036,15 @@ namespace Jxr.Managed.Core
                         globalCoefficients[channel], columns, rowsCount,
                         imageWidth, imageHeight, channel, subsampled,
                         colorFormat, main.Overlap, scaled,
-                        hp[channel][0].Parameter, !hasHighpass);
+                        hp[channel][0].Parameter, !hasHighpass,
+                        main.Subversion != 0);
                     for (int mbY = 0; mbY < rowsCount; mbY++)
                         for (int mbX = 0; mbX < columns; mbX++)
+                        {
+                            if (trace != null)
+                                trace.RecordStage("reconstructed_samples", mbX,
+                                    mbY, channel == 0 ? "Y" : channel == 1 ? "U" : "V",
+                                    overlapSamples[mbY * columns + mbX]);
                             CopyColorMacroblock(
                                 overlapSamples[mbY * columns + mbX],
                                 outputPlanes[channel],
@@ -971,6 +1054,7 @@ namespace Jxr.Managed.Core
                                 subsampled && channel != 0 ? 8 : 16,
                                 subsampled && channel != 0 &&
                                     colorFormat == JxrCodecColorFormat.Yuv420 ? 8 : 16);
+                        }
                 }
             if (subsampled)
             {
@@ -987,22 +1071,72 @@ namespace Jxr.Managed.Core
                 imageWidth, imageHeight, rgbOrder, scaled ? 3 : 0,
                 pixels, imageWidth * 3);
             if (error != JxrError.None) { pixels = null; return error; }
+            if (trace != null)
+                RecordRgbOutput(trace, pixels, imageWidth, imageHeight,
+                    rgbOrder);
             width = imageWidth;
             height = imageHeight;
             return JxrError.None;
         }
 
+        private static void RecordDecoderStage(JxrCodecState state,
+            JxrDecoderTrace trace, string name, int x, int y)
+        {
+            if (trace == null || !trace.Selects(x, y)) return;
+            for (int channel = 0; channel < 3; channel++)
+            {
+                int[] coefficients;
+                if (state.CoefficientPlanes.GetPlane(channel,
+                    out coefficients) == JxrError.None)
+                    trace.RecordStage(name, x, y,
+                        channel == 0 ? "Y" : channel == 1 ? "U" : "V",
+                        coefficients);
+            }
+        }
+
+        private static void RecordRgbOutput(JxrDecoderTrace trace,
+            byte[] pixels, int width, int height, bool rgbOrder)
+        {
+            int startX = trace.MacroblockX * 16;
+            int startY = trace.MacroblockY * 16;
+            if (startX >= width || startY >= height) return;
+            int macroblockWidth = Math.Min(16, width - startX);
+            int macroblockHeight = Math.Min(16, height - startY);
+            int[] values = new int[macroblockWidth * macroblockHeight * 3];
+            int target = 0;
+            for (int y = 0; y < macroblockHeight; y++)
+                for (int x = 0; x < macroblockWidth; x++)
+                {
+                    int source = ((startY + y) * width + startX + x) * 3;
+                    if (rgbOrder)
+                    {
+                        values[target++] = pixels[source];
+                        values[target++] = pixels[source + 1];
+                        values[target++] = pixels[source + 2];
+                    }
+                    else
+                    {
+                        values[target++] = pixels[source + 2];
+                        values[target++] = pixels[source + 1];
+                        values[target++] = pixels[source];
+                    }
+                }
+            trace.RecordStage("bgr_output", trace.MacroblockX,
+                trace.MacroblockY, "BGR", values);
+        }
+
         private static int[][] GetInverseOverlapSamples(int[][] coefficients,
             int columns, int rows, int pixelWidth, int pixelHeight, int channel,
             bool subsampled, JxrCodecColorFormat colorFormat, int overlap,
-            bool scaled, int highpassQuantizer, bool highpassAbsent)
+            bool scaled, int highpassQuantizer, bool highpassAbsent,
+            bool alternateOperators)
         {
             if (subsampled && channel != 0)
                 return JxrChromaOverlapInverse.Transform(coefficients,
                     columns, rows, colorFormat, overlap, scaled);
             return JxrOverlapInverse.Transform(coefficients, pixelWidth,
                 pixelHeight, overlap, channel != 0 && scaled,
-                highpassQuantizer, highpassAbsent);
+                highpassQuantizer, highpassAbsent, alternateOperators);
         }
 
         private static void InverseAndCopyColorMacroblock(int[] samples,

@@ -14,6 +14,8 @@ Void JXRTraceConfigure(const char* szDirectory);
 Bool JXRTraceEnabled(Void);
 Void JXRTraceDumpCodecState(const char* szMode, const CWMImageStrCodec* pSC);
 Void JXRTraceDumpStage(const char* szMode, const char* szStage, const CWMImageStrCodec* pSC, Int iMBX, Int iMBY, JXRTraceBuffer eBuffer);
+Void JXRTraceDumpValues(const char* szMode, const char* szStage, Int iMBX,
+    Int iMBY, const char* szChannel, const PixelI* pValues);
 size_t JXRTraceBitPosition(const BitIOInfo* pIO, Bool bWrite);
 Void JXRTraceDumpBitRange(const char* szMode, const char* szPacket, Int iMBX, Int iMBY,
     size_t cbitStart, size_t cbitEnd);

@@ -49,6 +49,17 @@ def select_assets(assets: list[dict[str, Any]], suite: str) -> list[dict[str, An
     return list(chosen.values())
 
 
+def filter_assets(assets: list[dict[str, Any]], profile_filter: str | None
+                  ) -> list[dict[str, Any]]:
+    if profile_filter is None:
+        return assets
+    if profile_filter == "frequency-no-alpha":
+        return [asset for asset in assets
+                if asset.get("profile", {}).get("bitstream_layout") == "frequency"
+                and asset.get("profile", {}).get("alpha_mode") == "none"]
+    raise ValueError("unsupported profile filter: " + str(profile_filter))
+
+
 def read_bmp(path: Path) -> tuple[int, int, int, bytes]:
     """Return width, height, channels and top-down tightly packed pixels."""
     data = path.read_bytes()
@@ -171,7 +182,8 @@ def write_corpus_manifest(assets: list[dict[str, Any]], path: Path,
 
 
 def compare_corpus_manifest(expected_path: Path, assets: list[dict[str, Any]],
-                            occurrences: list[dict[str, Any]]) -> dict[str, int]:
+                            occurrences: list[dict[str, Any]],
+                            content_only: bool = False) -> dict[str, int]:
     expected_rows = []
     with expected_path.open("r", encoding="utf-8") as stream:
         expected_rows = [json.loads(line) for line in stream if line.strip()]
@@ -180,16 +192,69 @@ def compare_corpus_manifest(expected_path: Path, assets: list[dict[str, Any]],
     current = {row["sha256"]: row for row in current_rows}
     removed = set(expected) - set(current)
     added = set(current) - set(expected)
+    fields = ("parse_status", "parse_error", "pptx", "entry",
+              "occurrences", "presentations", "locations")
+    if not content_only:
+        fields += ("profile",)
     changed = {key for key in set(expected) & set(current)
                if any(expected[key].get(field) != current[key].get(field)
-                      for field in ("parse_status", "parse_error", "pptx", "entry",
-                                    "occurrences", "presentations", "locations", "profile"))}
+                      for field in fields)}
     return {"assets_removed": len(removed), "assets_added": len(added),
             "assets_changed": len(changed)}
 
 
 def profile_summary(asset: dict[str, Any]) -> dict[str, Any]:
     return dict(asset.get("profile") or {})
+
+
+def load_known_mismatches(path: Path) -> dict[str, dict[str, Any]]:
+    """Load an exact-input allowlist; only pixel mismatches may be waived."""
+    known = {}
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        sha = row.get("sha256")
+        if (not isinstance(sha, str) or len(sha) != 64 or
+                any(char not in "0123456789abcdef" for char in sha) or
+                row.get("bitstream_layout") != "frequency" or
+                row.get("alpha_mode") != "none" or
+                row.get("codestream_subversion") != 0 or
+                row.get("overlap") != 1 or sha in known):
+            raise ValueError("invalid or duplicate known mismatch at line %d" % line_number)
+        known[sha] = row
+    if not known:
+        raise ValueError("known mismatch manifest is empty")
+    return known
+
+
+def classify_known_mismatches(results: list[dict[str, Any]],
+                              known: dict[str, dict[str, Any]]) -> dict[str, int]:
+    """Annotate only exact known pixel mismatches; retain their real status."""
+    selected = {row["sha256"] for row in results}
+    absent = set(known) - selected
+    if absent:
+        raise ValueError("known mismatch SHA not selected: " + min(absent))
+    unresolved = resolved = unexpected = 0
+    for row in results:
+        row.pop("known_mismatch", None)
+        entry = known.get(row["sha256"])
+        if entry is not None:
+            profile = row.get("profile") or {}
+            for field in ("bitstream_layout", "alpha_mode",
+                          "codestream_subversion", "overlap"):
+                if profile.get(field) != entry[field]:
+                    raise ValueError("known mismatch profile drift: " + row["sha256"])
+            if row["status"] == "pixel_mismatch":
+                row["known_mismatch"] = True
+                unresolved += 1
+            elif row["status"] == "match":
+                resolved += 1
+        elif row["status"] == "pixel_mismatch":
+            unexpected += 1
+    return {"known_mismatches": unresolved,
+            "known_mismatches_resolved": resolved,
+            "unexpected_mismatches": unexpected}
 
 
 def run_process(command: list[str], cwd: Path) -> tuple[int, str]:
@@ -390,6 +455,8 @@ def make_parser() -> argparse.ArgumentParser:
                         help="JSON results path; defaults to report-dir/corpus-results.json")
     parser.add_argument("--suite", choices=("representatives", "all"),
                         default="representatives")
+    parser.add_argument("--profile-filter", choices=("frequency-no-alpha",),
+                        help="limit a suite to the named JXR profile family")
     parser.add_argument("--refresh-inventory", action="store_true",
                         help="run the profiler before loading its assets.jsonl")
     parser.add_argument("--manifest-only", action="store_true",
@@ -398,6 +465,8 @@ def make_parser() -> argparse.ArgumentParser:
                         help="write the full path/SHA/profile index of unique JXR files")
     parser.add_argument("--corpus-manifest", type=Path,
                         help="verify the profiler inventory against a saved corpus index")
+    parser.add_argument("--corpus-manifest-content-only", action="store_true",
+                        help="check SHA, location and parse status but ignore profiler profile metadata")
     parser.add_argument("--record-reference", type=Path,
                         help="write native pixel digests for the selected suite")
     parser.add_argument("--reference-manifest", type=Path,
@@ -408,6 +477,8 @@ def make_parser() -> argparse.ArgumentParser:
                         help="write managed profile results as versioned JSONL")
     parser.add_argument("--diagnostic", action="store_true",
                         help="exit successfully when processing completes, even with managed mismatches")
+    parser.add_argument("--known-mismatches", type=Path,
+                        help="exact SHA allowlist for legacy frequency/no-alpha pixel mismatches")
     parser.add_argument("--max-entry-mb", type=int, default=512)
     return parser
 
@@ -435,6 +506,26 @@ def main(argv: list[str] | None = None) -> int:
     if args.max_entry_mb <= 0:
         print("--max-entry-mb must be positive", file=sys.stderr)
         return 2
+    if args.corpus_manifest_content_only and not args.corpus_manifest:
+        print("--corpus-manifest-content-only requires --corpus-manifest",
+              file=sys.stderr)
+        return 2
+    if args.known_mismatches and (args.suite != "all" or
+                                  args.profile_filter != "frequency-no-alpha" or
+                                  args.profile_only or args.manifest_only or
+                                  args.diagnostic or not args.corpus_manifest):
+        print("--known-mismatches requires --suite all, "
+              "--profile-filter frequency-no-alpha and --corpus-manifest; "
+              "it cannot be combined with diagnostic/profile/manifest-only mode",
+              file=sys.stderr)
+        return 2
+    known_mismatches = {}
+    if args.known_mismatches:
+        try:
+            known_mismatches = load_known_mismatches(args.known_mismatches.resolve())
+        except (OSError, ValueError, json.JSONDecodeError) as error:
+            print("Invalid known mismatch manifest: " + str(error), file=sys.stderr)
+            return 2
 
     if args.refresh_inventory:
         profiler = Path(__file__).resolve().parents[1] / "pptx-jxr-profiler" / "profiler.py"
@@ -451,7 +542,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         inventory = load_assets(report_dir)
         occurrences = load_occurrences(report_dir)
-        assets = select_assets(inventory, args.suite)
+        assets = filter_assets(select_assets(inventory, args.suite),
+                               args.profile_filter)
     except (OSError, ValueError, json.JSONDecodeError) as error:
         print(str(error), file=sys.stderr)
         return 2
@@ -465,7 +557,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.corpus_manifest:
         try:
             manifest_check = compare_corpus_manifest(
-                args.corpus_manifest.resolve(), inventory, occurrences)
+                args.corpus_manifest.resolve(), inventory, occurrences,
+                args.corpus_manifest_content_only)
         except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:
             print("Invalid corpus manifest: " + str(error), file=sys.stderr)
             return 2
@@ -701,9 +794,17 @@ def main(argv: list[str] | None = None) -> int:
     if args.reference_manifest and args.suite == "all":
         missing_references = len(set(reference_lookup) - observed_reference_keys)
         untracked_assets = len(observed_reference_keys - set(reference_lookup))
+    known_counts = None
+    if args.known_mismatches:
+        try:
+            known_counts = classify_known_mismatches(results, known_mismatches)
+        except ValueError as error:
+            print("Known mismatch baseline drift: " + str(error), file=sys.stderr)
+            return 1
     summary = {
         "schema_version": SCHEMA_VERSION,
         "suite": args.suite,
+        "profile_filter": args.profile_filter,
         "corpus_root": str(root),
         "inventory_unique_assets": len(inventory),
         "inventory_parse_errors": sum(item.get("parse_status") != "parsed"
@@ -723,6 +824,10 @@ def main(argv: list[str] | None = None) -> int:
         "reference_unmatched": missing_references,
         "reference_untracked": untracked_assets,
         "corpus_manifest": manifest_check if args.corpus_manifest else None,
+        "corpus_manifest_content_only": args.corpus_manifest_content_only,
+        "known_mismatch_manifest": (str(args.known_mismatches.resolve())
+                                    if args.known_mismatches else None),
+        "known_mismatch_counts": known_counts,
         "reference_capture_complete": (args.record_reference is not None and
                                         not any(row["status"] == "error"
                                                 for row in results)),
@@ -746,6 +851,11 @@ def main(argv: list[str] | None = None) -> int:
         summary["assets_match"], len(results), summary["assets_mismatch"],
         summary["managed_decode_errors"], summary["assets_error"],
         summary["reference_drift"], summary["reference_missing"]))
+    if known_counts is not None:
+        print("Known mismatch baseline: %d unresolved, %d resolved, %d unexpected" % (
+            known_counts["known_mismatches"],
+            known_counts["known_mismatches_resolved"],
+            known_counts["unexpected_mismatches"]))
     if (summary["assets_error"] or summary["reference_drift"] or
             summary["reference_missing"] or summary["reference_untracked"]):
         return 1
@@ -753,7 +863,10 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     if summary["reference_unmatched"]:
         return 1
-    if (summary["assets_mismatch"] or summary["managed_decode_errors"]) and not args.diagnostic:
+    if args.known_mismatches and known_counts["unexpected_mismatches"]:
+        return 1
+    if ((summary["assets_mismatch"] and not args.known_mismatches) or
+            summary["managed_decode_errors"]) and not args.diagnostic:
         return 1
     return 0
 

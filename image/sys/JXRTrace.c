@@ -137,6 +137,43 @@ static Void JXRTraceWriteValues(FILE* pFile, const PixelI* pValues)
     fprintf(pFile, "]");
 }
 
+Void JXRTraceDumpValues(const char* szMode, const char* szStage, Int iMBX,
+    Int iMBY, const char* szChannel, const PixelI* pValues)
+{
+    char szFile[256], szPath[1200];
+    PixelI orderedValues[256];
+    const PixelI* valuesToWrite = pValues;
+    FILE* pFile;
+    size_t row, column;
+
+    if (!JXRTraceEnabled() || NULL == pValues || NULL == szChannel) return;
+    if (0 == strcmp(szStage, "reconstructed_samples"))
+    {
+        /* Decoder storage is in idxCC order; emit natural row-major pixels. */
+        for (row = 0; row < 16; ++row)
+            for (column = 0; column < 16; ++column)
+                orderedValues[row * 16 + column] =
+                    pValues[idxCC[row][column]];
+        valuesToWrite = orderedValues;
+    }
+    snprintf(szFile, sizeof(szFile), "%s-mb-%03d-%03d-%s-%s.json",
+        szMode, (int)iMBX, (int)iMBY, szStage, szChannel);
+    JXRTraceMakePath(szPath, sizeof(szPath), szFile);
+    pFile = fopen(szPath, "wb");
+    if (NULL == pFile) return;
+
+    fprintf(pFile,
+        "{\n  \"mode\": \"%s\",\n  \"stage\": \"%s\",\n"
+        "  \"macroblock\": { \"x\": %d, \"y\": %d },\n"
+        "  \"channel\": \"%s\",\n  \"storage\": \"%s\",\n"
+        "  \"values\": ",
+        szMode, szStage, (int)iMBX, (int)iMBY, szChannel,
+        valuesToWrite == orderedValues ? "row-major-256" : "internal-256");
+    JXRTraceWriteValues(pFile, valuesToWrite);
+    fprintf(pFile, "\n}\n");
+    fclose(pFile);
+}
+
 Void JXRTraceDumpCodecState(const char* szMode, const CWMImageStrCodec* pSC)
 {
     char szFile[128], szPath[1200];
@@ -177,6 +214,8 @@ Void JXRTraceDumpStage(const char* szMode, const char* szStage, const CWMImageSt
         pValues = pSC->p1MBbuffer[0];
     else if (JXRTraceOutput == eBuffer)
         pValues = pSC->a0MBbuffer[0];
+    else if (0 == strcmp(szMode, "decoder"))
+        pValues = pSC->p1MBbuffer[0];
     else
         pValues = pSC->pPlane[0];
     if (NULL == pValues)

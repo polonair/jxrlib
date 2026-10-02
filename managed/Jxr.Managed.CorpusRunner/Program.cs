@@ -9,6 +9,37 @@ namespace Jxr.Managed.CorpusRunner
     {
         private static int Main(string[] args)
         {
+            if (args.Length == 5 && args[0] == "decode-trace")
+            {
+                try
+                {
+                    byte[] input = File.ReadAllBytes(args[1]);
+                    int macroblockX = Int32.Parse(args[2]);
+                    int macroblockY = Int32.Parse(args[3]);
+                    JxrDecoderTrace trace = new JxrDecoderTrace(macroblockX,
+                        macroblockY);
+                    JxrDecoderOptions options = new JxrDecoderOptions();
+                    options.OutputFormat = JxrPixelFormat.Bgr24;
+                    options.AlphaMode = JxrAlphaDecodeMode.ColorOnly;
+                    JxrImage image;
+                    JxrError error = JxrCodec.DecodeWithTrace(input, options,
+                        out image, trace);
+                    if (error != JxrError.None)
+                    {
+                        Console.Error.WriteLine(error.ToString());
+                        return 1;
+                    }
+                    File.WriteAllText(args[4], TraceJson(trace, image.Width,
+                        image.Height), new UTF8Encoding(false));
+                    return 0;
+                }
+                catch (Exception exception)
+                {
+                    Console.Error.WriteLine(exception.GetType().Name + ": " +
+                        exception.Message);
+                    return 1;
+                }
+            }
             if (args.Length == 3 && args[0] == "profile")
             {
                 try
@@ -116,6 +147,58 @@ namespace Jxr.Managed.CorpusRunner
             json.Append(profile.MacroblockQuantizerMapComplete ? "true" : "false");
             json.Append("}");
             return json.ToString();
+        }
+
+        private static string TraceJson(JxrDecoderTrace trace, int width,
+            int height)
+        {
+            StringBuilder json = new StringBuilder(8192);
+            json.Append("{\"schema_version\":1,\"width\":");
+            json.Append(width);
+            json.Append(",\"height\":"); json.Append(height);
+            json.Append(",\"macroblock\":{\"x\":");
+            json.Append(trace.MacroblockX);
+            json.Append(",\"y\":"); json.Append(trace.MacroblockY);
+            json.Append("},\"stages\":[");
+            for (int index = 0; index < trace.StageCount; index++)
+            {
+                if (index != 0) json.Append(',');
+                JxrDecoderTraceStage stage = trace.GetStage(index);
+                json.Append("{\"stage\":"); JsonString(json, stage.Name);
+                json.Append(",\"x\":"); json.Append(stage.X);
+                json.Append(",\"y\":"); json.Append(stage.Y);
+                json.Append(",\"channel\":"); JsonString(json, stage.Channel);
+                json.Append(",\"values\":"); IntArray(json, stage.Values);
+                json.Append('}');
+            }
+            json.Append("],\"bit_ranges\":[");
+            for (int index = 0; index < trace.BitRangeCount; index++)
+            {
+                if (index != 0) json.Append(',');
+                JxrDecoderTraceBitRange range = trace.GetBitRange(index);
+                json.Append("{\"packet\":"); JsonString(json, range.Name);
+                json.Append(",\"x\":"); json.Append(range.X);
+                json.Append(",\"y\":"); json.Append(range.Y);
+                json.Append(",\"tile_row\":"); json.Append(range.TileRow);
+                json.Append(",\"tile_column\":"); json.Append(range.TileColumn);
+                json.Append(",\"byte_offset\":"); json.Append(range.PacketOffset);
+                json.Append(",\"bit_start\":"); json.Append(range.StartBit);
+                json.Append(",\"bit_end\":"); json.Append(range.EndBit);
+                json.Append('}');
+            }
+            json.Append("]}");
+            return json.ToString();
+        }
+
+        private static void IntArray(StringBuilder json, int[] values)
+        {
+            json.Append('[');
+            for (int index = 0; index < values.Length; index++)
+            {
+                if (index != 0) json.Append(',');
+                json.Append(values[index]);
+            }
+            json.Append(']');
         }
 
         private static void PlaneJson(StringBuilder json,
