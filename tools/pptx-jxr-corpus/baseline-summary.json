@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "captured_date": "2026-10-02",
+  "corpus_label": "ASPOSE/SLIDESNET/TestData",
+  "profiler_version": "0.1.4",
+  "pptx_scanned": 5890,
+  "jxr_occurrences": 535,
+  "unique_jxr_assets": 238,
+  "parse_failures": 0,
+  "profiler_issues": 36,
+  "managed_decoder_comparison": {
+    "assets_match": 95,
+    "assets_pixel_mismatch": 33,
+    "assets_decode_error": 108,
+    "native_reference_unavailable": 2,
+    "native_reference_rows": 317,
+    "native_reference_complete": false
+  },
+  "presentation_coverage": {
+    "presentations_with_jxr": 135,
+    "fully_decoded": 44,
+    "not_fully_decoded": 91
+  },
+  "notes": [
+    "Results compare managed pixels with the C decoder output; they do not test re-encoding.",
+    "The detailed per-asset run report is kept outside the repository with the profiler output.",
+    "The tracked reference manifest contains native pixel digests only for assets with a C decoder oracle."
+  ]
+}

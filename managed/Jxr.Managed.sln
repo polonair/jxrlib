@@ -4,6 +4,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Jxr.Managed.Core", "Jxr.Man
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Jxr.Managed.Tests", "Jxr.Managed.Tests\Jxr.Managed.Tests.csproj", "{BB6F716D-3D1F-4EFA-93C8-A5B2C03F9C00}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Jxr.Managed.CorpusRunner", "Jxr.Managed.CorpusRunner\Jxr.Managed.CorpusRunner.csproj", "{F4B77E74-6D58-4AB1-BD27-C266B1CF752B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -18,5 +20,9 @@ Global
 		{BB6F716D-3D1F-4EFA-93C8-A5B2C03F9C00}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{BB6F716D-3D1F-4EFA-93C8-A5B2C03F9C00}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{BB6F716D-3D1F-4EFA-93C8-A5B2C03F9C00}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F4B77E74-6D58-4AB1-BD27-C266B1CF752B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F4B77E74-6D58-4AB1-BD27-C266B1CF752B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F4B77E74-6D58-4AB1-BD27-C266B1CF752B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F4B77E74-6D58-4AB1-BD27-C266B1CF752B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
