@@ -5,3 +5,6 @@
 /tests/work/
 /managed/**/bin/
 /managed/**/obj/
+/tools/pptx-jxr-profiler/__pycache__/
+/tools/pptx-jxr-profiler/tests/__pycache__/
+/tools/pptx-jxr-profiler/reports/
