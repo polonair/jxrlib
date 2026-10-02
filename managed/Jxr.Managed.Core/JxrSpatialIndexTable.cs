@@ -9,13 +9,18 @@ namespace Jxr.Managed.Core
         private readonly int packetBase;
         private readonly long[] offsets;
         private readonly byte[][] frequencyPackets;
+        private readonly long[] frequencyPacketOffsets;
+        private readonly long[] frequencyPacketLengths;
 
         private JxrPacketIndexTable(int packetBase, long[] offsets,
-            byte[][] frequencyPackets)
+            byte[][] frequencyPackets, long[] frequencyPacketOffsets,
+            long[] frequencyPacketLengths)
         {
             this.packetBase = packetBase;
             this.offsets = offsets;
             this.frequencyPackets = frequencyPackets;
+            this.frequencyPacketOffsets = frequencyPacketOffsets;
+            this.frequencyPacketLengths = frequencyPacketLengths;
         }
 
         internal int PacketCount { get { return offsets.Length; } }
@@ -91,6 +96,10 @@ namespace Jxr.Managed.Core
                 if (tileCountLong > Int32.MaxValue / 4)
                     return JxrError.UnsupportedFeature;
                 byte[][] packets = new byte[(int)tileCountLong * 4][];
+                long[] packetOffsets = new long[packets.Length];
+                long[] packetLengths = new long[packets.Length];
+                for (int packetIndex = 0; packetIndex < packetOffsets.Length; packetIndex++)
+                    packetOffsets[packetIndex] = -1;
                 long[] starts = new long[offsets.Length];
                 int realCount = 0;
                 for (int index = 0; index < offsets.Length; index++)
@@ -126,8 +135,11 @@ namespace Jxr.Managed.Core
                     packets[target] = new byte[(int)(end - start)];
                     Array.Copy(source, packetPosition, packets[target], 0,
                         (int)(end - start));
+                    packetOffsets[target] = start;
+                    packetLengths[target] = end - start;
                 }
-                table = new JxrPacketIndexTable(packetBase, offsets, packets);
+                table = new JxrPacketIndexTable(packetBase, offsets, packets,
+                    packetOffsets, packetLengths);
                 return JxrError.None;
             }
 
@@ -142,7 +154,48 @@ namespace Jxr.Managed.Core
                 previous = offsets[index];
             }
 
-            table = new JxrPacketIndexTable(packetBase, offsets, null);
+            table = new JxrPacketIndexTable(packetBase, offsets, null, null, null);
+            return JxrError.None;
+        }
+
+        internal JxrError GetPacketSpan(JxrHeaders headers, int tileRow,
+            int tileColumn, int band, out int offset, out int length)
+        {
+            offset = length = 0;
+            if (headers == null || tileRow < 0 || tileColumn < 0 || band < 0)
+                return JxrError.InvalidArgument;
+            int columns = headers.Main.VerticalSliceCountMinusOne + 1;
+            int rows = headers.Main.HorizontalSliceCountMinusOne + 1;
+            if (tileColumn >= columns || tileRow >= rows)
+                return JxrError.InvalidArgument;
+            int tile = tileRow * columns + tileColumn;
+            long start, count;
+            if (frequencyPackets != null)
+            {
+                if (band > 3) return JxrError.InvalidArgument;
+                int index = tile * 4 + band;
+                if (index < 0 || index >= frequencyPacketOffsets.Length ||
+                    frequencyPacketOffsets[index] < 0)
+                    return band == 3 ? JxrError.UnsupportedFeature :
+                        JxrError.InvalidBitstream;
+                start = frequencyPacketOffsets[index];
+                count = frequencyPacketLengths[index];
+            }
+            else
+            {
+                if (band != 0 || tile < 0 || tile >= offsets.Length ||
+                    offsets[tile] < 0) return JxrError.InvalidArgument;
+                start = (long)packetBase + offsets[tile];
+                long end = tile + 1 < offsets.Length ?
+                    (long)packetBase + offsets[tile + 1] :
+                    (long)headers.CodestreamOffset + headers.CodestreamLength;
+                count = end - start;
+            }
+            if (start < 0 || count < 4 || start > Int32.MaxValue ||
+                count > Int32.MaxValue || start + count > Int32.MaxValue)
+                return JxrError.InvalidBitstream;
+            offset = (int)start;
+            length = (int)count;
             return JxrError.None;
         }
 

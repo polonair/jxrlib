@@ -220,7 +220,7 @@ namespace Jxr.Managed.Core
         {
             image = null;
             byte[] alphaStream = Slice(source, headers.AlphaOffset,
-                headers.AlphaByteCount - headers.AlphaOffset);
+                headers.AlphaByteCount);
             byte[] pixels;
             int width, height;
             JxrError error = JxrMinimalDecoder.DecodeGrayPixels(alphaStream,

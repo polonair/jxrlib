@@ -190,7 +190,12 @@ def parse_codestream(data: bytes) -> dict[str, Any]:
     color_format = reader.read(3)
     scaled_arithmetic = bool(reader.read(1))
     subband = reader.read(4)
-    channels = {0: 1, 1: 3, 2: 3, 3: 3, 4: 4, 6: reader.read(4) + 1}.get(color_format)
+    # Do not put the format-6 component-count read in a dict literal: Python
+    # eagerly evaluates every value, consuming four bits for formats 0..4.
+    if color_format == 6:
+        channels = reader.read(4) + 1
+    else:
+        channels = {0: 1, 1: 3, 2: 3, 3: 3, 4: 4}.get(color_format)
     if channels is None:
         raise ProfileError("unsupported color format %d" % color_format)
     chroma_centering: dict[str, int] = {}
@@ -356,7 +361,13 @@ def parse_jxr(payload: bytes) -> dict[str, Any]:
         alpha_byte_count = None
         alpha_range_interpretation = None
         if alpha_offset is not None and alpha_range_tag is not None:
-            if alpha_range_tag > alpha_offset:
+            if alpha_range_tag == len(payload) - alpha_offset:
+                alpha_end_offset = len(payload)
+                alpha_range_interpretation = "byte_count"
+            elif alpha_range_tag == len(payload):
+                alpha_end_offset = alpha_range_tag
+                alpha_range_interpretation = "absolute_end_offset"
+            elif alpha_range_tag > alpha_offset:
                 alpha_end_offset = alpha_range_tag
                 alpha_range_interpretation = "absolute_end_offset"
             else:

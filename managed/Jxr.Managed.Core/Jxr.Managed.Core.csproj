@@ -16,6 +16,7 @@
   </PropertyGroup>
   <ItemGroup><Reference Include="System" /></ItemGroup>
   <ItemGroup><Compile Include="JxrSpatialIndexTable.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="JxrSourceProfile.cs" /></ItemGroup>
   <ItemGroup><Compile Include="JxrFrequencyCodestreamWriter.cs" /></ItemGroup>
   <ItemGroup><Compile Include="JxrChromaForward.cs" /></ItemGroup>
   <ItemGroup><Compile Include="JxrChromaOverlapForward.cs" /></ItemGroup>

@@ -154,7 +154,7 @@ class CorpusUtilityTests(unittest.TestCase):
                 "--output", str(result_path), "--suite", "all",
                 "--record-reference", str(reference_path),
             ])
-            self.assertEqual(0, result)
+            self.assertEqual(0, result, result_path.read_text(encoding="utf-8"))
             self.assertEqual(3, len(reference_path.read_text(
                 encoding="utf-8").splitlines()))
             result_json = json.loads(result_path.read_text(encoding="utf-8"))
@@ -168,6 +168,19 @@ class CorpusUtilityTests(unittest.TestCase):
                 "--reference-manifest", str(reference_path),
             ])
             self.assertEqual(0, result)
+            profile_manifest = temp_path / "managed-profile-v2.jsonl"
+            profile_result = corpus.main([
+                "--root", str(root), "--report-dir", str(report),
+                "--managed-runner", str(managed), "--output", str(result_path),
+                "--suite", "all", "--profile-only",
+                "--profile-manifest", str(profile_manifest),
+            ])
+            self.assertEqual(0, profile_result,
+                             result_path.read_text(encoding="utf-8"))
+            profile_summary = json.loads(result_path.read_text(encoding="utf-8"))
+            self.assertEqual(2, profile_summary["profiles_match"])
+            self.assertEqual(2, len(profile_manifest.read_text(
+                encoding="utf-8").splitlines()))
 
 
 if __name__ == "__main__":

@@ -2,6 +2,19 @@ using System;
 
 namespace Jxr.Managed.Core
 {
+    public enum JxrContainerKind
+    {
+        RawCodestream = 0,
+        TiffLike = 1
+    }
+
+    public enum JxrAlphaRangeInterpretation
+    {
+        None = 0,
+        AbsoluteEndOffset = 1,
+        ByteCount = 2
+    }
+
     // The managed syntax values corresponding to JxrMainHeaderDescriptor,
     // JxrImagePlaneDescriptor and JxrImagePlaneQuantizerHeader. They are
     // populated only by JxrHeaders.Read, without a native codec object.
@@ -87,11 +100,21 @@ namespace Jxr.Managed.Core
         private readonly int codestreamLength;
         private readonly int alphaOffset;
         private readonly int alphaByteCount;
+        private readonly JxrContainerKind containerKind;
+        private readonly string pixelFormatGuid;
+        private readonly int containerWidth, containerHeight, orientationTag;
+        private readonly float horizontalDpi, verticalDpi;
+        private readonly uint alphaRangeTagValue;
+        private readonly JxrAlphaRangeInterpretation alphaRangeInterpretation;
 
         private JxrHeaders(JxrMainHeader main, JxrImagePlaneHeader plane,
             JxrImagePlaneQuantizerHeader quantizers, int byteCount,
             int codestreamOffset, int codestreamLength, int alphaOffset,
-            int alphaByteCount)
+            int alphaByteCount, JxrContainerKind containerKind,
+            string pixelFormatGuid, int containerWidth, int containerHeight,
+            int orientationTag, float horizontalDpi, float verticalDpi,
+            uint alphaRangeTagValue,
+            JxrAlphaRangeInterpretation alphaRangeInterpretation)
         {
             this.main = main;
             this.plane = plane;
@@ -101,6 +124,15 @@ namespace Jxr.Managed.Core
             this.codestreamLength = codestreamLength;
             this.alphaOffset = alphaOffset;
             this.alphaByteCount = alphaByteCount;
+            this.containerKind = containerKind;
+            this.pixelFormatGuid = pixelFormatGuid;
+            this.containerWidth = containerWidth;
+            this.containerHeight = containerHeight;
+            this.orientationTag = orientationTag;
+            this.horizontalDpi = horizontalDpi;
+            this.verticalDpi = verticalDpi;
+            this.alphaRangeTagValue = alphaRangeTagValue;
+            this.alphaRangeInterpretation = alphaRangeInterpretation;
         }
 
         public JxrMainHeader Main { get { return main; } }
@@ -110,9 +142,19 @@ namespace Jxr.Managed.Core
         public int CodestreamOffset { get { return codestreamOffset; } }
         public int CodestreamLength { get { return codestreamLength; } }
         public int AlphaOffset { get { return alphaOffset; } }
-        // This TIFF-like tag stores the absolute end offset, matching the C writer.
+        // The normalized byte count is independent of the TIFF BCC3 convention.
         public int AlphaByteCount { get { return alphaByteCount; } }
         public bool HasPlanarAlpha { get { return alphaOffset != 0; } }
+        public JxrContainerKind ContainerKind { get { return containerKind; } }
+        public string PixelFormatGuid { get { return pixelFormatGuid; } }
+        public int ContainerWidth { get { return containerWidth; } }
+        public int ContainerHeight { get { return containerHeight; } }
+        public int OrientationTag { get { return orientationTag; } }
+        public float HorizontalDpi { get { return horizontalDpi; } }
+        public float VerticalDpi { get { return verticalDpi; } }
+        public uint AlphaRangeTagValue { get { return alphaRangeTagValue; } }
+        public JxrAlphaRangeInterpretation AlphaRangeInterpretation
+        { get { return alphaRangeInterpretation; } }
 
         // Syntax-level entry points mirror the three native descriptor readers.
         // The reader remains at the first bit after the parsed descriptor.
@@ -161,11 +203,25 @@ namespace Jxr.Managed.Core
             int codestreamOffset = 0;
             int codestreamLength = source.Length;
             int alphaOffset = 0, alphaByteCount = 0;
-            if (source.Length >= 4 && source[0] == (byte)'I' &&
-                source[1] == (byte)'I' && source[2] == 0xbc && source[3] == 1)
+            JxrContainerKind containerKind = JxrContainerKind.RawCodestream;
+            string pixelFormatGuid = null;
+            int containerWidth = 0, containerHeight = 0, orientationTag = 0;
+            float horizontalDpi = 0, verticalDpi = 0;
+            uint alphaRangeTagValue = 0;
+            JxrAlphaRangeInterpretation alphaRangeInterpretation =
+                JxrAlphaRangeInterpretation.None;
+            if (source.Length >= 4 &&
+                ((source[0] == (byte)'I' && source[1] == (byte)'I' &&
+                    source[2] == 0xbc && source[3] == 1) ||
+                 (source[0] == (byte)'M' && source[1] == (byte)'M' &&
+                    source[2] == 1 && source[3] == 0xbc)))
             {
+                containerKind = JxrContainerKind.TiffLike;
                 if (!LocateCodestream(source, out codestreamOffset,
-                    out codestreamLength, out alphaOffset, out alphaByteCount))
+                    out codestreamLength, out alphaOffset, out alphaByteCount,
+                    out pixelFormatGuid, out containerWidth, out containerHeight,
+                    out orientationTag, out horizontalDpi, out verticalDpi,
+                    out alphaRangeTagValue, out alphaRangeInterpretation))
                     return JxrError.InvalidBitstream;
             }
             else if (source.Length >= 1 && source[0] != (byte)'W')
@@ -202,63 +258,194 @@ namespace Jxr.Managed.Core
             if (cursor.Error != JxrError.None) return cursor.Error;
             result = new JxrHeaders(main, plane, quantizers,
                 cursor.BitPosition / 8, codestreamOffset, codestreamLength,
-                alphaOffset, alphaByteCount);
+                alphaOffset, alphaByteCount, containerKind, pixelFormatGuid,
+                containerWidth, containerHeight, orientationTag, horizontalDpi,
+                verticalDpi, alphaRangeTagValue, alphaRangeInterpretation);
             return JxrError.None;
         }
 
         private static bool LocateCodestream(byte[] source, out int offset,
-            out int length, out int alphaOffset, out int alphaByteCount)
+            out int length, out int alphaOffset, out int alphaByteCount,
+            out string pixelFormatGuid, out int containerWidth,
+            out int containerHeight, out int orientationTag,
+            out float horizontalDpi, out float verticalDpi,
+            out uint alphaRangeTagValue,
+            out JxrAlphaRangeInterpretation alphaRangeInterpretation)
         {
             offset = 0;
             length = 0;
             alphaOffset = alphaByteCount = 0;
+            pixelFormatGuid = null;
+            containerWidth = containerHeight = orientationTag = 0;
+            horizontalDpi = verticalDpi = 0;
+            alphaRangeTagValue = 0;
+            alphaRangeInterpretation = JxrAlphaRangeInterpretation.None;
             if (source.Length < 10) return false;
+            bool littleEndian;
+            if (source[0] == (byte)'I' && source[1] == (byte)'I')
+                littleEndian = true;
+            else if (source[0] == (byte)'M' && source[1] == (byte)'M')
+                littleEndian = false;
+            else return false;
             uint directoryOffset = ReadU32(source, 4);
+            if (!littleEndian) directoryOffset = Swap32(directoryOffset);
             if (directoryOffset > (uint)(source.Length - 2)) return false;
             int directory = (int)directoryOffset;
-            int entryCount = ReadU16(source, directory);
+            int entryCount = ReadU16(source, directory, littleEndian);
             if ((long)directory + 2 + (long)entryCount * 12 > source.Length)
                 return false;
             bool foundOffset = false, foundLength = false;
             bool foundAlphaOffset = false, foundAlphaByteCount = false;
+            uint rawAlphaRange = 0;
+            byte[] guidBytes = null;
             for (int index = 0; index < entryCount; index++)
             {
                 int entry = directory + 2 + index * 12;
-                int tag = ReadU16(source, entry);
-                if ((tag == 0xbcc0 || tag == 0xbcc1 || tag == 0xbcc2 ||
-                    tag == 0xbcc3) &&
-                    ReadU16(source, entry + 2) == 4 && ReadU32(source, entry + 4) == 1)
+                int tag = ReadU16(source, entry, littleEndian);
+                int type = ReadU16(source, entry + 2, littleEndian);
+                uint count = ReadU32(source, entry + 4);
+                if (!littleEndian) count = Swap32(count);
+                byte[] tagData;
+                if (!ReadTiffValue(source, littleEndian, type, count, entry + 8,
+                    out tagData)) return false;
+                if (tag == 0xbc01 && tagData.Length >= 16)
                 {
-                    uint value = ReadU32(source, entry + 8);
-                    if (value > Int32.MaxValue) return false;
-                    if (tag == 0xbcc0) { offset = (int)value; foundOffset = true; }
-                    else if (tag == 0xbcc1) { length = (int)value; foundLength = true; }
-                    else if (tag == 0xbcc2) { alphaOffset = (int)value; foundAlphaOffset = true; }
-                    else { alphaByteCount = (int)value; foundAlphaByteCount = true; }
+                    guidBytes = new byte[16];
+                    Array.Copy(tagData, guidBytes, 16);
                 }
+                uint scalar;
+                if (TryReadTiffScalar(tagData, type, littleEndian, out scalar))
+                {
+                    if (scalar > Int32.MaxValue &&
+                        (tag == 0xbc80 || tag == 0xbc81 || tag == 0xbcc0 ||
+                         tag == 0xbcc1 || tag == 0xbcc2 || tag == 0xbcc3))
+                        return false;
+                    if (tag == 0xbc80) containerWidth = (int)scalar;
+                    else if (tag == 0xbc81) containerHeight = (int)scalar;
+                    else if (tag == 0xbc02) orientationTag = (int)scalar;
+                    else if (tag == 0xbcc0) { offset = (int)scalar; foundOffset = true; }
+                    else if (tag == 0xbcc1) { length = (int)scalar; foundLength = true; }
+                    else if (tag == 0xbcc2) { alphaOffset = (int)scalar; foundAlphaOffset = true; }
+                    else if (tag == 0xbcc3) { rawAlphaRange = scalar; foundAlphaByteCount = true; }
+                }
+                if (tag == 0xbc82) horizontalDpi = ReadTiffFloat(tagData, type, littleEndian);
+                else if (tag == 0xbc83) verticalDpi = ReadTiffFloat(tagData, type, littleEndian);
             }
+            if (guidBytes != null) pixelFormatGuid = new Guid(guidBytes).ToString("D").ToLowerInvariant();
             if (!foundOffset || !foundLength || offset < 0 || length < 8 ||
                 offset > source.Length - length) return false;
             if (!foundAlphaOffset && !foundAlphaByteCount) return true;
-            return foundAlphaOffset && foundAlphaByteCount && alphaOffset > 0 &&
-                alphaByteCount > alphaOffset && alphaOffset >= offset + length &&
-                alphaByteCount <= source.Length && alphaByteCount - alphaOffset >= 8 &&
-                source[alphaOffset] == (byte)'W' &&
-                source[alphaOffset + 1] == (byte)'M' &&
-                source[alphaOffset + 2] == (byte)'P' &&
-                source[alphaOffset + 3] == (byte)'H';
+            if (!foundAlphaOffset || !foundAlphaByteCount || alphaOffset <= 0 ||
+                alphaOffset < offset + length || alphaOffset > source.Length - 8 ||
+                source[alphaOffset] != (byte)'W' ||
+                source[alphaOffset + 1] != (byte)'M' ||
+                source[alphaOffset + 2] != (byte)'P' ||
+                source[alphaOffset + 3] != (byte)'H') return false;
+            alphaRangeTagValue = rawAlphaRange;
+            long absoluteEnd = rawAlphaRange;
+            long byteCountEnd = (long)alphaOffset + rawAlphaRange;
+            bool absoluteValid = absoluteEnd > alphaOffset &&
+                absoluteEnd <= source.Length && absoluteEnd - alphaOffset >= 8;
+            bool byteCountValid = rawAlphaRange >= 8 && byteCountEnd <= source.Length;
+            bool valueIsAbsoluteEnd = rawAlphaRange == (uint)source.Length;
+            bool valueIsRemainingByteCount = rawAlphaRange ==
+                (uint)(source.Length - alphaOffset);
+            if (valueIsAbsoluteEnd && absoluteValid) byteCountValid = false;
+            else if (valueIsRemainingByteCount && byteCountValid) absoluteValid = false;
+            if (absoluteValid == byteCountValid) return false;
+            int alphaEnd;
+            if (absoluteValid)
+            {
+                alphaEnd = (int)absoluteEnd;
+                alphaRangeInterpretation = JxrAlphaRangeInterpretation.AbsoluteEndOffset;
+            }
+            else
+            {
+                alphaEnd = (int)byteCountEnd;
+                alphaRangeInterpretation = JxrAlphaRangeInterpretation.ByteCount;
+            }
+            alphaByteCount = alphaEnd - alphaOffset;
+            return alphaByteCount >= 8 &&
+                source[alphaOffset + 4] == (byte)'O' &&
+                source[alphaOffset + 5] == (byte)'T' &&
+                source[alphaOffset + 6] == (byte)'O';
         }
 
-        private static int ReadU16(byte[] data, int index)
+        private static bool ReadTiffValue(byte[] source, bool littleEndian,
+            int type, uint count, int valueField, out byte[] value)
         {
-            return data[index] | (data[index + 1] << 8);
+            value = null;
+            int itemSize;
+            switch (type)
+            {
+                case 1: case 2: case 6: case 7: itemSize = 1; break;
+                case 3: case 8: itemSize = 2; break;
+                case 4: case 9: case 11: itemSize = 4; break;
+                case 5: case 10: case 12: itemSize = 8; break;
+                default: return true;
+            }
+            long byteCount = (long)itemSize * count;
+            if (count > 1048576 || byteCount > Int32.MaxValue) return false;
+            int dataOffset = valueField;
+            if (byteCount > 4)
+            {
+                uint pointer = ReadU32(source, valueField);
+                if (!littleEndian) pointer = Swap32(pointer);
+                if (pointer > source.Length || byteCount > source.Length - (long)pointer)
+                    return false;
+                dataOffset = (int)pointer;
+            }
+            if (byteCount > source.Length - dataOffset) return false;
+            value = new byte[(int)byteCount];
+            Array.Copy(source, dataOffset, value, 0, value.Length);
+            return true;
+        }
+
+        private static bool TryReadTiffScalar(byte[] data, int type,
+            bool littleEndian, out uint value)
+        {
+            value = 0;
+            if (data == null || data.Length == 0) return false;
+            if (type == 1 || type == 2 || type == 6 || type == 7)
+                value = data[0];
+            else if (type == 3 || type == 8)
+                value = littleEndian ? (uint)(data[0] | (data[1] << 8)) :
+                    (uint)((data[0] << 8) | data[1]);
+            else if (type == 4 || type == 9)
+                value = ReadU32(data, 0, littleEndian);
+            else return false;
+            return true;
+        }
+
+        private static float ReadTiffFloat(byte[] data, int type, bool littleEndian)
+        {
+            if (type != 11 || data == null || data.Length != 4) return 0;
+            byte[] value = (byte[])data.Clone();
+            if (!littleEndian) Array.Reverse(value);
+            return BitConverter.ToSingle(value, 0);
+        }
+
+        private static int ReadU16(byte[] data, int index, bool littleEndian)
+        {
+            return littleEndian ? data[index] | (data[index + 1] << 8) :
+                (data[index] << 8) | data[index + 1];
+        }
+
+        private static uint ReadU32(byte[] data, int index, bool littleEndian)
+        {
+            if (littleEndian)
+                return (uint)data[index] | ((uint)data[index + 1] << 8) |
+                    ((uint)data[index + 2] << 16) | ((uint)data[index + 3] << 24);
+            return ((uint)data[index] << 24) | ((uint)data[index + 1] << 16) |
+                ((uint)data[index + 2] << 8) | data[index + 3];
         }
 
         private static uint ReadU32(byte[] data, int index)
-        {
-            return (uint)data[index] | ((uint)data[index + 1] << 8) |
-                ((uint)data[index + 2] << 16) | ((uint)data[index + 3] << 24);
-        }
+        { return ReadU32(data, index, true); }
+
+        private static uint Swap32(uint value)
+        { return (value >> 24) | ((value >> 8) & 0x0000ff00) |
+            ((value << 8) & 0x00ff0000) | (value << 24); }
 
         private static JxrMainHeader ReadMain(Cursor input)
         {

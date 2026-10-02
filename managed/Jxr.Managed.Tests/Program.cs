@@ -36,6 +36,7 @@ namespace Jxr.Managed.Tests
             new TestCase("forward_transform_math_reference_vectors", TestForwardTransformMathReferenceVectors),
             new TestCase("inverse_transform_math_reference_vectors", TestInverseTransformMathReferenceVectors),
             new TestCase("headers_reference_fixtures", TestHeadersReferenceFixtures),
+            new TestCase("source_profile_reference_fixtures", TestSourceProfileReferenceFixtures),
             new TestCase("headers_syntax_vectors", TestHeadersSyntaxVectors),
             new TestCase("header_writer_fixture", TestHeaderWriterFixture),
             new TestCase("header_writer_fields", TestHeaderWriterFields),
@@ -203,6 +204,115 @@ namespace Jxr.Managed.Tests
                 values[index] = Int32.Parse(fields[index].Trim(),
                     System.Globalization.CultureInfo.InvariantCulture);
             return values;
+        }
+
+        private static bool TestSourceProfileReferenceFixtures()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "minimal-profile\\minimal-gray-16x16.jxr")))
+                directory = directory.Parent;
+            if (directory == null) return false;
+            string[] files = {
+                "minimal-profile\\minimal-gray-16x16.jxr",
+                "managed\\fixtures\\rgb444-tiles2x2-q16-ol2.jxr",
+                "managed\\fixtures\\frequency-gray32-tile2x2.jxr",
+                "managed\\fixtures\\alpha-planar-q1-32x32.jxr"
+            };
+            JxrSourceProfile[] profiles = new JxrSourceProfile[files.Length];
+            for (int index = 0; index < files.Length; index++)
+            {
+                byte[] bytes = File.ReadAllBytes(Path.Combine(directory.FullName,
+                    files[index]));
+                JxrError error = JxrSourceProfileReader.Read(bytes,
+                    out profiles[index]);
+                if (error != JxrError.None || profiles[index] == null ||
+                    !profiles[index].PacketSyntaxComplete)
+                {
+                    Console.WriteLine("Source profile failed for " + files[index] +
+                        ": " + error);
+                    return false;
+                }
+            }
+            if (profiles[0].Headers.ContainerKind != JxrContainerKind.TiffLike ||
+                profiles[0].Headers.PixelFormatGuid == null ||
+                profiles[0].Headers.ContainerWidth != 16 ||
+                profiles[0].ColorPlane.TileCount != 1 ||
+                profiles[1].ColorPlane.TileCount != 4 ||
+                profiles[2].ColorPlane.TileCount != 4 ||
+                profiles[2].ColorPlane.GetTile(0).PacketCount < 3 ||
+                profiles[2].ColorPlane.GetTile(0).PacketCount > 4 ||
+                !profiles[3].HasPlanarAlpha || profiles[3].AlphaPlane == null ||
+                profiles[3].Headers.AlphaRangeInterpretation !=
+                    JxrAlphaRangeInterpretation.AbsoluteEndOffset ||
+                profiles[3].Headers.AlphaByteCount != profiles[3].Headers.AlphaRangeTagValue -
+                    profiles[3].Headers.AlphaOffset)
+            {
+                Console.WriteLine("Profile fixture values: container=" +
+                    profiles[0].Headers.ContainerKind + " guid=" +
+                    profiles[0].Headers.PixelFormatGuid + " dims=" +
+                    profiles[0].Headers.ContainerWidth + "x" +
+                    profiles[0].Headers.ContainerHeight + " spatialTiles=" +
+                    profiles[1].ColorPlane.TileCount + " frequencyTiles=" +
+                    profiles[2].ColorPlane.TileCount + " frequencyPackets=" +
+                    profiles[2].ColorPlane.GetTile(0).PacketCount + " alpha=" +
+                    profiles[3].Headers.AlphaRangeInterpretation + ":" +
+                    profiles[3].Headers.AlphaByteCount + "/" +
+                    profiles[3].Headers.AlphaRangeTagValue + "/" +
+                    profiles[3].Headers.AlphaOffset + " subband=" +
+                    profiles[2].ColorPlane.Headers.Plane.Subband + " checks=" +
+                    (profiles[0].Headers.ContainerKind == JxrContainerKind.TiffLike) + "," +
+                    (profiles[0].Headers.PixelFormatGuid != null) + "," +
+                    (profiles[0].Headers.ContainerWidth == 16) + "," +
+                    (profiles[0].ColorPlane.TileCount == 1) + "," +
+                    (profiles[1].ColorPlane.TileCount == 4) + "," +
+                    (profiles[2].ColorPlane.TileCount == 4) + "," +
+                    (profiles[2].ColorPlane.GetTile(0).PacketCount ==
+                        (profiles[2].ColorPlane.Headers.Plane.Subband == 3 ? 1 :
+                         profiles[2].ColorPlane.Headers.Plane.Subband == 2 ? 2 :
+                         profiles[2].ColorPlane.Headers.Plane.Subband == 1 ? 3 : 4)) + "," +
+                    profiles[3].HasPlanarAlpha + "," +
+                    (profiles[3].AlphaPlane != null) + "," +
+                    (profiles[3].Headers.AlphaRangeInterpretation ==
+                        JxrAlphaRangeInterpretation.AbsoluteEndOffset) + "," +
+                    (profiles[3].Headers.AlphaByteCount == profiles[3].Headers.AlphaRangeTagValue -
+                        profiles[3].Headers.AlphaOffset));
+                return false;
+            }
+            byte[] alphaSource = File.ReadAllBytes(Path.Combine(directory.FullName,
+                files[3]));
+            uint ifdOffset = BitConverter.ToUInt32(alphaSource, 4);
+            int ifd = (int)ifdOffset;
+            int entryCount = BitConverter.ToUInt16(alphaSource, ifd);
+            int rangeValuePosition = -1;
+            for (int entryIndex = 0; entryIndex < entryCount; entryIndex++)
+            {
+                int entry = ifd + 2 + entryIndex * 12;
+                if (BitConverter.ToUInt16(alphaSource, entry) == 0xbcc3)
+                { rangeValuePosition = entry + 8; break; }
+            }
+            if (rangeValuePosition < 0) return false;
+            byte[] byteCountAlpha = (byte[])alphaSource.Clone();
+            Array.Copy(BitConverter.GetBytes((uint)profiles[3].Headers.AlphaByteCount),
+                0, byteCountAlpha, rangeValuePosition, 4);
+            JxrSourceProfile byteCountProfile;
+            if (JxrSourceProfileReader.Read(byteCountAlpha, out byteCountProfile) !=
+                    JxrError.None || byteCountProfile == null ||
+                byteCountProfile.Headers.AlphaRangeInterpretation !=
+                    JxrAlphaRangeInterpretation.ByteCount ||
+                byteCountProfile.Headers.AlphaByteCount != profiles[3].Headers.AlphaByteCount)
+                return false;
+            byte[] ambiguousAlpha = new byte[alphaSource.Length + 4000];
+            Array.Copy(alphaSource, ambiguousAlpha, alphaSource.Length);
+            JxrHeaders ambiguousHeaders;
+            if (JxrHeaders.Read(ambiguousAlpha, out ambiguousHeaders) !=
+                JxrError.InvalidBitstream) return false;
+            JxrSourceProfile streamProfile;
+            using (MemoryStream stream = new MemoryStream(byteCountAlpha))
+                if (JxrSourceProfileReader.Read(stream, out streamProfile) != JxrError.None ||
+                    streamProfile == null || !streamProfile.PacketSyntaxComplete)
+                    return false;
+            return true;
         }
 
         private static bool TestHeadersReferenceFixtures()
@@ -816,10 +926,18 @@ namespace Jxr.Managed.Tests
                 string name = "alpha-planar-q" + alphaQualities[item] + "-32x32";
                 byte[] native = File.ReadAllBytes(Path.Combine(fixtures, name + ".jxr"));
                 JxrHeaders headers;
-                if (JxrHeaders.Read(native, out headers) != JxrError.None ||
+                JxrError headerError = JxrHeaders.Read(native, out headers);
+                if (headerError != JxrError.None || headers == null ||
                     !headers.HasPlanarAlpha || headers.AlphaOffset <
                     headers.CodestreamOffset + headers.CodestreamLength ||
-                    headers.AlphaByteCount != native.Length) return false;
+                    headers.AlphaByteCount != native.Length - headers.AlphaOffset)
+                {
+                    Console.WriteLine("Planar alpha header differs for " + name +
+                        ": " + headerError + " offset=" + (headers == null ? -1 : headers.AlphaOffset) +
+                        " bytes=" + (headers == null ? -1 : headers.AlphaByteCount) +
+                        " length=" + native.Length);
+                    return false;
+                }
                 JxrEncoderOptions encodeOptions = new JxrEncoderOptions();
                 encodeOptions.QualityIndex = 16;
                 encodeOptions.AlphaQualityIndex = alphaQualities[item];
@@ -954,7 +1072,8 @@ namespace Jxr.Managed.Tests
             JxrHeaders tiledHeaders;
             if (JxrHeaders.Read(tiled, out tiledHeaders) != JxrError.None ||
                 !tiledHeaders.HasPlanarAlpha ||
-                tiledHeaders.AlphaByteCount != tiled.Length) return false;
+                tiledHeaders.AlphaByteCount != tiled.Length - tiledHeaders.AlphaOffset)
+                return false;
             JxrImage tiledRestored;
             JxrDecoderOptions tiledDecodeOptions = new JxrDecoderOptions();
             tiledDecodeOptions.OutputFormat = JxrPixelFormat.Bgra32;

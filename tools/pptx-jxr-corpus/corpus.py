@@ -270,6 +270,90 @@ def managed_pixels(runner: Path, jxr_path: Path, work: Path,
     return width, height, channels, pixels
 
 
+def managed_source_profile(runner: Path, jxr_path: Path,
+                           work: Path) -> dict[str, Any]:
+    profile_path = work / "managed-profile.json"
+    code, output = run_process([str(runner), "profile", str(jxr_path),
+                                str(profile_path)], runner.parent)
+    if code != 0 or not profile_path.is_file():
+        raise RuntimeError("managed profile reader failed (%d): %s" %
+                           (code, output))
+    return json.loads(profile_path.read_text(encoding="utf-8"))
+
+
+def compare_managed_profile(reference: dict[str, Any],
+                            managed: dict[str, Any]) -> list[str]:
+    differences = []
+    color = managed.get("color_plane") or {}
+    fields = (("width", color.get("width")),
+              ("height", color.get("height")),
+              ("overlap", color.get("overlap")),
+              ("orientation_code", color.get("orientation")),
+              ("source_color_format_code", color.get("source_color_format")),
+              ("source_bit_depth_code", color.get("source_bit_depth")),
+              ("coded_bit_depth_code", color.get("coded_bit_depth")),
+              ("plane_color_format_code", color.get("plane_color_format")),
+              ("subband_code", color.get("subbands")),
+              ("index_table", color.get("index_table")),
+              ("trim_flexbits_flag", color.get("trim_flexbits")),
+              ("red_blue_swapped", color.get("red_blue_swapped")),
+              ("has_alpha", color.get("has_alpha")),
+              ("tile_columns", color.get("tile_columns")),
+              ("tile_rows", color.get("tile_rows")),
+              ("tile_column_boundaries_mb", color.get("tile_column_boundaries")),
+              ("tile_row_boundaries_mb", color.get("tile_row_boundaries")),
+              ("frame_header_bytes", color.get("header_bytes")))
+    for field, actual in fields:
+        if reference.get(field) != actual:
+            differences.append("%s: profiler=%r managed=%r" %
+                               (field, reference.get(field), actual))
+    reference_quantizers = reference.get("frame_quantizers") or {}
+    managed_quantizers = color.get("frame_quantizers") or {}
+    for band in ("dc", "lp", "hp"):
+        expected = reference_quantizers.get(band)
+        actual = managed_quantizers.get(band)
+        if expected is None:
+            continue
+        if "inherits" in expected:
+            if actual is not None and actual.get("present"):
+                differences.append("frame_quantizers.%s: profiler=%r managed=%r" %
+                                   (band, expected, actual))
+        elif actual is None or not actual.get("present") or \
+                expected.get("channel_mode") != actual.get("channel_mode"):
+            differences.append("frame_quantizers.%s: profiler=%r managed=%r" %
+                               (band, expected, actual))
+        else:
+            mode = expected.get("channel_mode", 0)
+            count = 1 if mode == 0 else (2 if mode == 1 else
+                                         len(expected.get("stored_indices", [])))
+            stored = actual.get("indices", [])[:count]
+            if expected.get("stored_indices", []) != stored:
+                differences.append("frame_quantizers.%s.indices: profiler=%r managed=%r" %
+                                   (band, expected.get("stored_indices"), stored))
+    if reference.get("container") == "tiff_like_jxr":
+        fields = (("pixel_format_guid", managed.get("pixel_format_guid")),
+                  ("container_width", managed.get("container_width")),
+                  ("container_height", managed.get("container_height")),
+                  ("orientation_tag", managed.get("orientation_tag")),
+                  ("codestream_offset", color.get("codestream_offset")),
+                  ("codestream_length", color.get("codestream_length")),
+                  ("alpha_offset", managed.get("alpha_offset") or None),
+                  ("alpha_byte_count", managed.get("alpha_byte_count") or None),
+                  ("alpha_range_tag_value", managed.get("alpha_range_tag_value")))
+        for field, actual in fields:
+            if reference.get(field) != actual:
+                differences.append("%s: profiler=%r managed=%r" %
+                                   (field, reference.get(field), actual))
+        managed_range = managed.get("alpha_range_interpretation")
+        mapping = {"None": None, "AbsoluteEndOffset": "absolute_end_offset",
+                   "ByteCount": "byte_count"}
+        if reference.get("alpha_range_interpretation") != mapping.get(managed_range):
+            differences.append("alpha_range_interpretation: profiler=%r managed=%r" %
+                               (reference.get("alpha_range_interpretation"),
+                                managed_range))
+    return differences
+
+
 def native_reference(decoder: Path, jxr: bytes, work: Path,
                      channels: tuple[str, ...]) -> dict[str, dict[str, Any]]:
     jxr_path = work / "source.jxr"
@@ -318,6 +402,10 @@ def make_parser() -> argparse.ArgumentParser:
                         help="write native pixel digests for the selected suite")
     parser.add_argument("--reference-manifest", type=Path,
                         help="compare native output with a saved reference manifest")
+    parser.add_argument("--profile-only", action="store_true",
+                        help="read source profiles without invoking either pixel decoder")
+    parser.add_argument("--profile-manifest", type=Path,
+                        help="write managed profile results as versioned JSONL")
     parser.add_argument("--diagnostic", action="store_true",
                         help="exit successfully when processing completes, even with managed mismatches")
     parser.add_argument("--max-entry-mb", type=int, default=512)
@@ -333,12 +421,13 @@ def main(argv: list[str] | None = None) -> int:
     output_path = (args.output or report_dir / "corpus-results.json").resolve()
     required_paths = [(root, "corpus root")]
     if not args.manifest_only:
-        if decoder is None or runner is None:
-            print("--native-decoder and --managed-runner are required for decoding",
-                  file=sys.stderr)
+        if runner is None or (not args.profile_only and decoder is None):
+            print("--managed-runner is required; --native-decoder is also required "
+                  "unless --profile-only is selected", file=sys.stderr)
             return 2
-        required_paths.extend(((decoder, "native decoder"),
-                               (runner, "managed runner")))
+        required_paths.append((runner, "managed runner"))
+        if not args.profile_only:
+            required_paths.append((decoder, "native decoder"))
     for path, label in required_paths:
         if not path.exists():
             print("Missing %s: %s" % (label, path), file=sys.stderr)
@@ -351,7 +440,8 @@ def main(argv: list[str] | None = None) -> int:
         profiler = Path(__file__).resolve().parents[1] / "pptx-jxr-profiler" / "profiler.py"
         code, text = run_process([sys.executable, str(profiler), "--root",
                                   str(root), "--out", str(report_dir),
-                                  "--max-entry-mb", str(args.max_entry_mb)],
+                                  "--max-entry-mb", str(args.max_entry_mb),
+                "--no-cache"],
                                  profiler.parent)
         if text:
             print(text)
@@ -388,6 +478,7 @@ def main(argv: list[str] | None = None) -> int:
 
     references = []
     results = []
+    managed_profiles = []
     observed_reference_keys = set()
     reference_lookup = {}
     if args.reference_manifest:
@@ -415,6 +506,11 @@ def main(argv: list[str] | None = None) -> int:
             record["status"] = "invalid_manifest_path"
             record["error"] = "PPTX path escapes corpus root"
             results.append(record)
+            if args.profile_only:
+                managed_profiles.append({"schema_version": 2,
+                    "sha256": asset["sha256"], "pptx": asset["pptx"],
+                    "entry": asset["entry"], "status": "invalid_manifest_path",
+                    "error": record["error"]})
             continue
         try:
             with zipfile.ZipFile(pptx, "r") as package:
@@ -435,6 +531,41 @@ def main(argv: list[str] | None = None) -> int:
                         channels = ("color", "alpha") if has_alpha else ("color",)
                         jxr_path = work / "source.jxr"
                         jxr_path.write_bytes(jxr)
+                        if args.profile_only:
+                            try:
+                                managed = managed_source_profile(runner, jxr_path,
+                                                                 work)
+                                differences = compare_managed_profile(
+                                    profile, managed)
+                                status = ("metadata_mismatch" if differences else
+                                    "match" if managed.get("packet_syntax_complete")
+                                    else "packet_incomplete")
+                                managed_profiles.append({
+                                    "schema_version": 2,
+                                    "sha256": asset["sha256"],
+                                    "pptx": asset["pptx"],
+                                    "entry": asset["entry"],
+                                    "profile": profile_summary(asset),
+                                    "status": status,
+                                    "differences": differences,
+                                    "managed_profile": managed,
+                                })
+                                record["status"] = status
+                                record["profile_differences"] = differences
+                            except (OSError, RuntimeError, ValueError, KeyError) as error:
+                                managed_profiles.append({
+                                    "schema_version": 2,
+                                    "sha256": asset["sha256"],
+                                    "pptx": asset["pptx"],
+                                    "entry": asset["entry"],
+                                    "profile": profile_summary(asset),
+                                    "status": "managed_profile_error",
+                                    "error": str(error),
+                                })
+                                record["status"] = "managed_profile_error"
+                                record["error"] = str(error)
+                            results.append(record)
+                            continue
                         reference_data = native_reference(decoder, jxr, work,
                                                           channels)
                         channel_results = []
@@ -505,7 +636,50 @@ def main(argv: list[str] | None = None) -> int:
                 zipfile.BadZipFile, struct.error) as error:
             record["status"] = "error"
             record["error"] = str(error)
+            if args.profile_only:
+                managed_profiles.append({"schema_version": 2,
+                    "sha256": asset["sha256"], "pptx": asset["pptx"],
+                    "entry": asset["entry"], "profile": profile_summary(asset),
+                                    "status": "managed_profile_error",
+                                    "error": str(error)})
         results.append(record)
+
+    if args.profile_only:
+        profile_manifest = (args.profile_manifest or
+            report_dir / "managed-profile-manifest-v2.jsonl").resolve()
+        profile_manifest.parent.mkdir(parents=True, exist_ok=True)
+        profile_manifest.write_text("".join(json.dumps(row, sort_keys=True,
+            ensure_ascii=False) + "\n" for row in managed_profiles),
+            encoding="utf-8")
+        summary = {
+            "schema_version": 2,
+            "suite": args.suite,
+            "corpus_root": str(root),
+            "inventory_unique_assets": len(inventory),
+            "assets_selected": len(assets),
+            "profiles_match": sum(row["status"] == "match"
+                                   for row in managed_profiles),
+            "profiles_metadata_match": sum(row["status"] in
+                ("match", "packet_incomplete") for row in managed_profiles),
+            "packet_incomplete": sum(row["status"] == "packet_incomplete"
+                                     for row in managed_profiles),
+            "metadata_mismatch": sum(row["status"] == "metadata_mismatch"
+                                      for row in managed_profiles),
+            "profile_errors": sum(row["status"] == "managed_profile_error"
+                                  for row in managed_profiles),
+            "profile_manifest": str(profile_manifest),
+            "results": managed_profiles,
+        }
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2) +
+                               "\n", encoding="utf-8")
+        print("Profile summary: %d/%d full packet profiles, %d metadata-matched but packet-incomplete, %d metadata mismatches, %d errors" % (
+            summary["profiles_match"], len(managed_profiles),
+            summary["packet_incomplete"], summary["metadata_mismatch"],
+            summary["profile_errors"]))
+        print("Wrote profile manifest: %s" % profile_manifest)
+        return 0 if (summary["profiles_metadata_match"] == len(assets) and
+                     summary["profile_errors"] == 0) else 1
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     presentation_coverage = None

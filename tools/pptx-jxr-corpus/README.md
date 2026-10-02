@@ -39,6 +39,30 @@ python .\tools\pptx-jxr-corpus\corpus.py `
   --corpus-manifest '.\tools\pptx-jxr-corpus\corpus-manifest.jsonl'
 ```
 
+`--refresh-inventory` forces a fresh profiler scan (`--no-cache`) so parser
+changes do not reuse profiles produced by an older parser version.
+
+To validate managed source-profile extraction without decoding pixels or
+requiring the native decoder, use:
+
+```powershell
+python .\tools\pptx-jxr-corpus\corpus.py `
+  --root 'D:\ASPOSE\SLIDESNET\TestData' `
+  --report-dir 'D:\JxrReports\TestData' `
+  --managed-runner '.\managed\Jxr.Managed.CorpusRunner\bin\Release\Jxr.Managed.CorpusRunner.exe' `
+  --suite all --profile-only `
+  --profile-manifest 'D:\JxrReports\TestData\managed-profile-manifest-v2.jsonl' `
+  --output 'D:\JxrReports\TestData\managed-profile-summary-v2.json'
+```
+
+This writes a versioned JSONL record per unique JXR with the managed main and
+container profile, tile packet spans, tile QP/trim metadata where available,
+and an explicit packet-parse completeness/error status. `packet_incomplete`
+means the main/container profile was read and independently matched, but the
+packet syntax reader declined or could not fully parse the packet map; this is
+reported separately from malformed headers or metadata mismatches. Add
+`--refresh-inventory` when the independent profiler parser has changed.
+
 Use `--suite all` for every unique JXR. The JSON result contains one row per
 asset, profile metadata, native and managed pixel SHA-256 values, and the first
 pixel/channel that differs. `--diagnostic` is intended while known managed
