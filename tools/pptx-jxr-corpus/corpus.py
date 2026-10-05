@@ -62,6 +62,9 @@ def filter_assets(assets: list[dict[str, Any]], profile_filter: str | None
         return [asset for asset in assets
                 if asset.get("profile", {}).get("bitstream_layout") == "frequency"
                 and asset.get("profile", {}).get("alpha_mode") == "planar"]
+    if profile_filter == "spatial":
+        return [asset for asset in assets
+                if asset.get("profile", {}).get("bitstream_layout") == "spatial"]
     raise ValueError("unsupported profile filter: " + str(profile_filter))
 
 
@@ -250,7 +253,7 @@ def load_known_mismatches(path: Path) -> dict[str, dict[str, Any]]:
         sha = row.get("sha256")
         if (not isinstance(sha, str) or len(sha) != 64 or
                 any(char not in "0123456789abcdef" for char in sha) or
-                row.get("bitstream_layout") != "frequency" or
+                row.get("bitstream_layout") not in ("frequency", "spatial") or
                 row.get("alpha_mode") not in ("none", "planar") or
                 row.get("codestream_subversion") != 0 or
                 row.get("overlap") != 1 or sha in known):
@@ -832,7 +835,7 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--suite", choices=("representatives", "all"),
                         default="representatives")
     parser.add_argument("--profile-filter", choices=("frequency-no-alpha",
-                        "frequency-planar-alpha"),
+                       "frequency-planar-alpha", "spatial"),
                         help="limit a suite to the named JXR profile family")
     parser.add_argument("--asset-sha256",
                         help="select one already-filtered asset for targeted diagnostics")
@@ -903,11 +906,12 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if args.known_mismatches and (args.suite != "all" or
                                   args.profile_filter not in
-                                  ("frequency-no-alpha", "frequency-planar-alpha") or
+                                  ("frequency-no-alpha", "frequency-planar-alpha",
+                                   "spatial") or
                                   args.profile_only or args.manifest_only or
                                   args.diagnostic or not args.corpus_manifest):
         print("--known-mismatches requires --suite all, "
-              "a supported frequency profile filter and --corpus-manifest; "
+              "a supported profile filter and --corpus-manifest; "
               "it cannot be combined with diagnostic/profile/manifest-only mode",
               file=sys.stderr)
         return 2

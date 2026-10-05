@@ -77,6 +77,18 @@ class CorpusUtilityTests(unittest.TestCase):
                                         "frequency-planar-alpha")
         self.assertEqual(["a"], [item["sha256"] for item in selected])
 
+    def test_spatial_filter_includes_spatial_alpha_and_non_alpha(self):
+        selected_assets = [
+            {"sha256": "a", "profile": {"bitstream_layout": "spatial",
+                                             "alpha_mode": "none"}},
+            {"sha256": "b", "profile": {"bitstream_layout": "spatial",
+                                             "alpha_mode": "planar"}},
+            {"sha256": "c", "profile": {"bitstream_layout": "frequency",
+                                             "alpha_mode": "none"}},
+        ]
+        selected = corpus.filter_assets(selected_assets, "spatial")
+        self.assertEqual(["a", "b"], [item["sha256"] for item in selected])
+
     def test_pbgra_c_decoder_normalization_changes_only_guid(self):
         source = bytearray(64)
         source[:8] = b"II\xbc\x01\x08\x00\x00\x00"
@@ -150,6 +162,12 @@ class CorpusUtilityTests(unittest.TestCase):
             "known-mismatches-frequency-no-alpha.jsonl"
         known = corpus.load_known_mismatches(path)
         self.assertEqual(33, len(known))
+        spatial_path = Path(__file__).resolve().parents[1] / \
+            "known-mismatches-spatial.jsonl"
+        spatial = corpus.load_known_mismatches(spatial_path)
+        self.assertEqual(28, len(spatial))
+        self.assertTrue(all(row["bitstream_layout"] == "spatial"
+                            for row in spatial.values()))
         sha = next(iter(known))
         profile = {key: known[sha][key] for key in
                    ("bitstream_layout", "alpha_mode",
@@ -207,6 +225,30 @@ class CorpusUtilityTests(unittest.TestCase):
                             encoding="utf-8")
             with self.assertRaises(ValueError):
                 corpus.load_known_mismatches(path)
+
+    def test_spatial_known_mismatch_requires_exact_profile_and_metrics(self):
+        path = Path(__file__).resolve().parents[1] / \
+            "known-mismatches-spatial.jsonl"
+        known = corpus.load_known_mismatches(path)
+        sha = next(iter(known))
+        expected = known[sha]
+        expected_channel = expected["channels"]["color"]
+        profile = {key: expected[key] for key in
+                   ("bitstream_layout", "alpha_mode",
+                    "codestream_subversion", "overlap")}
+        result = {"sha256": sha, "profile": profile,
+                  "status": "pixel_mismatch", "channels": [{
+                      "channel": "color", "status": "pixel_mismatch",
+                      "native_sha256": expected_channel["native_sha256"],
+                      "managed_sha256": expected_channel["managed_sha256"],
+                      "difference_metrics": {key: expected_channel[key]
+                          for key in ("mismatch_pixels", "mismatch_components",
+                                      "maximum_component_delta")}}]}
+        counts = corpus.classify_known_mismatches([result], {sha: expected})
+        self.assertEqual(1, counts["known_mismatches"])
+        result["channels"][0]["difference_metrics"]["maximum_component_delta"] += 1
+        with self.assertRaises(ValueError):
+            corpus.classify_known_mismatches([result], {sha: expected})
 
     def test_write_corpus_manifest_contains_index_not_asset_data(self):
         asset = {"sha256": "abc", "pptx": "folder/sample.pptx",

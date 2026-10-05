@@ -225,8 +225,7 @@ namespace Jxr.Managed.Core
             if (options.OutputFormat == JxrPixelFormat.Rgb24 ||
                 options.OutputFormat == JxrPixelFormat.Bgr24)
             {
-                if (trace != null && (headers.Main.HasAlpha ||
-                    headers.Main.BitstreamFormat != 1))
+                if (trace != null && headers.Main.HasAlpha)
                     return JxrError.UnsupportedFeature;
                 byte[] rgb;
                 int rgbWidth, rgbHeight;

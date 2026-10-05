@@ -259,6 +259,34 @@ color and alpha planes separately against managed color-only and alpha-only
 decode. Color is normalized to top-down BGR24 and alpha to Gray8. Files without
 alpha are compared as BGR24.
 
+## Spatial stream decoding
+
+The corpus contains 28 spatial profiles (27 without alpha and one with planar
+alpha). Run all of them against the C decoder with:
+
+```powershell
+python .\tools\pptx-jxr-corpus\corpus.py `
+  --root 'D:\ASPOSE\SLIDESNET\TestData' `
+  --report-dir 'D:\JxrReports\TestData' `
+  --native-decoder '.\jxrencoderdecoder\Release\JXRDecApp\x64\JXRDecApp.exe' `
+  --managed-runner '.\managed\Jxr.Managed.CorpusRunner\bin\Release\Jxr.Managed.CorpusRunner.exe' `
+  --suite all --profile-filter spatial `
+  --corpus-manifest '.\tools\pptx-jxr-corpus\corpus-manifest.jsonl' `
+  --known-mismatches '.\tools\pptx-jxr-corpus\known-mismatches-spatial.jsonl'
+```
+
+The decoder handles the spatial packet-length forms used here, including the
+one-byte escape marker, and applies the shared chroma QP to both U and V. In
+the 2026-10-05 corpus run all 28 color streams and the planar-alpha stream
+decoded successfully. Alpha matched C exactly; color was not yet pixel-identical
+for 28/28 assets. The exact input/profile/output differences are pinned in
+`known-mismatches-spatial.jsonl`; they are all version-1, subversion-0,
+`OL_ONE` streams and remain visible as `pixel_mismatch`/`known_mismatch`. The
+largest observed color delta was 37. A new decode error, changed digest or
+metric, changed profile, or changed corpus inventory fails the strict baseline.
+This records current behavior; it does not waive or claim exact spatial color
+parity.
+
 ## Unit tests
 
 ```powershell

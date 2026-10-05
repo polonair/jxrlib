@@ -58,12 +58,17 @@ namespace Jxr.Managed.Core
                 return DecodeGrayTiles(source, headers, out pixels, out width,
                     out height);
 
-            int packetOffset;
-            error = LocateSingleSpatialPacket(source, headers, out packetOffset);
+            int packetOffset, packetLength;
+            error = LocateSingleSpatialPacket(source, headers, out packetOffset,
+                out packetLength);
             if (error != JxrError.None) return error;
-            if (packetOffset > Int32.MaxValue / 8)
+            long packetEnd = (long)packetOffset + packetLength;
+            if (packetOffset > Int32.MaxValue / 8 ||
+                packetEnd > Int32.MaxValue - 1)
                 return JxrError.UnsupportedFeature;
-            JxrBitReader reader = new JxrBitReader(source);
+            byte[] boundedSource = new byte[(int)packetEnd + 1];
+            Array.Copy(source, boundedSource, (int)packetEnd);
+            JxrBitReader reader = new JxrBitReader(boundedSource);
             int remaining = packetOffset * 8;
             while (remaining > 0)
             {
@@ -493,19 +498,20 @@ namespace Jxr.Managed.Core
                 main.HorizontalSliceCountMinusOne != 0)
                 return DecodeRgbTiles(source, headers, rgbOrder, out pixels,
                     out width, out height, trace);
-            if (trace != null) return JxrError.UnsupportedFeature;
-
-            int packetOffset;
-            error = LocateSingleSpatialPacket(source, headers, out packetOffset);
+            int packetOffset, packetLength;
+            error = LocateSingleSpatialPacket(source, headers, out packetOffset,
+                out packetLength);
             if (error != JxrError.None) return error;
-            if (packetOffset > Int32.MaxValue / 8) return JxrError.UnsupportedFeature;
+            long packetEnd = (long)packetOffset + packetLength;
+            if (packetOffset > Int32.MaxValue / 8 ||
+                packetEnd > Int32.MaxValue - 1)
+                return JxrError.UnsupportedFeature;
             // Native packet bit I/O keeps a zero-filled lookahead word after
             // the final byte. The color HP decoder may need that lookahead
             // to resolve a short final Huffman symbol, but may not consume
             // beyond the physical input. Validate that limit after decoding.
-            if (source.Length == Int32.MaxValue) return JxrError.UnsupportedFeature;
-            byte[] paddedSource = new byte[source.Length + 1];
-            Array.Copy(source, paddedSource, source.Length);
+            byte[] paddedSource = new byte[(int)packetEnd + 1];
+            Array.Copy(source, paddedSource, (int)packetEnd);
             JxrBitReader reader = new JxrBitReader(paddedSource);
             int remaining = packetOffset * 8;
             while (remaining > 0)
@@ -549,9 +555,11 @@ namespace Jxr.Managed.Core
                 JxrQuantizer[][] hp = new JxrQuantizer[3][];
                 for (int channel = 0; channel < 3; channel++)
                 {
-                    byte dcIndex = q.GetDcIndex(channel);
-                    byte lpIndex = plane.Subband == 3 ? dcIndex : q.GetLowpassIndex(channel);
-                    byte hpIndex = plane.Subband < 2 ? q.GetHighpassIndex(channel) : dcIndex;
+                    byte dcIndex = EffectiveColorQuantizerIndex(q, 0, channel);
+                    byte lpIndex = plane.Subband == 3 ? dcIndex :
+                        EffectiveColorQuantizerIndex(q, 1, channel);
+                    byte hpIndex = plane.Subband < 2 ?
+                        EffectiveColorQuantizerIndex(q, 2, channel) : dcIndex;
                     dc[channel] = JxrQuantization.Remap(dcIndex, scaledArithmetic, channel != 0).WithDcOffset();
                     lp[channel] = new JxrQuantizer[] {
                         JxrQuantization.Remap(lpIndex, scaledArithmetic, channel != 0) };
@@ -601,16 +609,32 @@ namespace Jxr.Managed.Core
                             state.SetNeighborCbp(channel, topCbp[channel][mbX], leftCbp[channel]);
                             Array.Clear(planes[channel], 0, planes[channel].Length);
                         }
+                        int bitStart = trace != null &&
+                            trace.Selects(mbX, mbY) ? reader.BitPosition : 0;
                         error = JxrDcCodec.Decode(state);
                         if (error != JxrError.None) return error;
+                        RecordDecoderStage(state, trace, "after_dc", mbX, mbY);
+                        if (trace != null && trace.Selects(mbX, mbY))
+                            trace.RecordBitRange("dc", mbX, mbY, 0, 0,
+                                packetOffset, bitStart, reader.BitPosition);
                         if (!dcOnly)
                         {
+                            bitStart = trace != null &&
+                                trace.Selects(mbX, mbY) ? reader.BitPosition : 0;
                             error = JxrLpCodec.Decode(state);
                             if (error != JxrError.None) return error;
+                            RecordDecoderStage(state, trace, "after_lp", mbX, mbY);
+                            if (trace != null && trace.Selects(mbX, mbY))
+                                trace.RecordBitRange("lp", mbX, mbY, 0, 0,
+                                    packetOffset, bitStart, reader.BitPosition);
                         }
+                        else
+                            RecordDecoderStage(state, trace, "after_lp", mbX, mbY);
                         error = JxrCoefficientPrediction.DecodeDcLp(state.Macroblock,
                             rows, colorFormat, mbX, mbX == 0, mbY == 0);
                         if (error != JxrError.None) return error;
+                        RecordDecoderStage(state, trace,
+                            "after_dc_lp_prediction", mbX, mbY);
                         error = JxrCoefficientPrediction.StoreCurrent(state.Macroblock,
                             rows, colorFormat, mbX);
                         if (error != JxrError.None) return error;
@@ -618,10 +642,18 @@ namespace Jxr.Managed.Core
                             state.Macroblock, quantizers, colorFormat,
                             3, dcOnly);
                         if (error != JxrError.None) return error;
+                        RecordDecoderStage(state, trace,
+                            "after_dequantization", mbX, mbY);
                         if (hasHighpass)
                         {
+                            bitStart = trace != null &&
+                                trace.Selects(mbX, mbY) ? reader.BitPosition : 0;
                             error = JxrHpCodec.Decode(state);
                             if (error != JxrError.None) return error;
+                            RecordDecoderStage(state, trace, "after_hp", mbX, mbY);
+                            if (trace != null && trace.Selects(mbX, mbY))
+                                trace.RecordBitRange("hp", mbX, mbY, 0, 0,
+                                    packetOffset, bitStart, reader.BitPosition);
                             for (int channel = 0; channel < 3; channel++)
                             {
                                 error = state.MacroblockCbp.GetCbp(channel, out leftCbp[channel]);
@@ -632,6 +664,8 @@ namespace Jxr.Managed.Core
                         error = JxrCoefficientPrediction.DecodeAc(state.Macroblock,
                             state.CoefficientPlanes, colorFormat);
                         if (error != JxrError.None) return error;
+                        RecordDecoderStage(state, trace,
+                            "after_ac_prediction", mbX, mbY);
                         for (int channel = 0; channel < 3; channel++)
                         {
                             int[] samples = new int[planes[channel].Length];
@@ -673,6 +707,11 @@ namespace Jxr.Managed.Core
                                 main.Subversion != 0);
                         for (int mbY = 0; mbY < rowsCount; mbY++)
                             for (int mbX = 0; mbX < columns; mbX++)
+                            {
+                                if (trace != null)
+                                    trace.RecordStage("reconstructed_samples", mbX,
+                                        mbY, channel == 0 ? "Y" : channel == 1 ? "U" : "V",
+                                        overlapSamples[mbY * columns + mbX]);
                                 CopyColorMacroblock(
                                     overlapSamples[mbY * columns + mbX],
                                     outputPlanes[channel],
@@ -682,6 +721,7 @@ namespace Jxr.Managed.Core
                                     subsampled && channel != 0 ? 8 : 16,
                                     subsampled && channel != 0 &&
                                         colorFormat == JxrCodecColorFormat.Yuv420 ? 8 : 16);
+                            }
                     }
                 if (subsampled)
                 {
@@ -698,7 +738,9 @@ namespace Jxr.Managed.Core
                     imageWidth, imageHeight, rgbOrder, scaledArithmetic ? 3 : 0,
                     pixels, imageWidth * 3);
                 if (error != JxrError.None) { pixels = null; return error; }
-                if (reader.BitPosition > (long)source.Length * 8)
+                if (trace != null)
+                    RecordRgbOutput(trace, pixels, imageWidth, imageHeight, rgbOrder);
+                if (reader.BitPosition > packetEnd * 8)
                 { pixels = null; return JxrError.UnexpectedEndOfStream; }
                 width = imageWidth; height = imageHeight;
                 return JxrError.None;
@@ -748,9 +790,11 @@ namespace Jxr.Managed.Core
             int[][] hpParameters = new int[3][];
             for (int channel = 0; channel < 3; channel++)
             {
-                byte dcIndex = q.GetDcIndex(channel);
-                byte lpIndex = plane.Subband == 3 ? dcIndex : q.GetLowpassIndex(channel);
-                byte hpIndex = plane.Subband < 2 ? q.GetHighpassIndex(channel) : dcIndex;
+                byte dcIndex = EffectiveColorQuantizerIndex(q, 0, channel);
+                byte lpIndex = plane.Subband == 3 ? dcIndex :
+                    EffectiveColorQuantizerIndex(q, 1, channel);
+                byte hpIndex = plane.Subband < 2 ?
+                    EffectiveColorQuantizerIndex(q, 2, channel) : dcIndex;
                 dc[channel] = JxrQuantization.Remap(dcIndex, scaled,
                     channel != 0).WithDcOffset();
                 lp[channel] = new JxrQuantizer[] {
@@ -1195,22 +1239,52 @@ namespace Jxr.Managed.Core
         }
 
         private static JxrError LocateSingleSpatialPacket(byte[] source,
-            JxrHeaders headers, out int offset)
+            JxrHeaders headers, out int offset, out int length)
         {
-            offset = 0;
+            offset = length = 0;
             int position = headers.CodestreamOffset + headers.ByteCount;
-            if (position < 0 || position > source.Length - 2)
+            int end = headers.CodestreamOffset + headers.CodestreamLength;
+            if (position < 0 || position > end - 1 || end > source.Length)
                 return JxrError.UnexpectedEndOfStream;
-            // JxrIndexTableReader always reads a variable-length word even in
-            // streaming mode. This profile uses its two-byte form.
             int first = source[position];
-            if (first >= 0xfb) return JxrError.UnsupportedFeature;
-            int headerSize = (first << 8) | source[position + 1];
-            long packetPosition = (long)position + 2 + headerSize;
-            if (packetPosition + 4 > source.Length)
+            int wordCount, prefixBytes;
+            if (first < 0xfb) { wordCount = 1; prefixBytes = 2; }
+            else if (first == 0xfb) { wordCount = 2; prefixBytes = 5; }
+            else if (first == 0xfc) { wordCount = 4; prefixBytes = 9; }
+            else { wordCount = 0; prefixBytes = 1; }
+            if (position > end - prefixBytes)
                 return JxrError.UnexpectedEndOfStream;
+            long headerSize = 0;
+            if (wordCount == 1)
+                headerSize = (first << 8) | source[position + 1];
+            else if (wordCount > 1)
+                for (int index = 0; index < wordCount; index++)
+                {
+                    int wordOffset = position + 1 + index * 2;
+                    headerSize = (headerSize << 16) |
+                        ((long)source[wordOffset] << 8) | source[wordOffset + 1];
+                    if (headerSize > Int32.MaxValue)
+                        return JxrError.UnsupportedFeature;
+                }
+            long packetPosition = (long)position + prefixBytes + headerSize;
+            if (packetPosition < position || packetPosition > end - 4)
+                return JxrError.InvalidBitstream;
             offset = (int)packetPosition;
+            length = end - offset;
             return JxrError.None;
+        }
+
+        private static byte EffectiveColorQuantizerIndex(
+            JxrImagePlaneQuantizerHeader quantizers, int band, int channel)
+        {
+            int mode = band == 0 ? quantizers.DcMode :
+                (band == 1 ? quantizers.LowpassMode : quantizers.HighpassMode);
+            // Mode 1 stores luma followed by one shared chroma index. Its
+            // second index applies to both U and V; slot 2 is unused.
+            int index = channel == 2 && mode == 1 ? 1 : channel;
+            if (band == 0) return quantizers.GetDcIndex(index);
+            if (band == 1) return quantizers.GetLowpassIndex(index);
+            return quantizers.GetHighpassIndex(index);
         }
 
         private static void CopyColorMacroblock(int[] samples, int[] plane,

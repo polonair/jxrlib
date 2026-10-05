@@ -109,8 +109,13 @@ reversible color transform.
 BGR BMP. `rgb444_quality_native_fixtures` also compares native-restored RGB
 pixels for QP=16 and four subband/trim variants of the sign image plus the
 605x478 city image. The scaled-arithmetic chroma DC/LP values are doubled
-after inverse transform stage 2, as in the native decoder. Alpha and
-non-spatial layouts remain unsupported; this is not yet a general-purpose
+after inverse transform stage 2, as in the native decoder. Corpus coverage
+also includes single-tile spatial PPTX profiles with 8-bit RGB/YUV 4:4:4,
+QP 15/30, `OL_ONE`, and planar alpha. Their spatial packet length escape and
+shared chroma quantizer are handled. The planar-alpha sample matches native
+alpha exactly; spatial color still has a tracked subversion-0/`OL_ONE`
+compatibility gap (see `tools/pptx-jxr-corpus/known-mismatches-spatial.jsonl`).
+Other JPEG XR profiles remain unsupported; this is not yet a general-purpose
 JPEG XR decoder.
 
 `JxrMinimalEncoder.EncodeGrayBmp` now connects the managed forward transform,
