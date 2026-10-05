@@ -65,7 +65,7 @@ endif
 
 CD=cd
 MK_DIR=mkdir -p
-CFLAGS=-I. -Icommon/include -I$(DIR_SYS) -I$(DIR_DEC) -I$(DIR_ENC) $(ENDIANFLAG) -D__ANSI__ -DDISABLE_PERF_MEASUREMENT -w $(PICFLAG) -O
+CFLAGS=-I. -Icommon/include -I$(DIR_SYS) $(ENDIANFLAG) -D__ANSI__ -DDISABLE_PERF_MEASUREMENT -w $(PICFLAG) -O
 
 STATIC_LIBRARIES=$(DIR_BUILD)/libjxrglue.a $(DIR_BUILD)/libjpegxr.a
 SHARED_LIBRARIES=$(DIR_BUILD)/libjxrglue.so $(DIR_BUILD)/libjpegxr.so
@@ -83,9 +83,7 @@ LIBS=-L$(DIR_BUILD) $(shell echo $(LIBRARIES) | sed -e 's%$(DIR_BUILD)/lib\([^ ]
 ## Common files
 ##
 
-# The native reference was split into small modules; discover all source files
-# in each module directory so the portable Makefile stays in sync with the VC projects.
-SRC_SYS=$(notdir $(wildcard $(DIR_SRC)/$(DIR_SYS)/*.c))
+SRC_SYS=adapthuff.c image.c strcodec.c strPredQuant.c strTransform.c perfTimerANSI.c
 OBJ_SYS=$(patsubst %.c, $(DIR_BUILD)/$(DIR_SYS)/%.o, $(SRC_SYS))
  
 $(DIR_BUILD)/$(DIR_SYS)/%.o: $(DIR_SRC)/$(DIR_SYS)/%.c
@@ -97,7 +95,7 @@ $(DIR_BUILD)/$(DIR_SYS)/%.o: $(DIR_SRC)/$(DIR_SYS)/%.c
 ## Decode files
 ##
 
-SRC_DEC=$(notdir $(wildcard $(DIR_SRC)/$(DIR_DEC)/*.c))
+SRC_DEC=decode.c postprocess.c segdec.c strdec.c strInvTransform.c strPredQuantDec.c JXRTranscode.c
 OBJ_DEC=$(patsubst %.c, $(DIR_BUILD)/$(DIR_DEC)/%.o, $(SRC_DEC))
 $(DIR_BUILD)/$(DIR_DEC)/%.o: $(DIR_SRC)/$(DIR_DEC)/%.c
 	$(MK_DIR) $(@D)
@@ -108,7 +106,7 @@ $(DIR_BUILD)/$(DIR_DEC)/%.o: $(DIR_SRC)/$(DIR_DEC)/%.c
 ## Encode files
 ##
 
-SRC_ENC=$(notdir $(wildcard $(DIR_SRC)/$(DIR_ENC)/*.c))
+SRC_ENC=encode.c segenc.c strenc.c strFwdTransform.c strPredQuantEnc.c
 OBJ_ENC=$(patsubst %.c, $(DIR_BUILD)/$(DIR_ENC)/%.o, $(SRC_ENC))
 
 $(DIR_BUILD)/$(DIR_ENC)/%.o: $(DIR_SRC)/$(DIR_ENC)/%.c

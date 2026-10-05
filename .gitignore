@@ -2,6 +2,7 @@
 /jxrencoderdecoder/Release/*
 /jxrtestlib/Release/*
 /jxrgluelib/Release/*
+/original/**/Release/
 /tests/work/
 /managed/**/bin/
 /managed/**/obj/

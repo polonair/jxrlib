@@ -1,0 +1,2 @@
+# Keep the pristine upstream snapshot byte-for-byte, including its line endings.
+original/** -text whitespace=-blank-at-eol,-blank-at-eof,-space-before-tab
