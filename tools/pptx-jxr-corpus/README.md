@@ -323,6 +323,48 @@ palette normalization, mismatch localization and metrics, independent PBGRA
 reference validation, and a native/managed fixture run. The full corpus run is
 an integration test and requires the external PPTX root plus both decoders.
 
+## Step 9: one complete PPTX round trip
+
+The proof of concept intentionally processes one pinned presentation and its
+single JXR entry:
+
+- `FunctionalTests/Text/SLIDESNET-44192/SLIDESNET-44192.pptx`
+- `ppt/media/hdphoto1.wdp`, SHA-256
+  `4dadf2d592d85782a3f6c0a4de8aa9edd130921064954d6bfe0c2220550500e5`
+- 174×87 BGR24, 8-bit RGB / YUV 4:4:4, frequency layout, all subbands, no
+  alpha, no overlap, one tile, codestream version 1.1.
+
+Run it after building the managed bridge and native decoder:
+
+```powershell
+python .\tools\pptx-jxr-corpus\single_case_roundtrip.py `
+  --root 'D:\ASPOSE\SLIDESNET\TestData' `
+  --managed-runner '.\managed\Jxr.Managed.CorpusRunner\bin\Release\Jxr.Managed.CorpusRunner.exe' `
+  --native-decoder '.\jxrencoderdecoder\Release\JXRDecApp\x64\JXRDecApp.exe' `
+  --aspose-slides-assembly 'D:\ASPOSE\SLIDESNET\build\net5_obf\Aspose.Slides.dll' `
+  --output-pptx 'D:\JxrReports\TestData\step9-single-case\SLIDESNET-44192-step9-final.pptx' `
+  --report 'D:\JxrReports\TestData\step9-single-case\step9-final-report.json'
+```
+
+The script refuses to overwrite the source or an existing output. It verifies
+the pinned source hash and profile, checks that the managed and native decoders
+agree on the source pixels, re-encodes those managed pixels with the parsed
+source profile, and checks that both decoders accept the output. The output
+profile is compared while allowing container offsets and lengths to change.
+Managed and native pixel drift are each required to stay within MAE 8 and
+maximum channel delta 96. The PPTX copy must pass ZIP CRC validation, retain
+the same member list and package comment, and preserve every non-target member
+payload exactly. A JSON report records the input/output profiles, hashes,
+quality metrics and package checks. The source presentation is never modified.
+Finally, PowerShell 7 loads both the original and output with the supplied
+Aspose.Slides assembly and checks that slide and image counts are unchanged.
+
+This is a single-case proof, not a corpus-wide compatibility claim. It avoids
+the known `subversion=0 / OL_ONE` color and alpha cases; it does not implement
+interleaved alpha or change the existing allowlists. The package-level check
+does not exercise PowerPoint rendering or the full Aspose.Slides presentation
+API.
+
 `baseline-summary.json` records the first full run; `corpus-manifest.jsonl`
 indexes all unique inputs and `reference-manifest.jsonl` stores native pixel
 digests for assets that the C decoder could decode. The managed mismatches and
