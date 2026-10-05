@@ -35,7 +35,7 @@ namespace Jxr.Managed.Core
             int width, int height, JxrEncoderOptions options, out byte[] jxr)
         {
             return EncodeGrayPixels(pixels, stride, width, height, options,
-                null, out jxr);
+                (JxrGrayEncodingTrace)null, out jxr);
         }
 
         internal static JxrError EncodeGrayPixels(byte[] pixels, int stride,
@@ -49,21 +49,45 @@ namespace Jxr.Managed.Core
             using (JxrEncoderSession session = JxrEncoderSession.Create(
                 sessionConfig, 0, 0))
                 return EncodeWithSession(pixels, stride, width, height, options,
-                    session, trace, out jxr);
+                    session, trace, null, out jxr);
+        }
+
+        internal static JxrError EncodeGrayProfilePixels(byte[] pixels, int stride,
+            int width, int height, JxrEncoderOptions options,
+            JxrProfileEncodingSettings profileSettings, out byte[] jxr)
+        {
+            jxr = null;
+            if (profileSettings == null || !profileSettings.GrayPlane)
+                return JxrError.InvalidArgument;
+            JxrSessionConfiguration sessionConfig = new JxrSessionConfiguration(
+                width, height, 0, 1, 4, false);
+            using (JxrEncoderSession session = JxrEncoderSession.Create(
+                sessionConfig, 0, 0))
+                return EncodeWithSession(pixels, stride, width, height, options,
+                    session, null, profileSettings, out jxr);
         }
 
         private static JxrError EncodeWithSession(byte[] pixels,
             int stride, int width, int height, JxrEncoderOptions options,
-            JxrEncoderSession session, JxrGrayEncodingTrace trace, out byte[] jxr)
+            JxrEncoderSession session, JxrGrayEncodingTrace trace,
+            JxrProfileEncodingSettings profileSettings, out byte[] jxr)
         {
             jxr = null;
             JxrError error;
             int columns = (width + 15) / 16, rowsCount = (height + 15) / 16;
-            byte dcIndex = QpIndex(options.DcQuantizerIndex, options.QualityIndex);
-            byte lpIndex = QpIndex(options.LowpassQuantizerIndex, options.QualityIndex);
-            byte hpIndex = QpIndex(options.HighpassQuantizerIndex, options.QualityIndex);
-            bool scaledArithmetic = options.Subbands != JxrGraySubbandMode.All ||
-                dcIndex > 1 || lpIndex > 1 || hpIndex > 1;
+            byte dcIndex = profileSettings == null ?
+                QpIndex(options.DcQuantizerIndex, options.QualityIndex) :
+                profileSettings.DcIndices[0];
+            byte lpIndex = profileSettings == null ?
+                QpIndex(options.LowpassQuantizerIndex, options.QualityIndex) :
+                profileSettings.LowpassIndices[0];
+            byte hpIndex = profileSettings == null ?
+                QpIndex(options.HighpassQuantizerIndex, options.QualityIndex) :
+                profileSettings.HighpassIndices[0];
+            bool scaledArithmetic = profileSettings == null ?
+                options.Subbands != JxrGraySubbandMode.All ||
+                    dcIndex > 1 || lpIndex > 1 || hpIndex > 1 :
+                profileSettings.ScaledArithmetic;
             int[][] overlapped = null;
             if (options.Overlap != 0)
             {
@@ -219,7 +243,11 @@ namespace Jxr.Managed.Core
                     }
                 }
             byte[] codestream;
-            if (frequency)
+            if (frequency && profileSettings != null)
+                error = JxrFrequencyCodestreamWriter.WriteGrayProfile(
+                    frequencyPackets, frequencyBitCounts, width, height,
+                    profileSettings, out codestream);
+            else if (frequency)
                 error = JxrFrequencyCodestreamWriter.WriteGray(frequencyPackets,
                     frequencyBitCounts, width, height, dcIndex, lpIndex,
                     hpIndex, options.Subbands, scaledArithmetic,

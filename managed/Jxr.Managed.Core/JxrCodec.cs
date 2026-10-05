@@ -6,8 +6,8 @@ namespace Jxr.Managed.Core
     // JPEG XR boundary: pixels in/out, with no BMP dependency.
     public static class JxrCodec
     {
-        // Re-encodes an RGB image using the supported frequency/no-alpha
-        // syntax and stream parameters from an inspected source file.
+        // Re-encodes supported frequency RGB and planar-alpha profiles using
+        // the stream parameters inspected from the source file.
         public static JxrError Encode(JxrImage image, JxrSourceProfile sourceProfile,
             out byte[] jxr)
         {
@@ -24,8 +24,78 @@ namespace Jxr.Managed.Core
             options.ChromaSubsampling = JxrChromaSubsampling.Yuv444;
             options.TileLayout = profileSettings.TileLayout;
             options.Progressive = profileSettings.Progressive;
+            if (profileSettings.Alpha != null)
+                return EncodePlanarAlphaProfile(image, options,
+                    profileSettings, out jxr);
             return JxrMinimalColorEncoder.Encode(image, options,
                 profileSettings, out jxr);
+        }
+
+        private static JxrError EncodePlanarAlphaProfile(JxrImage image,
+            JxrEncoderOptions colorOptions,
+            JxrProfileEncodingSettings profileSettings, out byte[] jxr)
+        {
+            jxr = null;
+            if (image == null || profileSettings == null ||
+                profileSettings.Alpha == null ||
+                (image.Format != JxrPixelFormat.Bgra32 &&
+                 image.Format != JxrPixelFormat.Pbgra32) ||
+                (long)image.Width * image.Height > Int32.MaxValue / 4)
+                return JxrError.InvalidArgument;
+            byte[] colorPixels = new byte[image.Width * image.Height * 3];
+            byte[] alphaPixels = new byte[image.Width * image.Height];
+            for (int y = 0; y < image.Height; y++)
+                for (int x = 0; x < image.Width; x++)
+                {
+                    int source = y * image.Stride + x * 4;
+                    int color = (y * image.Width + x) * 3;
+                    int alpha = y * image.Width + x;
+                    colorPixels[color] = image.Pixels[source];
+                    colorPixels[color + 1] = image.Pixels[source + 1];
+                    colorPixels[color + 2] = image.Pixels[source + 2];
+                    alphaPixels[alpha] = image.Pixels[source + 3];
+                }
+
+            JxrImage colorImage = new JxrImage(image.Width, image.Height,
+                JxrPixelFormat.Bgr24, colorPixels, image.Width * 3);
+            byte[] colorContainer;
+            JxrError error = JxrMinimalColorEncoder.Encode(colorImage,
+                colorOptions, profileSettings, out colorContainer);
+            if (error != JxrError.None) return error;
+
+            JxrProfileEncodingSettings alphaProfile = profileSettings.Alpha;
+            JxrEncoderOptions alphaOptions = new JxrEncoderOptions();
+            alphaOptions.QualityIndex = 1;
+            alphaOptions.Overlap = alphaProfile.Overlap;
+            alphaOptions.Layout = JxrBitstreamLayout.Frequency;
+            alphaOptions.Subbands = JxrGraySubbandMode.All;
+            alphaOptions.TileLayout = alphaProfile.TileLayout;
+            alphaOptions.Progressive = alphaProfile.Progressive;
+            JxrError alphaError = JxrMinimalEncoder.EncodeGrayProfilePixels(alphaPixels,
+                image.Width, image.Width, image.Height, alphaOptions,
+                alphaProfile, out jxr);
+            if (alphaError != JxrError.None) return alphaError;
+            byte[] alphaContainer = jxr;
+            jxr = null;
+
+            JxrHeaders colorHeaders, alphaHeaders;
+            error = JxrHeaders.Read(colorContainer, out colorHeaders);
+            if (error != JxrError.None) return error;
+            error = JxrHeaders.Read(alphaContainer, out alphaHeaders);
+            if (error != JxrError.None) return error;
+            byte[] colorStream = Slice(colorContainer,
+                colorHeaders.CodestreamOffset, colorHeaders.CodestreamLength);
+            byte[] alphaStream = Slice(alphaContainer,
+                alphaHeaders.CodestreamOffset, alphaHeaders.CodestreamLength);
+            bool byteCount = profileSettings.AlphaRangeInterpretation ==
+                JxrAlphaRangeInterpretation.ByteCount;
+            if (!byteCount && profileSettings.AlphaRangeInterpretation !=
+                JxrAlphaRangeInterpretation.AbsoluteEndOffset)
+                return JxrError.UnsupportedFeature;
+            return JxrContainerWriter.WriteRgbaPlanar(colorStream, alphaStream,
+                image.Width, image.Height, profileSettings.PixelFormatGuid,
+                byteCount, profileSettings.HorizontalDpi,
+                profileSettings.VerticalDpi, out jxr);
         }
 
         public static JxrError Encode(JxrImage image, JxrEncoderOptions options,

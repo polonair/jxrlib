@@ -19,6 +19,8 @@ namespace Jxr.Managed.Core
             0x6a8d, 0x43dd, 0xa7, 0xa8, 0xa2, 0x99, 0x35, 0x26, 0x1a, 0xe9);
         private static readonly Guid Bgra32PixelFormat = new Guid(0x6fddc324,
             0x4e03, 0x4bfe, 0xb1, 0x85, 0x3d, 0x77, 0x76, 0x8d, 0xc9, 0x0f);
+        private static readonly Guid Pbgra32PixelFormat = new Guid(0x6fddc324,
+            0x4e03, 0x4bfe, 0xb1, 0x85, 0x3d, 0x77, 0x76, 0x8d, 0xc9, 0x10);
 
         public static JxrError WriteRgb24(byte[] codestream, int width,
             int height, float horizontalDpi, float verticalDpi, out byte[] container)
@@ -49,11 +51,24 @@ namespace Jxr.Managed.Core
             byte[] alphaCodestream, int width, int height, bool bgra,
             float horizontalDpi, float verticalDpi, out byte[] container)
         {
+            return WriteRgbaPlanar(colorCodestream, alphaCodestream, width,
+                height, bgra ? Bgra32PixelFormat : Rgba32PixelFormat, false,
+                horizontalDpi, verticalDpi, out container);
+        }
+
+        internal static JxrError WriteRgbaPlanar(byte[] colorCodestream,
+            byte[] alphaCodestream, int width, int height, Guid pixelFormat,
+            bool alphaRangeIsByteCount, float horizontalDpi,
+            float verticalDpi, out byte[] container)
+        {
             container = null;
             if (colorCodestream == null || alphaCodestream == null ||
                 colorCodestream.Length < 8 || alphaCodestream.Length < 8 ||
                 alphaCodestream[0] != (byte)'W' || alphaCodestream[1] != (byte)'M' ||
                 alphaCodestream[2] != (byte)'P' || alphaCodestream[3] != (byte)'H' ||
+                (pixelFormat != Bgra32PixelFormat &&
+                 pixelFormat != Rgba32PixelFormat &&
+                 pixelFormat != Pbgra32PixelFormat) ||
                 width <= 0 || height <= 0 || horizontalDpi <= 0 || verticalDpi <= 0 ||
                 Single.IsInfinity(horizontalDpi) || Single.IsInfinity(verticalDpi) ||
                 Single.IsNaN(horizontalDpi) || Single.IsNaN(verticalDpi))
@@ -71,7 +86,7 @@ namespace Jxr.Managed.Core
             writer.Write((byte)'I', 8);
             Write16(writer, 0x01bc);
             Write32(writer, directoryOffset);
-            byte[] guid = (bgra ? Bgra32PixelFormat : Rgba32PixelFormat).ToByteArray();
+            byte[] guid = pixelFormat.ToByteArray();
             for (int index = 0; index < guid.Length; index++) writer.Write(guid[index], 8);
             for (int index = 0; index < directoryOffset - 24; index++) writer.Write(0, 8);
             Write16(writer, entryCount);
@@ -84,7 +99,8 @@ namespace Jxr.Managed.Core
             WriteEntry(writer, 0xbcc0, 4, 1, codestreamOffset);
             WriteEntry(writer, 0xbcc1, 4, 1, (uint)colorCodestream.Length);
             WriteEntry(writer, 0xbcc2, 4, 1, alphaOffset);
-            WriteEntry(writer, 0xbcc3, 4, 1, alphaEnd);
+            WriteEntry(writer, 0xbcc3, 4, 1,
+                alphaRangeIsByteCount ? (uint)alphaCodestream.Length : alphaEnd);
             Write32(writer, 0);
             byte[] prefix = writer.ToArray();
             if (prefix.Length != codestreamOffset) return JxrError.InvalidBitstream;

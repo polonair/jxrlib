@@ -42,6 +42,19 @@ namespace Jxr.Managed.Core
                 profile.Progressive, true, profile, out codestream);
         }
 
+        internal static JxrError WriteGrayProfile(byte[][][] packets,
+            int[][] bitCounts, int width, int height,
+            JxrProfileEncodingSettings profile, out byte[] codestream)
+        {
+            if (profile == null) { codestream = null; return JxrError.InvalidArgument; }
+            return Write(packets, bitCounts, width, height,
+                profile.DcIndices[0], profile.LowpassIndices[0],
+                profile.HighpassIndices[0], JxrGraySubbandMode.All,
+                profile.ScaledArithmetic, 0, profile.Overlap,
+                JxrChromaSubsampling.Yuv444, profile.TileLayout,
+                profile.Progressive, false, profile, out codestream);
+        }
+
         private static JxrError Write(byte[][][] packets, int[][] bitCounts,
             int width, int height, byte dcQp, byte lpQp, byte hpQp,
             JxrGraySubbandMode subbands, bool scaled, int trim, int overlap,
@@ -66,9 +79,11 @@ namespace Jxr.Managed.Core
                     return JxrError.InvalidArgument;
 
             JxrBitWriter header = new JxrBitWriter();
-            error = rgb && profileSettings != null ?
-                JxrHeaderWriter.WriteRgbProfile(header, width, height,
+            error = profileSettings != null ?
+                (rgb ? JxrHeaderWriter.WriteRgbProfile(header, width, height,
                     profileSettings) :
+                 JxrGrayProfileHeaderWriter.WriteGrayProfileHeader(header,
+                    width, height, profileSettings)) :
                 rgb ? JxrHeaderWriter.WriteRgbSpatial(header, width, height,
                     dcQp, lpQp, hpQp, subbands, scaled, trim, overlap, chroma, layout) :
                 JxrHeaderWriter.WriteGraySpatial(header, width, height, dcQp,

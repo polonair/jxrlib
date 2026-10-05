@@ -3,8 +3,8 @@ using System.Collections.Generic;
 
 namespace Jxr.Managed.Core
 {
-    // Restricted adapter from a parsed source profile to the common corpus
-    // encoder. The profile is validated before any pixels are transformed.
+    // Validated, explicit settings copied from a parsed source profile. Planar
+    // alpha has an independent gray-plane settings object.
     internal sealed class JxrProfileEncodingSettings
     {
         private sealed class OrderedPacket
@@ -14,6 +14,7 @@ namespace Jxr.Managed.Core
             internal OrderedPacket(int tileIndex, JxrProfilePacket packet)
             { TileIndex = tileIndex; Packet = packet; }
         }
+
         internal byte[] DcIndices;
         internal byte[] LowpassIndices;
         internal byte[] HighpassIndices;
@@ -26,8 +27,12 @@ namespace Jxr.Managed.Core
         internal bool Progressive;
         internal JxrTileLayout TileLayout;
         internal Guid PixelFormatGuid;
+        internal Guid ColorContainerPixelFormatGuid;
         internal float HorizontalDpi;
         internal float VerticalDpi;
+        internal bool GrayPlane;
+        internal JxrProfileEncodingSettings Alpha;
+        internal JxrAlphaRangeInterpretation AlphaRangeInterpretation;
 
         internal static JxrError Create(JxrImage image, JxrSourceProfile profile,
             out JxrProfileEncodingSettings settings)
@@ -38,56 +43,106 @@ namespace Jxr.Managed.Core
                 !profile.MacroblockQuantizerMapComplete)
                 return JxrError.UnsupportedFeature;
 
-            JxrHeaders headers = profile.Headers;
-            JxrMainHeader main = headers.Main;
-            JxrImagePlaneHeader plane = headers.Plane;
-            JxrImagePlaneQuantizerHeader quantizers = headers.Quantizers;
-            if (headers.ContainerKind != JxrContainerKind.TiffLike ||
-                headers.HasPlanarAlpha || main.Version != 1 ||
-                (main.Subversion != 0 && main.Subversion != 1) ||
-                main.BitstreamFormat != (int)JxrBitstreamLayout.Frequency ||
-                main.HasHardTileBoundaries || !main.HasIndexTable ||
-                main.HasAlpha || main.Orientation != 0 || main.RedBlueSwapped ||
-                main.Overlap < 0 || main.Overlap > 1 || main.TrimFlexbits ||
-                main.Width != image.Width || main.Height != image.Height ||
-                plane.ColorFormat != (int)JxrChromaSubsampling.Yuv444 ||
-                plane.ChannelCount != 3 || plane.Subband != (int)JxrGraySubbandMode.All ||
-                plane.HasChromaCenteringX || plane.HasChromaCenteringY ||
-                plane.HasSampleConversion || main.SourceColorFormat != 7 ||
-                main.SourceBitDepth != 1 || main.CodedBitDepth != 1 ||
-                !quantizers.HasDc || !quantizers.HasLowpass ||
-                !quantizers.HasHighpass ||
-                quantizers.DcMode != 2 || quantizers.LowpassMode != 2 ||
-                quantizers.HighpassMode != 2 ||
-                profile.ColorPlane.TileCount < 1 ||
-                profile.ColorPlane.TileCount > 4096)
+            JxrHeaders container = profile.Headers;
+            if (container.ContainerKind != JxrContainerKind.TiffLike ||
+                container.Main.Width != image.Width ||
+                container.Main.Height != image.Height ||
+                container.ContainerWidth != image.Width ||
+                container.ContainerHeight != image.Height ||
+                container.HorizontalDpi <= 0 || container.VerticalDpi <= 0 ||
+                container.HasPlanarAlpha != profile.HasPlanarAlpha)
                 return JxrError.UnsupportedFeature;
 
             JxrPixelFormat expectedFormat;
             Guid pixelFormatGuid;
-            if (!TryGetPixelFormat(headers.PixelFormatGuid, out expectedFormat,
+            if (!TryGetPixelFormat(container.PixelFormatGuid, out expectedFormat,
                 out pixelFormatGuid) || image.Format != expectedFormat)
                 return JxrError.UnsupportedFeature;
-            if (headers.ContainerWidth != image.Width ||
-                headers.ContainerHeight != image.Height ||
-                headers.HorizontalDpi <= 0 || headers.VerticalDpi <= 0)
+
+            JxrProfileEncodingSettings colorSettings;
+            JxrError error = CreatePlaneSettings(profile.ColorPlane,
+                container, false, out colorSettings);
+            if (error != JxrError.None) return error;
+            colorSettings.PixelFormatGuid = pixelFormatGuid;
+            colorSettings.ColorContainerPixelFormatGuid = profile.HasPlanarAlpha ?
+                new Guid("6fddc324-4e03-4bfe-b185-3d77768dc90c") : pixelFormatGuid;
+            colorSettings.HorizontalDpi = container.HorizontalDpi;
+            colorSettings.VerticalDpi = container.VerticalDpi;
+            colorSettings.AlphaRangeInterpretation =
+                container.AlphaRangeInterpretation;
+
+            if (profile.HasPlanarAlpha)
+            {
+                if (image.Format != JxrPixelFormat.Bgra32 &&
+                    image.Format != JxrPixelFormat.Pbgra32 ||
+                    profile.AlphaPlane.Headers.Main.Width != image.Width ||
+                    profile.AlphaPlane.Headers.Main.Height != image.Height)
+                    return JxrError.UnsupportedFeature;
+                JxrProfileEncodingSettings alphaSettings;
+                error = CreatePlaneSettings(profile.AlphaPlane,
+                    profile.AlphaPlane.Headers, true, out alphaSettings);
+                if (error != JxrError.None) return error;
+                colorSettings.Alpha = alphaSettings;
+            }
+            else if (image.Format != JxrPixelFormat.Bgr24 &&
+                image.Format != JxrPixelFormat.Rgb24)
                 return JxrError.UnsupportedFeature;
 
-            byte[] dc = ReadIndices(quantizers, 0, 3);
-            byte[] lp = ReadIndices(quantizers, 1, 3);
-            byte[] hp = ReadIndices(quantizers, 2, 3);
-            if (dc == null || lp == null || hp == null ||
-                !HasSupportedTileQuantizers(profile.ColorPlane))
+            settings = colorSettings;
+            return JxrError.None;
+        }
+
+        private static JxrError CreatePlaneSettings(
+            JxrSourcePlaneProfile profilePlane, JxrHeaders headers,
+            bool grayPlane, out JxrProfileEncodingSettings settings)
+        {
+            settings = null;
+            if (profilePlane == null || headers == null ||
+                !profilePlane.SyntaxComplete ||
+                !profilePlane.MacroblockQuantizerMapComplete)
+                return JxrError.UnsupportedFeature;
+
+            JxrMainHeader main = headers.Main;
+            JxrImagePlaneHeader plane = headers.Plane;
+            JxrImagePlaneQuantizerHeader quantizers = headers.Quantizers;
+            int expectedSourceFormat = grayPlane ? 0 : 7;
+            int expectedPlaneFormat = grayPlane ? 0 :
+                (int)JxrChromaSubsampling.Yuv444;
+            int expectedChannels = grayPlane ? 1 : 3;
+            int expectedQuantizerMode = grayPlane ? 0 : 2;
+            if (main.Version != 1 || (main.Subversion != 0 && main.Subversion != 1) ||
+                main.BitstreamFormat != (int)JxrBitstreamLayout.Frequency ||
+                main.HasHardTileBoundaries || !main.HasIndexTable ||
+                main.HasAlpha || main.Orientation != 0 || main.RedBlueSwapped ||
+                main.Overlap < 0 || main.Overlap > 1 || main.TrimFlexbits ||
+                main.SourceColorFormat != expectedSourceFormat ||
+                main.SourceBitDepth != 1 || main.CodedBitDepth != 1 ||
+                plane.ColorFormat != expectedPlaneFormat ||
+                plane.ChannelCount != expectedChannels ||
+                plane.Subband != (int)JxrGraySubbandMode.All ||
+                plane.HasChromaCenteringX || plane.HasChromaCenteringY ||
+                plane.HasSampleConversion || !quantizers.HasDc ||
+                !quantizers.HasLowpass || !quantizers.HasHighpass ||
+                quantizers.DcMode != expectedQuantizerMode ||
+                quantizers.LowpassMode != expectedQuantizerMode ||
+                quantizers.HighpassMode != expectedQuantizerMode ||
+                profilePlane.TileCount < 1 || profilePlane.TileCount > 4096)
+                return JxrError.UnsupportedFeature;
+
+            byte[] dc = ReadIndices(quantizers, 0, expectedChannels);
+            byte[] lp = ReadIndices(quantizers, 1, expectedChannels);
+            byte[] hp = ReadIndices(quantizers, 2, expectedChannels);
+            if (!HasSupportedTileQuantizers(profilePlane))
                 return JxrError.UnsupportedFeature;
 
             int columns = main.VerticalSliceCountMinusOne + 1;
             int rows = main.HorizontalSliceCountMinusOne + 1;
-            if ((long)columns * rows != profile.ColorPlane.TileCount)
+            if ((long)columns * rows != profilePlane.TileCount)
                 return JxrError.InvalidBitstream;
             int[] columnWidths = new int[columns];
             int[] rowHeights = new int[rows];
-            int totalColumns = (image.Width + 15) / 16;
-            int totalRows = (image.Height + 15) / 16;
+            int totalColumns = ((int)main.Width + 15) / 16;
+            int totalRows = ((int)main.Height + 15) / 16;
             for (int column = 0; column < columns; column++)
             {
                 int end = column + 1 < columns ? main.GetTileX(column + 1) :
@@ -101,12 +156,12 @@ namespace Jxr.Managed.Core
             }
             JxrTileLayout layout = new JxrTileLayout(columnWidths, rowHeights);
             JxrTileGeometry geometry;
-            if (JxrTileGeometry.Create(image.Width, image.Height, layout,
-                out geometry) != JxrError.None)
+            if (JxrTileGeometry.Create((int)main.Width, (int)main.Height,
+                layout, out geometry) != JxrError.None)
                 return JxrError.InvalidBitstream;
 
             bool progressive;
-            JxrError orderError = DetectProgressiveOrder(profile.ColorPlane,
+            JxrError orderError = DetectProgressiveOrder(profilePlane,
                 out progressive);
             if (orderError != JxrError.None) return orderError;
 
@@ -122,9 +177,7 @@ namespace Jxr.Managed.Core
             settings.Subversion = main.Subversion;
             settings.Progressive = progressive;
             settings.TileLayout = layout;
-            settings.PixelFormatGuid = pixelFormatGuid;
-            settings.HorizontalDpi = headers.HorizontalDpi;
-            settings.VerticalDpi = headers.VerticalDpi;
+            settings.GrayPlane = grayPlane;
             return JxrError.None;
         }
 
@@ -236,6 +289,10 @@ namespace Jxr.Managed.Core
             { format = JxrPixelFormat.Bgr24; return true; }
             if (guid == new Guid("6fddc324-4e03-4bfe-b185-3d77768dc90d"))
             { format = JxrPixelFormat.Rgb24; return true; }
+            if (guid == new Guid("6fddc324-4e03-4bfe-b185-3d77768dc90f"))
+            { format = JxrPixelFormat.Bgra32; return true; }
+            if (guid == new Guid("6fddc324-4e03-4bfe-b185-3d77768dc910"))
+            { format = JxrPixelFormat.Pbgra32; return true; }
             return false;
         }
     }

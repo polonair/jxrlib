@@ -155,8 +155,47 @@ python .\tools\pptx-jxr-corpus\corpus.py `
 
 This gate requires all 82 inputs to be selected, C and managed readers to
 agree with current profile metadata, zero decode/native errors, zero unmatched
-independent references, and no changed or new pixel mismatch. It does not
-imply re-encoding planar alpha or support for interleaved alpha.
+independent references, and no changed or new pixel mismatch. This is a
+decode-only gate; the separate encode gate follows.
+
+Profile-guided re-encoding of frequency/planar-alpha inputs is exercised
+separately with `--encode-profile-round-trip`. It feeds C-decoded color and
+alpha pixels to the managed encoder, then checks both output plane profiles,
+the output's C-decoder acceptance, color drift (MAE <= 8 and max delta <= 96),
+and exact alpha preservation (the corpus alpha QP is 0):
+
+```powershell
+python .\tools\pptx-jxr-corpus\corpus.py `
+  --root 'D:\ASPOSE\SLIDESNET\TestData' `
+  --report-dir 'D:\JxrReports\TestData' `
+  --native-decoder '.\jxrencoderdecoder\Release\JXRDecApp\x64\JXRDecApp.exe' `
+  --managed-runner '.\managed\Jxr.Managed.CorpusRunner\bin\Release\Jxr.Managed.CorpusRunner.exe' `
+  --suite all --profile-filter frequency-planar-alpha --encode-profile-round-trip `
+  --corpus-manifest '.\tools\pptx-jxr-corpus\corpus-manifest.jsonl' `
+  --independent-reference-manifest '.\tools\pptx-jxr-corpus\independent-pbgra-references.jsonl' `
+  --output 'D:\JxrReports\TestData\frequency-planar-alpha-reencode.json'
+```
+
+This covers the 80 straight-BGRA and two premultiplied-BGRA profiles. For the
+two PBGRA assets, the legacy C decoder is invoked on a temporary byte-identical
+copy with only the TIFF-like pixel-format GUID value changed to BGRA; independent
+references pin the source pixels and prevent this compatibility workaround
+from silently changing PBGRA interpretation. Alpha mismatches are never
+allowlisted by the decoder baseline. In particular, an encode round-trip that
+does not preserve alpha exactly remains a visible quality mismatch even when
+the same asset is in the legacy decoder mismatch set.
+
+On the 2026-10-05 corpus run, all **82/82** output streams retained their
+semantic profile and were accepted by the native C decoder, including both
+PBGRA inputs. Color stayed within the quality gate for every file. Exact alpha
+round-trip passed for **70/82**; the 12 remaining quality mismatches all use
+`codestream_subversion=0`, `OL_ONE`, including 11 inputs already known to
+exercise the legacy overlap path. The same alpha deltas are present when the
+managed decoder reads those re-encoded outputs, so this is not limited to the
+native decoder. They remain strict quality failures, not waived results, and
+are tracked for the follow-up legacy-overlap compatibility work. Full JSON
+measurements are written outside the repository at
+`D:\JxrReports\TestData\frequency-planar-alpha-reencode-2026-10-05-final.json`.
 
 For a single extracted JXR, the managed bridge can also capture decoder state
 for one macroblock without changing the normal decode path:

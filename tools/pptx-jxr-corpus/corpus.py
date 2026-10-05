@@ -10,6 +10,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import uuid
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -350,10 +351,16 @@ def native_pixels(decoder: Path, jxr_path: Path, work: Path,
 
 
 def native_color_and_alpha(decoder: Path, jxr_path: Path,
-                           work: Path) -> tuple[tuple[int, int, int, bytes],
-                                                tuple[int, int, int, bytes]]:
+                           work: Path, normalize_pbgra: bool = False
+                           ) -> tuple[tuple[int, int, int, bytes],
+                                      tuple[int, int, int, bytes]]:
+    decode_path = jxr_path
+    if normalize_pbgra:
+        normalized = normalize_pbgra_container_as_bgra(jxr_path.read_bytes())
+        decode_path = work / "normalized-pbgra-as-bgra.jxr"
+        decode_path.write_bytes(normalized)
     bmp_path = work / "native-bgra.bmp"
-    command = [str(decoder), "-i", str(jxr_path), "-o", str(bmp_path),
+    command = [str(decoder), "-i", str(decode_path), "-o", str(bmp_path),
                "-c", "22", "-a", "2", "-p", "0"]
     code, output = run_process(command, decoder.parent)
     if code != 0 or not bmp_path.is_file():
@@ -370,6 +377,39 @@ def native_color_and_alpha(decoder: Path, jxr_path: Path,
         alpha[pixel] = bgra[bgra_offset + 3]
     return ((width, height, 3, bytes(color)),
             (width, height, 1, bytes(alpha)))
+
+
+def normalize_pbgra_container_as_bgra(data: bytes) -> bytes:
+    """Change only the outer GUID for C decoders that reject the PBGRA GUID."""
+    if len(data) < 10 or data[:2] not in (b"II", b"MM"):
+        raise ValueError("PBGRA container has no TIFF-like header")
+    little = data[:2] == b"II"
+    endian = "<" if little else ">"
+    if struct.unpack_from(endian + "H", data, 2)[0] != 0x01BC:
+        raise ValueError("PBGRA container has an unexpected TIFF-like signature")
+    directory = struct.unpack_from(endian + "I", data, 4)[0]
+    if directory > len(data) - 2:
+        raise ValueError("PBGRA container directory offset is out of bounds")
+    entry_count = struct.unpack_from(endian + "H", data, directory)[0]
+    if directory + 2 + entry_count * 12 > len(data):
+        raise ValueError("PBGRA container directory is truncated")
+    guid_offset = None
+    for index in range(entry_count):
+        entry = directory + 2 + index * 12
+        tag, value_type = struct.unpack_from(endian + "HH", data, entry)
+        count = struct.unpack_from(endian + "I", data, entry + 4)[0]
+        if tag != 0xBC01:
+            continue
+        if value_type != 1 or count != 16:
+            raise ValueError("PBGRA container pixel-format tag is malformed")
+        guid_offset = struct.unpack_from(endian + "I", data, entry + 8)[0]
+        break
+    if guid_offset is None or guid_offset > len(data) - 16:
+        raise ValueError("PBGRA container pixel-format GUID is missing or truncated")
+    normalized = bytearray(data)
+    normalized[guid_offset:guid_offset + 16] = uuid.UUID(
+        "6fddc324-4e03-4bfe-b185-3d77768dc90f").bytes_le
+    return bytes(normalized)
 
 
 def managed_pixels(runner: Path, jxr_path: Path, work: Path,
@@ -600,6 +640,147 @@ def managed_profile_reencode(runner: Path, decoder: Path, source_path: Path,
             "profile_differences": [], "quality": metrics}
 
 
+def plane_semantic_signature(plane: dict[str, Any]) -> tuple[Any, ...]:
+    """Fields that must survive re-encoding; packet offsets/lengths may move."""
+    fields = ("width", "height", "version", "subversion", "bitstream_format",
+              "orientation", "overlap", "coded_bit_depth",
+              "source_color_format", "source_bit_depth", "trim_flexbits",
+              "red_blue_swapped", "has_alpha", "hard_tiles", "index_table",
+              "extra_top", "extra_left", "extra_bottom", "extra_right",
+              "tile_columns", "tile_rows", "tile_column_boundaries",
+              "tile_row_boundaries", "plane_color_format", "channel_count",
+              "scaled_arithmetic", "subbands", "chroma_centering_x",
+              "chroma_centering_y", "sample_conversion", "mantissa_or_shift",
+              "exponent_bias")
+    frame = plane.get("frame_quantizers") or {}
+    frame_signature = (frame.get("mode"), tuple(
+        (band, (frame.get(band) or {}).get("present"),
+         (frame.get(band) or {}).get("channel_mode"),
+         tuple((frame.get(band) or {}).get("indices", [])))
+        for band in ("dc", "lp", "hp")))
+    tiles = []
+    for tile in plane.get("tiles", []):
+        packets = tuple((packet.get("type"), packet.get("tile_id"))
+                        for packet in tile.get("packets", []))
+        tiles.append((tile.get("row"), tile.get("column"), tile.get("id"),
+                      tile.get("trim_present"), tile.get("trim_flexbits"),
+                      json.dumps(tile.get("dc_quantizers"), sort_keys=True),
+                      json.dumps(tile.get("lp_quantizers"), sort_keys=True),
+                      json.dumps(tile.get("hp_quantizers"), sort_keys=True),
+                      packets))
+    return (tuple(plane.get(field) for field in fields), frame_signature,
+            tuple(tiles))
+
+
+def compare_reencoded_alpha_profile(source: dict[str, Any],
+                                    encoded: dict[str, Any]) -> list[str]:
+    differences = []
+    for field in ("container", "pixel_format_guid", "container_width",
+                  "container_height", "orientation_tag",
+                  "alpha_range_interpretation"):
+        if source.get(field) != encoded.get(field):
+            differences.append("%s: source=%r encoded=%r" %
+                               (field, source.get(field), encoded.get(field)))
+    for field in ("horizontal_dpi", "vertical_dpi"):
+        left, right = source.get(field), encoded.get(field)
+        if (not isinstance(left, (int, float)) or
+                not isinstance(right, (int, float)) or abs(left - right) > 0.01):
+            differences.append("%s: source=%r encoded=%r" % (field, left, right))
+    for name in ("color_plane", "alpha_plane"):
+        left, right = source.get(name), encoded.get(name)
+        if left is None or right is None or \
+                plane_semantic_signature(left) != plane_semantic_signature(right):
+            differences.append("%s semantic profile differs" % name)
+        elif not right.get("syntax_complete") or \
+                not right.get("macroblock_quantizer_map_complete"):
+            differences.append("%s packet profile is incomplete" % name)
+    return differences
+
+
+def managed_profile_reencode_alpha(runner: Path, decoder: Path,
+                                   source_path: Path,
+                                   source_profile: dict[str, Any],
+                                   source_managed_profile: dict[str, Any],
+                                   independent: dict[str, Any] | None,
+                                   work: Path) -> dict[str, Any]:
+    """Re-encode C-decoded BGRA/PBGRA and test both planar streams."""
+    guid = str(source_profile.get("pixel_format_guid", "")).lower()
+    if guid.endswith("c90f"):
+        pixel_format = "bgra"
+    elif guid.endswith("c910"):
+        pixel_format = "pbgra"
+    else:
+        raise ValueError("unsupported source pixel-format GUID for alpha profile re-encode")
+    normalize_pbgra = pixel_format == "pbgra"
+    source_color, source_alpha = native_color_and_alpha(decoder, source_path,
+                                                        work, normalize_pbgra)
+    width, height, color_channels, color_pixels = source_color
+    alpha_width, alpha_height, alpha_channels, alpha_pixels = source_alpha
+    if (width, height, color_channels, alpha_width, alpha_height, alpha_channels) != \
+            (source_profile.get("width"), source_profile.get("height"), 3,
+             source_profile.get("width"), source_profile.get("height"), 1):
+        raise ValueError("native planar-alpha decode dimensions are inconsistent")
+    packed = bytearray(width * height * 4)
+    for pixel in range(width * height):
+        target, color = pixel * 4, pixel * 3
+        packed[target:target + 3] = color_pixels[color:color + 3]
+        packed[target + 3] = alpha_pixels[pixel]
+    if pixel_format == "pbgra":
+        if independent is None:
+            raise ValueError("PBGRA source has no pinned independent reference")
+        if (independent.get("pixel_format") != "Pbgra32" or
+                independent.get("pixel_sha256") != digest(bytes(packed)) or
+                independent.get("width") != width or
+                independent.get("height") != height):
+            raise ValueError("C-decoded PBGRA pixels differ from independent reference")
+
+    raw_path = work / "profile-input-bgra.bin"
+    encoded_path = work / "profile-roundtrip-alpha.jxr"
+    raw_path.write_bytes(packed)
+    code, output = run_process([str(runner), "encode-profile",
+        str(source_path), pixel_format, str(raw_path), str(encoded_path)],
+        runner.parent)
+    if code != 0 or not encoded_path.is_file():
+        raise RuntimeError("planar-alpha profile encoder failed (%d): %s" %
+                           (code, output))
+    encoded_profile = managed_source_profile(runner, encoded_path, work)
+    differences = compare_reencoded_alpha_profile(source_managed_profile,
+                                                   encoded_profile)
+    if differences:
+        return {"status": "profile_mismatch", "profile_differences": differences,
+                "encoded_bytes": encoded_path.stat().st_size}
+    encoded_color, encoded_alpha = native_color_and_alpha(decoder, encoded_path,
+                                                           work, normalize_pbgra)
+    if (encoded_color[0], encoded_color[1], encoded_color[2],
+        encoded_alpha[0], encoded_alpha[1], encoded_alpha[2]) != \
+            (width, height, 3, width, height, 1):
+        return {"status": "native_decode_mismatch",
+                "encoded_bytes": encoded_path.stat().st_size,
+                "expected_dimensions": [width, height, 4]}
+    color_metrics = difference_metrics(color_pixels, encoded_color[3], 3)
+    color_metrics["mean_absolute_error"] = sum(
+        abs(left - right) for left, right in
+        zip(color_pixels, encoded_color[3])) / float(max(1, len(color_pixels)))
+    alpha_metrics = difference_metrics(alpha_pixels, encoded_alpha[3], 1)
+    alpha_equal = alpha_pixels == encoded_alpha[3]
+    managed_alpha = managed_pixels(runner, encoded_path, work, "alpha")
+    if (managed_alpha[0], managed_alpha[1], managed_alpha[2]) != \
+            (width, height, 1):
+        return {"status": "managed_decode_mismatch",
+                "encoded_bytes": encoded_path.stat().st_size,
+                "expected_dimensions": [width, height, 1]}
+    managed_alpha_equal = alpha_pixels == managed_alpha[3]
+    color_ok = color_metrics["mean_absolute_error"] <= 8.0 and \
+        color_metrics["maximum_component_delta"] <= 96
+    return {"status": "match" if color_ok and alpha_equal else "quality_mismatch",
+            "encoded_bytes": encoded_path.stat().st_size,
+            "profile_differences": [],
+            "quality": {"color": color_metrics,
+                        "alpha": alpha_metrics,
+                        "alpha_exact": alpha_equal,
+                        "managed_alpha_exact": managed_alpha_equal}}
+
+
 def packet_order(profile: dict[str, Any]) -> list[tuple[int, int, int]]:
     """Return physical DC/LP/HP order; empty flexbits packets are optional."""
     plane = profile.get("color_plane") or {}
@@ -674,7 +855,7 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--profile-only", action="store_true",
                         help="read source profiles without invoking either pixel decoder")
     parser.add_argument("--encode-profile-round-trip", action="store_true",
-                        help="re-encode C-decoded frequency/no-alpha assets with their source profile")
+                        help="re-encode C-decoded frequency assets with their source profile")
     parser.add_argument("--profile-manifest", type=Path,
                         help="write managed profile results as versioned JSONL")
     parser.add_argument("--diagnostic", action="store_true",
@@ -694,10 +875,12 @@ def main(argv: list[str] | None = None) -> int:
     output_path = (args.output or report_dir / "corpus-results.json").resolve()
     required_paths = [(root, "corpus root")]
     if args.encode_profile_round_trip and (args.suite != "all" or
-            args.profile_filter != "frequency-no-alpha" or args.profile_only or
+            args.profile_filter not in ("frequency-no-alpha",
+                                        "frequency-planar-alpha") or args.profile_only or
             args.manifest_only):
         print("--encode-profile-round-trip requires --suite all and "
-              "--profile-filter frequency-no-alpha", file=sys.stderr)
+              "--profile-filter frequency-no-alpha or frequency-planar-alpha",
+              file=sys.stderr)
         return 2
     if not args.manifest_only:
         if runner is None or (not args.profile_only and decoder is None):
@@ -895,8 +1078,19 @@ def main(argv: list[str] | None = None) -> int:
                                 if source_differences:
                                     raise ValueError("source profile differs from profiler: " +
                                         "; ".join(source_differences))
-                                outcome = managed_profile_reencode(runner,
-                                    decoder, jxr_path, profile, managed, work)
+                                if args.profile_filter == "frequency-planar-alpha":
+                                    outcome = managed_profile_reencode_alpha(
+                                        runner, decoder, jxr_path, profile,
+                                        managed,
+                                        independent_references.get(asset["sha256"]),
+                                        work)
+                                    if profile.get("pixel_format_guid", "").lower().endswith(
+                                            "c910"):
+                                        observed_independent_references.add(
+                                            asset["sha256"])
+                                else:
+                                    outcome = managed_profile_reencode(runner,
+                                        decoder, jxr_path, profile, managed, work)
                                 record.update(outcome)
                             except (OSError, RuntimeError, ValueError, KeyError) as error:
                                 record["status"] = "error"

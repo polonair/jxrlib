@@ -290,7 +290,8 @@ namespace Jxr.Managed.Core
                     return JxrContainerWriter.WriteRgb24(codestream,
                         width, height, profileSettings.HorizontalDpi,
                         profileSettings.VerticalDpi,
-                        profileSettings.PixelFormatGuid, out jxr);
+                        profileSettings.ColorContainerPixelFormatGuid,
+                        out jxr);
                 return JxrContainerWriter.WriteRgb24(codestream,
                     width, height, 96.012f, 96.012f, out jxr);
             }

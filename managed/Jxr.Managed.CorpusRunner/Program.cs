@@ -26,9 +26,11 @@ namespace Jxr.Managed.CorpusRunner
                     JxrPixelFormat format;
                     if (args[2] == "rgb") format = JxrPixelFormat.Rgb24;
                     else if (args[2] == "bgr") format = JxrPixelFormat.Bgr24;
+                    else if (args[2] == "bgra") format = JxrPixelFormat.Bgra32;
+                    else if (args[2] == "pbgra") format = JxrPixelFormat.Pbgra32;
                     else
                     {
-                        Console.Error.WriteLine("pixel format must be rgb or bgr");
+                        Console.Error.WriteLine("pixel format must be rgb, bgr, bgra or pbgra");
                         return 2;
                     }
                     if (profile.Headers.Main.Width > Int32.MaxValue ||
@@ -39,13 +41,15 @@ namespace Jxr.Managed.CorpusRunner
                     }
                     int width = (int)profile.Headers.Main.Width;
                     int height = (int)profile.Headers.Main.Height;
-                    if ((long)width * height * 3 != pixels.Length)
+                    int channels = format == JxrPixelFormat.Bgra32 ||
+                        format == JxrPixelFormat.Pbgra32 ? 4 : 3;
+                    if ((long)width * height * channels != pixels.Length)
                     {
                         Console.Error.WriteLine("pixel buffer length does not match source dimensions");
                         return 2;
                     }
                     JxrImage image = new JxrImage(width, height, format,
-                        pixels, width * 3);
+                        pixels, width * channels);
                     byte[] output;
                     error = JxrCodec.Encode(image, profile, out output);
                     if (error != JxrError.None)

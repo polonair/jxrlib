@@ -260,6 +260,76 @@ namespace Jxr.Managed.Core
         }
     }
 
+    internal static class JxrGrayProfileHeaderWriter
+    {
+    internal static JxrError WriteGrayProfileHeader(JxrBitWriter writer,
+        int width, int height, JxrProfileEncodingSettings profile)
+    {
+        if (writer == null || profile == null || !profile.GrayPlane ||
+            width < 1 || height < 1 || writer.BitCount != 0 ||
+            profile.DcIndices == null || profile.DcIndices.Length != 1 ||
+            profile.LowpassIndices == null || profile.LowpassIndices.Length != 1 ||
+            profile.HighpassIndices == null || profile.HighpassIndices.Length != 1 ||
+            profile.DcMode != 0 || profile.LowpassMode != 0 ||
+            profile.HighpassMode != 0 || profile.Subversion < 0 ||
+            profile.Subversion > 1 || profile.Overlap < 0 ||
+            profile.Overlap > 1 || profile.TileLayout == null)
+            return JxrError.InvalidArgument;
+        JxrTileGeometry tiles;
+        JxrError tileError = JxrTileGeometry.Create(width, height,
+            profile.TileLayout, out tiles);
+        if (tileError != JxrError.None) return tileError;
+        bool tiled = !tiles.IsSingleTile;
+        bool abbreviated = ((long)width + 15) / 16 <= 255 &&
+            ((long)height + 15) / 16 <= 255;
+        byte[] signature = { (byte)'W', (byte)'M', (byte)'P', (byte)'H',
+            (byte)'O', (byte)'T', (byte)'O', 0 };
+        for (int index = 0; index < signature.Length; index++)
+            writer.Write(signature[index], 8);
+        writer.Write(1, 4);
+        writer.Write((uint)profile.Subversion, 4);
+        writer.Write(tiled ? 1U : 0U, 1);
+        writer.Write(1, 1); // frequency layout
+        writer.Write(0, 3); // orientation
+        writer.Write(tiled ? 1U : 0U, 1);
+        writer.Write((uint)profile.Overlap, 2);
+        writer.Write(abbreviated ? 1U : 0U, 1);
+        writer.Write(1, 1); // short header
+        writer.Write(0, 1); // no windowing
+        writer.Write(0, 1); // no trim flexbits
+        writer.Write(0, 1); // no tile stretching
+        writer.Write(0, 2); // reserved and red/blue swap
+        writer.Write(0, 1); // no interleaved alpha
+        writer.Write(0, 4); // Y_ONLY source
+        writer.Write(1, 4); // 8-bit source
+        writer.Write((uint)(width - 1), abbreviated ? 16 : 32);
+        writer.Write((uint)(height - 1), abbreviated ? 16 : 32);
+        if (tiled)
+        {
+            writer.Write((uint)(tiles.Columns - 1), 12);
+            writer.Write((uint)(tiles.Rows - 1), 12);
+            int[] columnWidths = tiles.CopyColumnWidths();
+            int[] rowHeights = tiles.CopyRowHeights();
+            int tileSizeBits = abbreviated ? 8 : 16;
+            for (int index = 0; index < columnWidths.Length - 1; index++)
+                writer.Write((uint)columnWidths[index], tileSizeBits);
+            for (int index = 0; index < rowHeights.Length - 1; index++)
+                writer.Write((uint)rowHeights[index], tileSizeBits);
+        }
+        writer.AlignByte();
+        writer.Write(0, 3); // Y_ONLY plane
+        writer.Write(profile.ScaledArithmetic ? 1U : 0U, 1);
+        writer.Write((uint)JxrGraySubbandMode.All, 4);
+        writer.Write(1, 1); writer.Write(profile.DcIndices[0], 8);
+        writer.Write(0, 1); writer.Write(1, 1);
+        writer.Write(profile.LowpassIndices[0], 8);
+        writer.Write(0, 1); writer.Write(1, 1);
+        writer.Write(profile.HighpassIndices[0], 8);
+        writer.AlignByte();
+        return JxrError.None;
+    }
+    }
+
     public static class JxrPacketWriter
     {
         public static JxrError WriteHeader(JxrBitWriter writer,

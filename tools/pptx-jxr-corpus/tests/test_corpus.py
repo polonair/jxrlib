@@ -2,6 +2,7 @@ import struct
 import sys
 import tempfile
 import unittest
+import uuid
 import hashlib
 import json
 import zipfile
@@ -75,6 +76,25 @@ class CorpusUtilityTests(unittest.TestCase):
         selected = corpus.filter_assets(selected_assets,
                                         "frequency-planar-alpha")
         self.assertEqual(["a"], [item["sha256"] for item in selected])
+
+    def test_pbgra_c_decoder_normalization_changes_only_guid(self):
+        source = bytearray(64)
+        source[:8] = b"II\xbc\x01\x08\x00\x00\x00"
+        struct.pack_into("<H", source, 8, 1)
+        struct.pack_into("<HHI", source, 10, 0xBC01, 1, 16)
+        struct.pack_into("<I", source, 18, 32)
+        source[32:48] = uuid.UUID(
+            "6fddc324-4e03-4bfe-b185-3d77768dc910").bytes_le
+        source = bytes(source)
+        normalized = corpus.normalize_pbgra_container_as_bgra(source)
+        self.assertEqual(source[:32], normalized[:32])
+        self.assertNotEqual(source[32:48], normalized[32:48])
+        self.assertEqual(source[48:], normalized[48:])
+        self.assertEqual(uuid.UUID(
+            "6fddc324-4e03-4bfe-b185-3d77768dc90f").bytes_le,
+            normalized[32:48])
+        with self.assertRaises(ValueError):
+            corpus.normalize_pbgra_container_as_bgra(bytes(23))
 
     def test_profile_comparison_can_ignore_reencoded_container_lengths(self):
         reference = {"container": "tiff_like_jxr",
