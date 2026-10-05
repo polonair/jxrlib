@@ -93,7 +93,8 @@ namespace Jxr.Managed.Core
                 options.OutputFormat != JxrPixelFormat.Rgb24 &&
                 options.OutputFormat != JxrPixelFormat.Bgr24 &&
                 options.OutputFormat != JxrPixelFormat.Rgba32 &&
-                options.OutputFormat != JxrPixelFormat.Bgra32)
+                options.OutputFormat != JxrPixelFormat.Bgra32 &&
+                options.OutputFormat != JxrPixelFormat.Pbgra32)
                 return JxrError.InvalidArgument;
             if (options.AlphaMode != JxrAlphaDecodeMode.ColorOnly &&
                 options.AlphaMode != JxrAlphaDecodeMode.AlphaOnly &&
@@ -113,18 +114,21 @@ namespace Jxr.Managed.Core
                 if (options.AlphaMode == JxrAlphaDecodeMode.ColorAndAlpha)
                 {
                     if (options.OutputFormat != JxrPixelFormat.Rgba32 &&
-                        options.OutputFormat != JxrPixelFormat.Bgra32)
+                        options.OutputFormat != JxrPixelFormat.Bgra32 &&
+                        options.OutputFormat != JxrPixelFormat.Pbgra32)
                         return JxrError.InvalidArgument;
                     return DecodePlanarRgba(jxr, headers,
-                        options.OutputFormat == JxrPixelFormat.Rgba32, out image);
+                        options.OutputFormat, out image);
                 }
                 if (options.OutputFormat == JxrPixelFormat.Rgba32 ||
-                    options.OutputFormat == JxrPixelFormat.Bgra32)
+                    options.OutputFormat == JxrPixelFormat.Bgra32 ||
+                    options.OutputFormat == JxrPixelFormat.Pbgra32)
                     return JxrError.InvalidArgument;
             }
             else if (options.AlphaMode == JxrAlphaDecodeMode.AlphaOnly ||
                 options.OutputFormat == JxrPixelFormat.Rgba32 ||
-                options.OutputFormat == JxrPixelFormat.Bgra32)
+                options.OutputFormat == JxrPixelFormat.Bgra32 ||
+                options.OutputFormat == JxrPixelFormat.Pbgra32)
                 return JxrError.UnsupportedFeature;
             if (options.OutputFormat == JxrPixelFormat.Rgb24 ||
                 options.OutputFormat == JxrPixelFormat.Bgr24)
@@ -254,9 +258,15 @@ namespace Jxr.Managed.Core
         }
 
         private static JxrError DecodePlanarRgba(byte[] source,
-            JxrHeaders headers, bool rgba, out JxrImage image)
+            JxrHeaders headers, JxrPixelFormat outputFormat,
+            out JxrImage image)
         {
             image = null;
+            bool outputRgba = outputFormat == JxrPixelFormat.Rgba32;
+            bool outputPremultiplied = outputFormat == JxrPixelFormat.Pbgra32;
+            bool sourcePremultiplied = String.Equals(headers.PixelFormatGuid,
+                "6fddc324-4e03-4bfe-b185-3d77768dc910",
+                StringComparison.OrdinalIgnoreCase);
             byte[] colorPixels, alphaPixels;
             int width, height, alphaWidth, alphaHeight;
             JxrError error = JxrMinimalDecoder.DecodeRgbPixels(source,
@@ -274,23 +284,50 @@ namespace Jxr.Managed.Core
             for (int index = 0; index < width * height; index++)
             {
                 int sourceColor = index * 3, target = index * 4;
-                if (rgba)
+                byte red = colorPixels[sourceColor];
+                byte green = colorPixels[sourceColor + 1];
+                byte blue = colorPixels[sourceColor + 2];
+                byte alpha = alphaPixels[index];
+                if (outputPremultiplied && !sourcePremultiplied)
                 {
-                    pixels[target] = colorPixels[sourceColor];
-                    pixels[target + 1] = colorPixels[sourceColor + 1];
-                    pixels[target + 2] = colorPixels[sourceColor + 2];
+                    red = Premultiply(red, alpha);
+                    green = Premultiply(green, alpha);
+                    blue = Premultiply(blue, alpha);
+                }
+                else if (!outputPremultiplied && sourcePremultiplied)
+                {
+                    red = Unpremultiply(red, alpha);
+                    green = Unpremultiply(green, alpha);
+                    blue = Unpremultiply(blue, alpha);
+                }
+                if (outputRgba)
+                {
+                    pixels[target] = red;
+                    pixels[target + 1] = green;
+                    pixels[target + 2] = blue;
                 }
                 else
                 {
-                    pixels[target] = colorPixels[sourceColor + 2];
-                    pixels[target + 1] = colorPixels[sourceColor + 1];
-                    pixels[target + 2] = colorPixels[sourceColor];
+                    pixels[target] = blue;
+                    pixels[target + 1] = green;
+                    pixels[target + 2] = red;
                 }
-                pixels[target + 3] = alphaPixels[index];
+                pixels[target + 3] = alpha;
             }
-            JxrPixelFormat format = rgba ? JxrPixelFormat.Rgba32 : JxrPixelFormat.Bgra32;
-            image = new JxrImage(width, height, format, pixels, width * 4);
+            image = new JxrImage(width, height, outputFormat, pixels, width * 4);
             return JxrError.None;
+        }
+
+        private static byte Premultiply(byte component, byte alpha)
+        {
+            return (byte)((component * alpha + 127) / 255);
+        }
+
+        private static byte Unpremultiply(byte component, byte alpha)
+        {
+            if (alpha == 0) return 0;
+            int value = (component * 255 + alpha / 2) / alpha;
+            return (byte)(value > 255 ? 255 : value);
         }
 
         // Stream overloads buffer one complete JXR in this first integration.

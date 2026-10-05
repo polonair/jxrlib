@@ -78,12 +78,12 @@ spatial images and planar-alpha files, add
 `bitstream_layout == "frequency"` and `alpha_mode == "none"`; the older
 `has_alpha` profile bit alone does not distinguish planar-alpha assets.
 
-The 2026-10-02 frequency/no-alpha corpus check is currently **95/128
-pixel-identical**. The other 33 unique images are pre-existing differences in
-the legacy `codestream_subversion=0`, `OL_ONE` branch; they are recorded by
-input SHA-256 in `known-mismatches-frequency-no-alpha.jsonl`. This is a known
-compatibility gap, not a completed decoder mode. Run the strict baseline gate
-with:
+The frequency/no-alpha corpus check is currently **95/128 pixel-identical**.
+The other 33 unique images are differences in the legacy
+`codestream_subversion=0`, `OL_ONE` branch; they are recorded by input SHA-256
+and exact per-channel pixel hashes/metrics in
+`known-mismatches-frequency-no-alpha.jsonl`. This is a known compatibility gap,
+not a completed decoder mode. Run the strict baseline gate with:
 
 ```powershell
 python .\tools\pptx-jxr-corpus\corpus.py `
@@ -93,7 +93,6 @@ python .\tools\pptx-jxr-corpus\corpus.py `
   --managed-runner '.\managed\Jxr.Managed.CorpusRunner\bin\Release\Jxr.Managed.CorpusRunner.exe' `
   --suite all --profile-filter frequency-no-alpha `
   --corpus-manifest '.\tools\pptx-jxr-corpus\corpus-manifest.jsonl' `
-  --corpus-manifest-content-only `
   --known-mismatches '.\tools\pptx-jxr-corpus\known-mismatches-frequency-no-alpha.jsonl'
 ```
 
@@ -101,12 +100,43 @@ The report retains `pixel_mismatch` for these assets and marks only the
 allowlisted rows with `known_mismatch`. A new mismatch, decode error, changed
 profile, or changed corpus inventory fails the gate. A formerly mismatching
 asset becoming pixel-identical is allowed and counted as resolved; remove its
-SHA from the allowlist once the fix is reviewed. The committed corpus index
-predates a profiler metadata correction, so this command compares input SHA,
-locations and parse status but not the profiler's derived profile fields;
-the 33 allowed mismatches still require their pinned profile fields. Do not
-use this baseline to claim full parity or to suppress failures in unrelated
-profiles.
+SHA from the allowlist once the fix is reviewed. The allowlist is specific to
+this profile and must not suppress failures in unrelated profiles.
+
+Frequency-coded planar-alpha files can be checked separately. The refreshed
+corpus scan found 83 planar-alpha assets in total; 82 belong to the frequency
+family (one spatial-alpha profile remains outside this step). Current alpha
+range tags in all 83 use `byte_count`; the corpus index is refreshed to retain
+the corrected interpretation. The frequency/planar-alpha gate decodes color
+and alpha channels against C, and checks two `Pbgra32` (`.c910`) assets against
+independent references. One C reference is produced from the byte-identical
+stream after changing only its pixel-format GUID to straight BGRA; this
+test-only normalization is valid because every alpha sample in that asset is
+255. Windows Imaging Component also decodes it independently. The second
+`.c910` asset matches both C (after GUID normalization) and WIC exactly.
+
+The current frequency/planar-alpha baseline is **71/82 pixel-identical**; the
+other 11 exact inputs are pinned with per-channel digests and mismatch metrics
+in `known-mismatches-frequency-planar-alpha.jsonl`. All 11 mismatches are in
+`codestream_subversion=0`, `OL_ONE`. They remain visible as mismatches; only
+these exact pinned cases are accepted by the strict gate:
+
+```powershell
+python .\tools\pptx-jxr-corpus\corpus.py `
+  --root 'D:\ASPOSE\SLIDESNET\TestData' `
+  --report-dir 'D:\JxrReports\TestData' `
+  --native-decoder '.\jxrencoderdecoder\Release\JXRDecApp\x64\JXRDecApp.exe' `
+  --managed-runner '.\managed\Jxr.Managed.CorpusRunner\bin\Release\Jxr.Managed.CorpusRunner.exe' `
+  --suite all --profile-filter frequency-planar-alpha `
+  --corpus-manifest '.\tools\pptx-jxr-corpus\corpus-manifest.jsonl' `
+  --independent-reference-manifest '.\tools\pptx-jxr-corpus\independent-pbgra-references.jsonl' `
+  --known-mismatches '.\tools\pptx-jxr-corpus\known-mismatches-frequency-planar-alpha.jsonl'
+```
+
+This gate requires all 82 inputs to be selected, C and managed readers to
+agree with current profile metadata, zero decode/native errors, zero unmatched
+independent references, and no changed or new pixel mismatch. It does not
+imply re-encoding planar alpha or support for interleaved alpha.
 
 For a single extracted JXR, the managed bridge can also capture decoder state
 for one macroblock without changing the normal decode path:
@@ -177,8 +207,9 @@ python -m unittest discover -s tools/pptx-jxr-corpus/tests -v
 ```
 
 The tests cover profile representative selection, BMP orientation/padding and
-palette normalization, and mismatch localization. The full corpus run is an
-integration test and requires the external PPTX root plus both decoders.
+palette normalization, mismatch localization and metrics, independent PBGRA
+reference validation, and a native/managed fixture run. The full corpus run is
+an integration test and requires the external PPTX root plus both decoders.
 
 `baseline-summary.json` records the first full run; `corpus-manifest.jsonl`
 indexes all unique inputs and `reference-manifest.jsonl` stores native pixel

@@ -57,6 +57,10 @@ def filter_assets(assets: list[dict[str, Any]], profile_filter: str | None
         return [asset for asset in assets
                 if asset.get("profile", {}).get("bitstream_layout") == "frequency"
                 and asset.get("profile", {}).get("alpha_mode") == "none"]
+    if profile_filter == "frequency-planar-alpha":
+        return [asset for asset in assets
+                if asset.get("profile", {}).get("bitstream_layout") == "frequency"
+                and asset.get("profile", {}).get("alpha_mode") == "planar"]
     raise ValueError("unsupported profile filter: " + str(profile_filter))
 
 
@@ -122,6 +126,34 @@ def first_difference(expected: bytes, actual: bytes, width: int,
                     "channel": offset % channels,
                     "expected": left, "actual": right}
     return None
+
+
+def difference_metrics(expected: bytes, actual: bytes, channels: int
+                       ) -> dict[str, int]:
+    """Count differing pixels/components and record the largest channel delta."""
+    if len(expected) != len(actual):
+        return {"mismatch_pixels": -1, "mismatch_components": -1,
+                "maximum_component_delta": -1}
+    mismatch_pixels = 0
+    mismatch_components = 0
+    maximum_component_delta = 0
+    for offset, (left, right) in enumerate(zip(expected, actual)):
+        if left != right:
+            mismatch_components += 1
+            maximum_component_delta = max(maximum_component_delta,
+                                          abs(left - right))
+            if offset % channels == 0:
+                # Count a pixel only once even when several channels differ.
+                mismatch_pixels += 1
+            else:
+                pixel_start = offset - offset % channels
+                pixel_changed_before = any(expected[index] != actual[index]
+                    for index in range(pixel_start, offset))
+                if not pixel_changed_before:
+                    mismatch_pixels += 1
+    return {"mismatch_pixels": mismatch_pixels,
+            "mismatch_components": mismatch_components,
+            "maximum_component_delta": maximum_component_delta}
 
 
 def load_assets(report_dir: Path) -> list[dict[str, Any]]:
@@ -218,7 +250,7 @@ def load_known_mismatches(path: Path) -> dict[str, dict[str, Any]]:
         if (not isinstance(sha, str) or len(sha) != 64 or
                 any(char not in "0123456789abcdef" for char in sha) or
                 row.get("bitstream_layout") != "frequency" or
-                row.get("alpha_mode") != "none" or
+                row.get("alpha_mode") not in ("none", "planar") or
                 row.get("codestream_subversion") != 0 or
                 row.get("overlap") != 1 or sha in known):
             raise ValueError("invalid or duplicate known mismatch at line %d" % line_number)
@@ -245,10 +277,44 @@ def classify_known_mismatches(results: list[dict[str, Any]],
                           "codestream_subversion", "overlap"):
                 if profile.get(field) != entry[field]:
                     raise ValueError("known mismatch profile drift: " + row["sha256"])
-            if row["status"] == "pixel_mismatch":
+            actual_channels = {channel["channel"]: channel
+                               for channel in row.get("channels", [])}
+            expected_channels = entry.get("channels")
+            if expected_channels is None:
+                if row["status"] == "pixel_mismatch":
+                    raise ValueError("known mismatch has no pinned channel metrics: " +
+                                     row["sha256"])
+                if row["status"] == "match":
+                    resolved += 1
+                continue
+            row_unresolved = False
+            for channel_name, actual in actual_channels.items():
+                expected = expected_channels.get(channel_name)
+                if actual["status"] == "match":
+                    continue
+                if actual["status"] != "pixel_mismatch" or expected is None:
+                    if actual["status"] == "pixel_mismatch":
+                        raise ValueError("new mismatch channel for known input: " +
+                                         row["sha256"] + "/" + channel_name)
+                    continue
+                actual_metrics = actual.get("difference_metrics") or {}
+                digest_fields = ("native_sha256", "managed_sha256")
+                metric_fields = ("mismatch_pixels", "mismatch_components",
+                                 "maximum_component_delta")
+                if (any(actual.get(field) != expected.get(field)
+                        for field in digest_fields) or
+                        any(actual_metrics.get(field) != expected.get(field)
+                            for field in metric_fields)):
+                    raise ValueError("known mismatch pixel baseline drift: " +
+                                     row["sha256"] + "/" + channel_name)
+                row_unresolved = True
+            if row["status"] == "pixel_mismatch" and not row_unresolved:
+                raise ValueError("known mismatch status has no pinned channel diff: " +
+                                 row["sha256"])
+            if row_unresolved:
                 row["known_mismatch"] = True
                 unresolved += 1
-            elif row["status"] == "match":
+            else:
                 resolved += 1
         elif row["status"] == "pixel_mismatch":
             unexpected += 1
@@ -322,7 +388,7 @@ def managed_pixels(runner: Path, jxr_path: Path, work: Path,
             metadata[key] = value
     width, height, stride = (int(metadata[key])
                              for key in ("width", "height", "stride"))
-    channels = 1 if channel == "alpha" else 3
+    channels = 1 if channel == "alpha" else (4 if channel == "pbgra" else 3)
     packed_stride = width * channels
     raw = raw_path.read_bytes()
     if width <= 0 or height <= 0 or stride < packed_stride or len(raw) != stride * height:
@@ -333,6 +399,39 @@ def managed_pixels(runner: Path, jxr_path: Path, work: Path,
         pixels = b"".join(raw[row * stride:row * stride + packed_stride]
                           for row in range(height))
     return width, height, channels, pixels
+
+
+def load_independent_references(path: Path) -> dict[str, dict[str, Any]]:
+    """Load independently decoded pixel digests for inputs without C output."""
+    result = {}
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        sha = row.get("sha256")
+        digest_value = row.get("pixel_sha256")
+        if (not isinstance(sha, str) or len(sha) != 64 or
+                any(char not in "0123456789abcdef" for char in sha) or
+                not isinstance(digest_value, str) or len(digest_value) != 64 or
+                row.get("pixel_format") != "Pbgra32" or
+                row.get("channels") != 4 or row.get("width", 0) <= 0 or
+                row.get("height", 0) <= 0 or not row.get("oracle") or
+                ("requires_opaque_alpha" in row and
+                 not isinstance(row.get("requires_opaque_alpha"), bool)) or
+                sha in result):
+            raise ValueError("invalid or duplicate independent reference at line %d" %
+                             line_number)
+        metrics = row.get("difference_metrics")
+        if (not isinstance(metrics, dict) or
+                any(not isinstance(metrics.get(key), int) or metrics[key] < 0
+                    for key in ("mismatch_pixels", "mismatch_components",
+                                "maximum_component_delta"))):
+            raise ValueError("independent reference has no pinned pixel metrics "
+                             "at line %d" % line_number)
+        result[sha] = row
+    if not result:
+        raise ValueError("independent reference manifest is empty")
+    return result
 
 
 def managed_source_profile(runner: Path, jxr_path: Path,
@@ -455,7 +554,8 @@ def make_parser() -> argparse.ArgumentParser:
                         help="JSON results path; defaults to report-dir/corpus-results.json")
     parser.add_argument("--suite", choices=("representatives", "all"),
                         default="representatives")
-    parser.add_argument("--profile-filter", choices=("frequency-no-alpha",),
+    parser.add_argument("--profile-filter", choices=("frequency-no-alpha",
+                        "frequency-planar-alpha"),
                         help="limit a suite to the named JXR profile family")
     parser.add_argument("--refresh-inventory", action="store_true",
                         help="run the profiler before loading its assets.jsonl")
@@ -471,6 +571,8 @@ def make_parser() -> argparse.ArgumentParser:
                         help="write native pixel digests for the selected suite")
     parser.add_argument("--reference-manifest", type=Path,
                         help="compare native output with a saved reference manifest")
+    parser.add_argument("--independent-reference-manifest", type=Path,
+                        help="compare PBGRA output with independent pixel digests")
     parser.add_argument("--profile-only", action="store_true",
                         help="read source profiles without invoking either pixel decoder")
     parser.add_argument("--profile-manifest", type=Path,
@@ -478,7 +580,7 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--diagnostic", action="store_true",
                         help="exit successfully when processing completes, even with managed mismatches")
     parser.add_argument("--known-mismatches", type=Path,
-                        help="exact SHA allowlist for legacy frequency/no-alpha pixel mismatches")
+                        help="exact SHA/profile/channel allowlist for known pixel mismatches")
     parser.add_argument("--max-entry-mb", type=int, default=512)
     return parser
 
@@ -511,11 +613,12 @@ def main(argv: list[str] | None = None) -> int:
               file=sys.stderr)
         return 2
     if args.known_mismatches and (args.suite != "all" or
-                                  args.profile_filter != "frequency-no-alpha" or
+                                  args.profile_filter not in
+                                  ("frequency-no-alpha", "frequency-planar-alpha") or
                                   args.profile_only or args.manifest_only or
                                   args.diagnostic or not args.corpus_manifest):
         print("--known-mismatches requires --suite all, "
-              "--profile-filter frequency-no-alpha and --corpus-manifest; "
+              "a supported frequency profile filter and --corpus-manifest; "
               "it cannot be combined with diagnostic/profile/manifest-only mode",
               file=sys.stderr)
         return 2
@@ -525,6 +628,16 @@ def main(argv: list[str] | None = None) -> int:
             known_mismatches = load_known_mismatches(args.known_mismatches.resolve())
         except (OSError, ValueError, json.JSONDecodeError) as error:
             print("Invalid known mismatch manifest: " + str(error), file=sys.stderr)
+            return 2
+
+    independent_references = {}
+    if args.independent_reference_manifest:
+        try:
+            independent_references = load_independent_references(
+                args.independent_reference_manifest.resolve())
+        except (OSError, ValueError, json.JSONDecodeError) as error:
+            print("Invalid independent reference manifest: " + str(error),
+                  file=sys.stderr)
             return 2
 
     if args.refresh_inventory:
@@ -574,6 +687,7 @@ def main(argv: list[str] | None = None) -> int:
     managed_profiles = []
     observed_reference_keys = set()
     reference_lookup = {}
+    observed_independent_references = set()
     if args.reference_manifest:
         try:
             with args.reference_manifest.open("r", encoding="utf-8") as stream:
@@ -659,6 +773,63 @@ def main(argv: list[str] | None = None) -> int:
                                 record["error"] = str(error)
                             results.append(record)
                             continue
+                        independent = independent_references.get(asset["sha256"])
+                        if independent is not None:
+                            expected_guid = profile.get("pixel_format_guid", "")
+                            if (profile.get("alpha_mode") != "planar" or
+                                    expected_guid.lower() !=
+                                    independent.get("pixel_format_guid", "").lower() or
+                                    independent.get("oracle") == ""):
+                                raise ValueError("independent reference does not match "
+                                                 "the source profile")
+                            observed_independent_references.add(asset["sha256"])
+                            raw_path = work / "independent-pbgra.bin"
+                            metadata_path = work / "independent-pbgra.txt"
+                            code, output = run_process([str(runner), "decode",
+                                str(jxr_path), "pbgra", str(raw_path),
+                                str(metadata_path)], runner.parent)
+                            if code != 0 or not raw_path.is_file() or \
+                                    not metadata_path.is_file():
+                                raise RuntimeError("managed PBGRA decode failed "
+                                                   "(%d): %s" % (code, output))
+                            metadata = {}
+                            for line in metadata_path.read_text(
+                                    encoding="utf-8-sig").splitlines():
+                                if "=" in line:
+                                    key, value = line.split("=", 1)
+                                    metadata[key] = value
+                            actual = raw_path.read_bytes()
+                            width = int(metadata.get("width", "0"))
+                            height = int(metadata.get("height", "0"))
+                            stride = int(metadata.get("stride", "0"))
+                            if (width != independent["width"] or
+                                    height != independent["height"] or
+                                    metadata.get("format") != "Pbgra32" or
+                                    stride != width * 4 or len(actual) != stride * height):
+                                raise ValueError("managed PBGRA image metadata differs "
+                                                 "from independent reference")
+                            if (independent.get("requires_opaque_alpha") and
+                                    any(actual[offset] != 255
+                                        for offset in range(3, len(actual), 4))):
+                                raise ValueError("PBGRA reference requires opaque alpha "
+                                                 "for its BGRA-normalized oracle")
+                            actual_digest = digest(actual)
+                            equal = actual_digest == independent["pixel_sha256"]
+                            metric_fields = ("mismatch_pixels", "mismatch_components",
+                                             "maximum_component_delta")
+                            metrics = ({key: 0 for key in metric_fields} if equal else
+                                       independent["difference_metrics"])
+                            record["channels"] = [{
+                                "channel": "pbgra", "status":
+                                    "match" if equal else "pixel_mismatch",
+                                "independent_oracle": independent["oracle"],
+                                "native_sha256": independent["pixel_sha256"],
+                                "managed_sha256": actual_digest,
+                                "difference_metrics": metrics,
+                            }]
+                            record["status"] = "match" if equal else "pixel_mismatch"
+                            results.append(record)
+                            continue
                         reference_data = native_reference(decoder, jxr, work,
                                                           channels)
                         channel_results = []
@@ -708,6 +879,12 @@ def main(argv: list[str] | None = None) -> int:
                                     else "pixel_mismatch")
                                 channel_result["managed_sha256"] = digest(actual)
                                 channel_result["difference"] = difference
+                                channel_result["difference_metrics"] = (
+                                    {"mismatch_pixels": 0,
+                                     "mismatch_components": 0,
+                                     "maximum_component_delta": 0}
+                                    if difference is None else
+                                    difference_metrics(ref["pixels"], actual, count))
                             except (OSError, RuntimeError, ValueError, KeyError) as error:
                                 channel_result["status"] = "managed_decode_error"
                                 channel_result["error"] = str(error)
@@ -828,6 +1005,9 @@ def main(argv: list[str] | None = None) -> int:
         "known_mismatch_manifest": (str(args.known_mismatches.resolve())
                                     if args.known_mismatches else None),
         "known_mismatch_counts": known_counts,
+        "independent_reference_assets": len(observed_independent_references),
+        "independent_reference_unmatched": len(
+            set(independent_references) - observed_independent_references),
         "reference_capture_complete": (args.record_reference is not None and
                                         not any(row["status"] == "error"
                                                 for row in results)),
@@ -858,6 +1038,8 @@ def main(argv: list[str] | None = None) -> int:
             known_counts["unexpected_mismatches"]))
     if (summary["assets_error"] or summary["reference_drift"] or
             summary["reference_missing"] or summary["reference_untracked"]):
+        return 1
+    if summary["independent_reference_unmatched"]:
         return 1
     if summary["corpus_manifest"] and any(summary["corpus_manifest"].values()):
         return 1

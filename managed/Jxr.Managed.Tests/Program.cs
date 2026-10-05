@@ -63,6 +63,7 @@ namespace Jxr.Managed.Tests
             new TestCase("gray_mixed_qp_options", TestGrayMixedQpOptions),
             new TestCase("public_pixel_api", TestPublicPixelApi),
             new TestCase("planar_alpha_native_fixtures", TestPlanarAlphaNativeFixtures),
+            new TestCase("pbgra_alpha_conversion_vectors", TestPbgraAlphaConversionVectors),
             new TestCase("public_stream_api", TestPublicStreamApi),
             new TestCase("image_pipeline_reference_vectors", TestImagePipelineReferenceVectors),
             new TestCase("image_pipeline_bitmap_fixtures", TestImagePipelineBitmapFixtures),
@@ -1135,6 +1136,101 @@ namespace Jxr.Managed.Tests
             JxrImage interleavedImage;
             return JxrCodec.Decode(interleaved, interleavedOptions,
                 out interleavedImage) != JxrError.None && interleavedImage == null;
+        }
+
+        private static bool TestPbgraAlphaConversionVectors()
+        {
+            const int width = 32, height = 32;
+            byte[] pixels = new byte[width * height * 4];
+            byte[] alphaValues = { 0, 1, 2, 32, 63, 64, 127, 128,
+                191, 200, 254, 255 };
+            for (int pixel = 0; pixel < width * height; pixel++)
+            {
+                int offset = pixel * 4;
+                byte alpha = alphaValues[pixel % alphaValues.Length];
+                pixels[offset] = (byte)(alpha / 3);
+                pixels[offset + 1] = (byte)(alpha / 2);
+                pixels[offset + 2] = alpha;
+                pixels[offset + 3] = alpha;
+            }
+            JxrImage input = new JxrImage(width, height,
+                JxrPixelFormat.Bgra32, pixels, width * 4);
+            JxrEncoderOptions encodeOptions = new JxrEncoderOptions();
+            encodeOptions.QualityIndex = 1;
+            encodeOptions.AlphaQualityIndex = 1;
+            encodeOptions.Layout = JxrBitstreamLayout.Frequency;
+            byte[] encoded;
+            if (JxrCodec.Encode(input, encodeOptions, out encoded) !=
+                JxrError.None) return false;
+            Guid oldGuid = new Guid("6fddc324-4e03-4bfe-b185-3d77768dc90f");
+            Guid pbgraGuid = new Guid("6fddc324-4e03-4bfe-b185-3d77768dc910");
+            byte[] sourceGuid = oldGuid.ToByteArray();
+            byte[] targetGuid = pbgraGuid.ToByteArray();
+            int guidOffset = FindBytes(encoded, sourceGuid);
+            if (guidOffset < 0 || FindBytes(encoded, sourceGuid, guidOffset + 1) >= 0)
+                return false;
+            Array.Copy(targetGuid, 0, encoded, guidOffset, targetGuid.Length);
+            JxrHeaders headers;
+            if (JxrHeaders.Read(encoded, out headers) != JxrError.None ||
+                !headers.HasPlanarAlpha ||
+                !String.Equals(headers.PixelFormatGuid, pbgraGuid.ToString(),
+                    StringComparison.OrdinalIgnoreCase)) return false;
+
+            JxrDecoderOptions options = new JxrDecoderOptions();
+            options.AlphaMode = JxrAlphaDecodeMode.ColorAndAlpha;
+            options.OutputFormat = JxrPixelFormat.Pbgra32;
+            JxrImage decoded;
+            if (JxrCodec.Decode(encoded, options, out decoded) != JxrError.None ||
+                decoded == null || decoded.Format != JxrPixelFormat.Pbgra32 ||
+                !EqualBytes(decoded.Pixels, pixels)) return false;
+
+            options.OutputFormat = JxrPixelFormat.Bgra32;
+            JxrImage straight;
+            if (JxrCodec.Decode(encoded, options, out straight) != JxrError.None ||
+                straight == null || straight.Format != JxrPixelFormat.Bgra32)
+                return false;
+            for (int pixel = 0; pixel < width * height; pixel++)
+            {
+                int offset = pixel * 4;
+                byte alpha = pixels[offset + 3];
+                for (int channel = 0; channel < 3; channel++)
+                {
+                    int expected = alpha == 0 ? 0 :
+                        (pixels[offset + channel] * 255 + alpha / 2) / alpha;
+                    if (expected > 255) expected = 255;
+                    if (straight.Pixels[offset + channel] != expected) return false;
+                }
+                if (straight.Pixels[offset + 3] != alpha) return false;
+            }
+
+            options.OutputFormat = JxrPixelFormat.Rgba32;
+            JxrImage rgba;
+            if (JxrCodec.Decode(encoded, options, out rgba) != JxrError.None ||
+                rgba == null || rgba.Format != JxrPixelFormat.Rgba32) return false;
+            for (int pixel = 0; pixel < width * height; pixel++)
+            {
+                int offset = pixel * 4;
+                if (rgba.Pixels[offset] != straight.Pixels[offset + 2] ||
+                    rgba.Pixels[offset + 1] != straight.Pixels[offset + 1] ||
+                    rgba.Pixels[offset + 2] != straight.Pixels[offset] ||
+                    rgba.Pixels[offset + 3] != straight.Pixels[offset + 3]) return false;
+            }
+            return true;
+        }
+
+        private static int FindBytes(byte[] data, byte[] value)
+        { return FindBytes(data, value, 0); }
+
+        private static int FindBytes(byte[] data, byte[] value, int start)
+        {
+            for (int index = start; index <= data.Length - value.Length; index++)
+            {
+                int item;
+                for (item = 0; item < value.Length; item++)
+                    if (data[index + item] != value[item]) break;
+                if (item == value.Length) return index;
+            }
+            return -1;
         }
 
         private static bool ReadBgra32(byte[] bitmap, out byte[] pixels,

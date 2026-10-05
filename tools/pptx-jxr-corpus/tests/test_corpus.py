@@ -63,6 +63,19 @@ class CorpusUtilityTests(unittest.TestCase):
                                         "frequency-no-alpha")
         self.assertEqual(["a"], [item["sha256"] for item in selected])
 
+    def test_frequency_planar_alpha_filter(self):
+        selected_assets = [
+            {"sha256": "a", "parse_status": "parsed", "profile": {
+                "bitstream_layout": "frequency", "alpha_mode": "planar"}},
+            {"sha256": "b", "parse_status": "parsed", "profile": {
+                "bitstream_layout": "frequency", "alpha_mode": "none"}},
+            {"sha256": "c", "parse_status": "parsed", "profile": {
+                "bitstream_layout": "spatial", "alpha_mode": "planar"}},
+        ]
+        selected = corpus.filter_assets(selected_assets,
+                                        "frequency-planar-alpha")
+        self.assertEqual(["a"], [item["sha256"] for item in selected])
+
     def test_known_mismatch_baseline_is_exact_and_does_not_hide_errors(self):
         path = Path(__file__).resolve().parents[1] / \
             "known-mismatches-frequency-no-alpha.jsonl"
@@ -72,9 +85,25 @@ class CorpusUtilityTests(unittest.TestCase):
         profile = {key: known[sha][key] for key in
                    ("bitstream_layout", "alpha_mode",
                     "codestream_subversion", "overlap")}
+        expected_channel = {"native_sha256": "n" * 64,
+                            "managed_sha256": "m" * 64,
+                            "mismatch_pixels": 3,
+                            "mismatch_components": 4,
+                            "maximum_component_delta": 2}
+        known[sha]["channels"] = {"color": expected_channel}
         results = [{"sha256": sha, "profile": profile,
+                    "channels": [{"channel": "color",
+                        "status": "pixel_mismatch",
+                        "native_sha256": "n" * 64,
+                        "managed_sha256": "m" * 64,
+                        "difference_metrics": {
+                            "mismatch_pixels": 3,
+                            "mismatch_components": 4,
+                            "maximum_component_delta": 2}}],
                     "status": "pixel_mismatch"},
                    {"sha256": "b" * 64, "profile": profile,
+                    "channels": [{"channel": "color",
+                        "status": "pixel_mismatch"}],
                     "status": "pixel_mismatch"}]
         counts = corpus.classify_known_mismatches(results, {sha: known[sha]})
         self.assertEqual({"known_mismatches": 1,
@@ -84,9 +113,11 @@ class CorpusUtilityTests(unittest.TestCase):
         self.assertEqual("pixel_mismatch", results[0]["status"])
         self.assertNotIn("known_mismatch", results[1])
         results[0]["status"] = "match"
+        results[0]["channels"][0]["status"] = "match"
         self.assertEqual(1, corpus.classify_known_mismatches(
             results, {sha: known[sha]})["known_mismatches_resolved"])
         results[0]["status"] = "managed_decode_error"
+        results[0]["channels"][0]["status"] = "managed_decode_error"
         self.assertEqual(0, corpus.classify_known_mismatches(
             results, {sha: known[sha]})["known_mismatches"])
         self.assertNotIn("known_mismatch", results[0])
@@ -173,6 +204,34 @@ class CorpusUtilityTests(unittest.TestCase):
         self.assertEqual({"x": 1, "y": 0, "channel": 1,
                           "expected": 4, "actual": 9}, result)
         self.assertIsNone(corpus.first_difference(b"same", b"same", 2, 1, 2))
+        self.assertEqual({"mismatch_pixels": 1, "mismatch_components": 2,
+                          "maximum_component_delta": 5},
+                         corpus.difference_metrics(bytes((0, 1, 2, 3, 4, 5)),
+                                                   bytes((0, 1, 2, 8, 9, 5)), 3))
+
+    def test_independent_pbgra_reference_manifest(self):
+        path = Path(__file__).resolve().parents[1] / \
+            "independent-pbgra-references.jsonl"
+        references = corpus.load_independent_references(path)
+        self.assertEqual(2, len(references))
+        for row in references.values():
+            self.assertEqual("Pbgra32", row["pixel_format"])
+            self.assertEqual(4, row["channels"])
+        self.assertTrue(references[
+            "bbfd250f27855bfb9bb496a09c046765bc8ad56529b5ac05612320fe2f65869a"][
+                "requires_opaque_alpha"])
+        with tempfile.TemporaryDirectory() as temp:
+            invalid = Path(temp) / "invalid.jsonl"
+            duplicate = next(iter(references.values()))
+            invalid.write_text(json.dumps(duplicate) + "\n" +
+                               json.dumps(duplicate) + "\n", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                corpus.load_independent_references(invalid)
+            invalid.write_text(json.dumps(dict(duplicate,
+                sha256="c" * 64, requires_opaque_alpha="yes")) + "\n",
+                encoding="utf-8")
+            with self.assertRaises(ValueError):
+                corpus.load_independent_references(invalid)
 
     def test_real_fixture_through_native_and_managed_decoders(self):
         repository = Path(__file__).resolve().parents[3]

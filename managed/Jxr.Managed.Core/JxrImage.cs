@@ -8,10 +8,12 @@ namespace Jxr.Managed.Core
         Rgb24 = 1,
         Bgr24 = 2,
         Rgba32 = 3,
-        Bgra32 = 4
+        Bgra32 = 4,
+        Pbgra32 = 5
     }
 
-    // Rows are top-down. RGBA32/BGRA32 use straight (unassociated) alpha.
+    // Rows are top-down. RGBA32/BGRA32 use straight alpha; PBGRA32 uses
+    // premultiplied alpha.
     // Pixels is caller-owned; this class never copies it.
     public sealed class JxrImage
     {
@@ -28,7 +30,8 @@ namespace Jxr.Managed.Core
                 (format == JxrPixelFormat.Rgb24 ||
                  format == JxrPixelFormat.Bgr24) ? 3 :
                 (format == JxrPixelFormat.Rgba32 ||
-                 format == JxrPixelFormat.Bgra32) ? 4 : 0;
+                 format == JxrPixelFormat.Bgra32 ||
+                 format == JxrPixelFormat.Pbgra32) ? 4 : 0;
             if (channels == 0 || width <= 0 || height <= 0 || pixels == null ||
                 (long)width * channels > stride || stride <= 0 ||
                 (long)stride * height > pixels.Length)

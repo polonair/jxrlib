@@ -64,10 +64,11 @@ namespace Jxr.Managed.CorpusRunner
                 }
             }
             if (args.Length != 5 || args[0] != "decode" ||
-                (args[2] != "color" && args[2] != "alpha"))
+                (args[2] != "color" && args[2] != "alpha" &&
+                 args[2] != "pbgra"))
             {
                 Console.Error.WriteLine(
-                    "Usage: Jxr.Managed.CorpusRunner.exe decode <input.jxr> <color|alpha> <pixels.bin> <metadata.txt>");
+                    "Usage: Jxr.Managed.CorpusRunner.exe decode <input.jxr> <color|alpha|pbgra> <pixels.bin> <metadata.txt>");
                 return 2;
             }
 
@@ -79,6 +80,11 @@ namespace Jxr.Managed.CorpusRunner
                 {
                     options.OutputFormat = JxrPixelFormat.Gray8;
                     options.AlphaMode = JxrAlphaDecodeMode.AlphaOnly;
+                }
+                else if (args[2] == "pbgra")
+                {
+                    options.OutputFormat = JxrPixelFormat.Pbgra32;
+                    options.AlphaMode = JxrAlphaDecodeMode.ColorAndAlpha;
                 }
                 else
                 {

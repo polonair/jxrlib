@@ -48,7 +48,7 @@ class ProfilerTests(unittest.TestCase):
         self.assertEqual(report["pixel_format"], "Gray8")
         self.assertEqual(report["bitstream_layout"], "spatial")
         self.assertEqual(report["overlap"], 0)
-        self.assertEqual(report["frame_quantizers"]["dc"]["inherits"], "codec_default")
+        self.assertEqual(report["frame_quantizers"]["dc"]["effective_indices"], [0])
         self.assertEqual(report["tile_quantizer_scope"], "not_parsed")
 
     def test_parse_raw_codestream(self):
@@ -91,6 +91,26 @@ class ProfilerTests(unittest.TestCase):
         self.assertEqual(report["alpha_range_interpretation"], "byte_count")
         self.assertEqual(report["alpha_end_offset"], alpha_end)
         self.assertEqual(report["alpha_byte_count"], alpha_end - alpha_offset)
+
+    def test_rejects_invalid_planar_alpha_ranges(self):
+        original = PLANAR_ALPHA_JXR.read_bytes()
+        endian = "<" if original[:2] == b"II" else ">"
+        ifd = profiler.struct.unpack(endian + "I", original[4:8])[0]
+        count = profiler.struct.unpack(endian + "H", original[ifd:ifd + 2])[0]
+        alpha_range_entry = None
+        for index in range(count):
+            entry = ifd + 2 + index * 12
+            tag = profiler.struct.unpack(endian + "H", original[entry:entry + 2])[0]
+            if tag == 0xbcc3:
+                alpha_range_entry = entry + 8
+                break
+        self.assertIsNotNone(alpha_range_entry)
+        for invalid_value in (0, len(original) + 1):
+            payload = bytearray(original)
+            profiler.struct.pack_into(endian + "I", payload,
+                                      alpha_range_entry, invalid_value)
+            with self.assertRaises(profiler.ProfileError):
+                profiler.parse_jxr(bytes(payload))
 
     def test_scans_hidden_extensions_relationships_and_errors(self):
         jxr = MINIMAL_JXR.read_bytes()
