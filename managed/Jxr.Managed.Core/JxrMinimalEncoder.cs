@@ -247,6 +247,10 @@ namespace Jxr.Managed.Core
                 error = JxrFrequencyCodestreamWriter.WriteGrayProfile(
                     frequencyPackets, frequencyBitCounts, width, height,
                     profileSettings, out codestream);
+            else if (!frequency && profileSettings != null)
+                error = JxrCodestreamWriter.WriteGraySpatialProfile(
+                    entropyPackets[0], entropyBitCounts[0], width, height,
+                    profileSettings, out codestream);
             else if (frequency)
                 error = JxrFrequencyCodestreamWriter.WriteGray(frequencyPackets,
                     frequencyBitCounts, width, height, dcIndex, lpIndex,

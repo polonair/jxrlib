@@ -69,6 +69,15 @@ namespace Jxr.Managed.Core
                 profile.Subversion);
         }
 
+        internal static JxrError WriteRgbSpatialProfile(JxrBitWriter writer,
+            int width, int height, JxrProfileEncodingSettings profile)
+        {
+            if (profile == null || profile.Layout != JxrBitstreamLayout.Spatial ||
+                profile.TileLayout == null || !profile.TileLayout.IsSingleTile)
+                return JxrError.UnsupportedFeature;
+            return WriteRgbProfile(writer, width, height, profile);
+        }
+
         private static JxrError WriteRgbSpatialCore(JxrBitWriter writer,
             int width, int height, byte[] dcQuantizerIndices,
             byte[] lowpassQuantizerIndices, byte[] highpassQuantizerIndices,
@@ -262,7 +271,7 @@ namespace Jxr.Managed.Core
 
     internal static class JxrGrayProfileHeaderWriter
     {
-    internal static JxrError WriteGrayProfileHeader(JxrBitWriter writer,
+        internal static JxrError WriteGrayProfileHeader(JxrBitWriter writer,
         int width, int height, JxrProfileEncodingSettings profile)
     {
         if (writer == null || profile == null || !profile.GrayPlane ||
@@ -273,13 +282,17 @@ namespace Jxr.Managed.Core
             profile.DcMode != 0 || profile.LowpassMode != 0 ||
             profile.HighpassMode != 0 || profile.Subversion < 0 ||
             profile.Subversion > 1 || profile.Overlap < 0 ||
-            profile.Overlap > 1 || profile.TileLayout == null)
+            profile.Overlap > 1 || profile.TileLayout == null ||
+            (profile.Layout != JxrBitstreamLayout.Spatial &&
+             profile.Layout != JxrBitstreamLayout.Frequency))
             return JxrError.InvalidArgument;
         JxrTileGeometry tiles;
         JxrError tileError = JxrTileGeometry.Create(width, height,
             profile.TileLayout, out tiles);
         if (tileError != JxrError.None) return tileError;
         bool tiled = !tiles.IsSingleTile;
+        if (profile.Layout == JxrBitstreamLayout.Spatial && tiled)
+            return JxrError.UnsupportedFeature;
         bool abbreviated = ((long)width + 15) / 16 <= 255 &&
             ((long)height + 15) / 16 <= 255;
         byte[] signature = { (byte)'W', (byte)'M', (byte)'P', (byte)'H',
@@ -289,9 +302,10 @@ namespace Jxr.Managed.Core
         writer.Write(1, 4);
         writer.Write((uint)profile.Subversion, 4);
         writer.Write(tiled ? 1U : 0U, 1);
-        writer.Write(1, 1); // frequency layout
+        writer.Write(profile.Layout == JxrBitstreamLayout.Frequency ? 1U : 0U, 1);
         writer.Write(0, 3); // orientation
-        writer.Write(tiled ? 1U : 0U, 1);
+        writer.Write(profile.Layout == JxrBitstreamLayout.Frequency || tiled ?
+            1U : 0U, 1);
         writer.Write((uint)profile.Overlap, 2);
         writer.Write(abbreviated ? 1U : 0U, 1);
         writer.Write(1, 1); // short header
@@ -327,6 +341,15 @@ namespace Jxr.Managed.Core
         writer.Write(profile.HighpassIndices[0], 8);
         writer.AlignByte();
         return JxrError.None;
+    }
+
+    internal static JxrError WriteGraySpatialProfile(JxrBitWriter writer,
+        int width, int height, JxrProfileEncodingSettings profile)
+    {
+        if (profile == null || profile.Layout != JxrBitstreamLayout.Spatial ||
+            profile.TileLayout == null || !profile.TileLayout.IsSingleTile)
+            return JxrError.UnsupportedFeature;
+        return WriteGrayProfileHeader(writer, width, height, profile);
     }
     }
 
@@ -375,6 +398,67 @@ namespace Jxr.Managed.Core
                 highpassQuantizerIndex, subbands, scaledArithmetic,
                 trimFlexbits, overlap, chromaSubsampling, tileLayout,
                 true, out codestream);
+        }
+
+        internal static JxrError WriteGraySpatialProfile(byte[] entropyPacket,
+            int entropyBitCount, int width, int height,
+            JxrProfileEncodingSettings profile, out byte[] codestream)
+        {
+            return WriteSpatialProfile(entropyPacket, entropyBitCount, width,
+                height, profile, false, out codestream);
+        }
+
+        internal static JxrError WriteRgbSpatialProfile(byte[] entropyPacket,
+            int entropyBitCount, int width, int height,
+            JxrProfileEncodingSettings profile, out byte[] codestream)
+        {
+            return WriteSpatialProfile(entropyPacket, entropyBitCount, width,
+                height, profile, true, out codestream);
+        }
+
+        private static JxrError WriteSpatialProfile(byte[] entropyPacket,
+            int entropyBitCount, int width, int height,
+            JxrProfileEncodingSettings profile, bool rgb, out byte[] codestream)
+        {
+            codestream = null;
+            if (profile == null || profile.Layout != JxrBitstreamLayout.Spatial ||
+                profile.TileLayout == null || !profile.TileLayout.IsSingleTile ||
+                profile.Overlap < 0 || profile.Overlap > 1 ||
+                entropyPacket == null || entropyBitCount < 0 ||
+                entropyBitCount > (long)entropyPacket.Length * 8)
+                return JxrError.InvalidArgument;
+            JxrBitWriter writer = new JxrBitWriter();
+            JxrError error = rgb ? JxrHeaderWriter.WriteRgbSpatialProfile(writer,
+                width, height, profile) :
+                JxrGrayProfileHeaderWriter.WriteGraySpatialProfile(writer,
+                    width, height, profile);
+            if (error != JxrError.None) return error;
+            JxrBitWriter marker = new JxrBitWriter();
+            marker.Write(0x6f, 8);
+            marker.Write(0xff, 8);
+            marker.Write(1, 16);
+            byte[] markerBytes = marker.ToArray();
+            error = JxrVariableLengthWordWriter.Write(writer,
+                (uint)markerBytes.Length);
+            if (error != JxrError.None) return error;
+            for (int index = 0; index < markerBytes.Length; index++)
+                writer.Write(markerBytes[index], 8);
+            error = JxrPacketWriter.WriteHeader(writer, 0, 0);
+            if (error != JxrError.None) return error;
+            JxrBitReader entropyReader = new JxrBitReader(entropyPacket);
+            int remainingBits = entropyBitCount;
+            while (remainingBits > 0)
+            {
+                uint bit;
+                error = entropyReader.ReadBits(1, out bit);
+                if (error != JxrError.None) return error;
+                error = writer.Write(bit, 1);
+                if (error != JxrError.None) return error;
+                remainingBits--;
+            }
+            writer.AlignByte();
+            codestream = writer.ToArray();
+            return JxrError.None;
         }
 
         private static JxrError WriteSpatialTiles(byte[][] entropyPackets,

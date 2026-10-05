@@ -287,6 +287,31 @@ metric, changed profile, or changed corpus inventory fails the strict baseline.
 This records current behavior; it does not waive or claim exact spatial color
 parity.
 
+## Spatial profile re-encoding
+
+Re-encode all spatial corpus assets with their source profile and validate both
+the profile and decoded quality against the native C decoder:
+
+```powershell
+python .\tools\pptx-jxr-corpus\corpus.py `
+  --root 'D:\ASPOSE\SLIDESNET\TestData' `
+  --report-dir 'D:\JxrReports\TestData' `
+  --native-decoder '.\jxrencoderdecoder\Release\JXRDecApp\x64\JXRDecApp.exe' `
+  --managed-runner '.\managed\Jxr.Managed.CorpusRunner\bin\Release\Jxr.Managed.CorpusRunner.exe' `
+  --suite all --profile-filter spatial --encode-profile-round-trip `
+  --corpus-manifest '.\tools\pptx-jxr-corpus\corpus-manifest.jsonl' `
+  --output 'D:\JxrReports\TestData\spatial-profile-reencode.json'
+```
+
+The runner requires the output to preserve the semantic packet/profile fields,
+be accepted by both decoders, and remain within MAE 8 / maximum component delta
+96 of the C-decoded source. For unchanged planar alpha it reuses the original
+lossless alpha codestream only after checking that the input alpha pixels match
+its decoded samples; changed alpha is encoded normally. The 2026-10-05 run
+passed all 28 spatial assets, including planar alpha, with no profile, quality,
+decoder, or input-manifest mismatches. The separate known source-decoder color
+mismatch baseline remains unchanged and is not used to excuse re-encode errors.
+
 ## Unit tests
 
 ```powershell

@@ -51,7 +51,8 @@ namespace Jxr.Managed.CorpusRunner
                     JxrImage image = new JxrImage(width, height, format,
                         pixels, width * channels);
                     byte[] output;
-                    error = JxrCodec.Encode(image, profile, out output);
+                    error = JxrCodec.Encode(image, profile, source, true,
+                        out output);
                     if (error != JxrError.None)
                     {
                         Console.Error.WriteLine("encode: " + error.ToString());

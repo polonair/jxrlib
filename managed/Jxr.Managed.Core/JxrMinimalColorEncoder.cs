@@ -277,6 +277,10 @@ namespace Jxr.Managed.Core
                             frequencyPackets, frequencyBitCounts, width, height,
                             profileSettings, out codestream);
                 }
+                else if (profileSettings != null)
+                    error = JxrCodestreamWriter.WriteRgbSpatialProfile(
+                        entropyPackets[0], entropyBitCounts[0], width, height,
+                        profileSettings, out codestream);
                 else error = JxrCodestreamWriter.WriteRgbSpatialTiles(entropyPackets,
                     entropyBitCounts, width, height, dcIndex, lpIndex, hpIndex,
                     options.Subbands, scaled, options.TrimFlexbits,

@@ -54,6 +54,7 @@ namespace Jxr.Managed.Tests
             new TestCase("spatial_tile_encode_native_fixtures", TestSpatialTileEncodeNativeFixtures),
             new TestCase("frequency_layout_native_fixtures", TestFrequencyLayoutNativeFixtures),
             new TestCase("profile_frequency_encoder_round_trip", TestProfileFrequencyEncoderRoundTrip),
+            new TestCase("profile_spatial_encoder_round_trip", TestProfileSpatialEncoderRoundTrip),
             new TestCase("profile_frequency_planar_alpha_round_trip",
                 TestProfileFrequencyPlanarAlphaRoundTrip),
             new TestCase("spatial_tile_layout_validation", TestSpatialTileLayoutValidation),
@@ -3156,6 +3157,61 @@ namespace Jxr.Managed.Tests
                 decoded.Width == pixels.Width && decoded.Height == pixels.Height;
         }
 
+        private static bool TestProfileSpatialEncoderRoundTrip()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "managed\\fixtures\\rgb444-32x32-ol1.jxr")))
+                directory = directory.Parent;
+            if (directory == null) return false;
+            byte[] source = File.ReadAllBytes(Path.Combine(directory.FullName,
+                "managed\\fixtures\\rgb444-32x32-ol1.jxr"));
+            JxrSourceProfile sourceProfile;
+            if (JxrSourceProfileReader.Read(source, out sourceProfile) != JxrError.None ||
+                sourceProfile == null || !sourceProfile.PacketSyntaxComplete ||
+                sourceProfile.Headers.Main.BitstreamFormat !=
+                    (int)JxrBitstreamLayout.Spatial ||
+                sourceProfile.Headers.Main.Overlap != 1)
+                return false;
+            JxrDecoderOptions decodeOptions = new JxrDecoderOptions();
+            decodeOptions.OutputFormat = JxrPixelFormat.Bgr24;
+            JxrImage pixels;
+            if (JxrCodec.Decode(source, decodeOptions, out pixels) != JxrError.None)
+                return false;
+            byte[] encoded;
+            if (JxrCodec.Encode(pixels, sourceProfile, source, out encoded) != JxrError.None ||
+                encoded == null) return false;
+            JxrSourceProfile encodedProfile;
+            if (JxrSourceProfileReader.Read(encoded, out encodedProfile) !=
+                JxrError.None || encodedProfile == null ||
+                !encodedProfile.PacketSyntaxComplete)
+                return false;
+            JxrHeaders expected = sourceProfile.Headers;
+            JxrHeaders actual = encodedProfile.Headers;
+            if (actual.ContainerKind != expected.ContainerKind ||
+                actual.PixelFormatGuid != expected.PixelFormatGuid ||
+                actual.ContainerWidth != expected.ContainerWidth ||
+                actual.ContainerHeight != expected.ContainerHeight ||
+                actual.HorizontalDpi != expected.HorizontalDpi ||
+                actual.VerticalDpi != expected.VerticalDpi ||
+                actual.Main.Version != expected.Main.Version ||
+                actual.Main.Subversion != expected.Main.Subversion ||
+                actual.Main.BitstreamFormat != expected.Main.BitstreamFormat ||
+                actual.Main.Overlap != expected.Main.Overlap ||
+                actual.Main.HasIndexTable != expected.Main.HasIndexTable ||
+                actual.Plane.ScaledArithmetic != expected.Plane.ScaledArithmetic ||
+                actual.Quantizers.DcMode != expected.Quantizers.DcMode ||
+                actual.Quantizers.LowpassMode != expected.Quantizers.LowpassMode ||
+                actual.Quantizers.HighpassMode != expected.Quantizers.HighpassMode ||
+                !SamePlaneProfile(sourceProfile.ColorPlane,
+                    encodedProfile.ColorPlane))
+                return false;
+            JxrImage decoded;
+            return JxrCodec.Decode(encoded, decodeOptions, out decoded) ==
+                    JxrError.None && decoded.Width == pixels.Width &&
+                decoded.Height == pixels.Height;
+        }
+
         private static bool TestProfileFrequencyPlanarAlphaRoundTrip()
         {
             DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
@@ -3201,7 +3257,7 @@ namespace Jxr.Managed.Tests
             if (JxrCodec.Decode(source, decodeOptions, out pixels) != JxrError.None)
                 return false;
             byte[] encoded;
-            if (JxrCodec.Encode(pixels, sourceProfile, out encoded) != JxrError.None ||
+            if (JxrCodec.Encode(pixels, sourceProfile, source, true, out encoded) != JxrError.None ||
                 encoded == null) return false;
             JxrSourceProfile encodedProfile;
             if (JxrSourceProfileReader.Read(encoded, out encodedProfile) !=

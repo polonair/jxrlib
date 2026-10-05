@@ -6,18 +6,53 @@ namespace Jxr.Managed.Core
     // JPEG XR boundary: pixels in/out, with no BMP dependency.
     public static class JxrCodec
     {
-        // Re-encodes supported frequency RGB and planar-alpha profiles using
+        // Re-encodes supported spatial/frequency RGB and planar-alpha profiles using
         // the stream parameters inspected from the source file.
         public static JxrError Encode(JxrImage image, JxrSourceProfile sourceProfile,
             out byte[] jxr)
         {
+            return Encode(image, sourceProfile, null, out jxr);
+        }
+
+        // Source-aware overload lets an unchanged lossless planar alpha plane
+        // retain its original codestream while color is re-encoded.
+        public static JxrError Encode(JxrImage image, JxrSourceProfile sourceProfile,
+            byte[] sourceJxr, out byte[] jxr)
+        {
+            return Encode(image, sourceProfile, sourceJxr, false, out jxr);
+        }
+
+        // Set sourceDecodedPixels only when the pixels were decoded from this
+        // exact stream and were not edited. This permits lossless plane reuse
+        // even when this managed decoder differs from the external reference.
+        public static JxrError Encode(JxrImage image, JxrSourceProfile sourceProfile,
+            byte[] sourceJxr, bool sourceDecodedPixels, out byte[] jxr)
+        {
             jxr = null;
+            if (sourceJxr != null)
+            {
+                JxrHeaders sourceHeaders;
+                JxrError sourceError = JxrHeaders.Read(sourceJxr,
+                    out sourceHeaders);
+                if (sourceError != JxrError.None) return sourceError;
+                if (sourceProfile == null || sourceProfile.Headers == null ||
+                    sourceHeaders.Main.Width != sourceProfile.Headers.Main.Width ||
+                    sourceHeaders.Main.Height != sourceProfile.Headers.Main.Height ||
+                    sourceHeaders.Main.Subversion !=
+                        sourceProfile.Headers.Main.Subversion ||
+                    sourceHeaders.Main.BitstreamFormat !=
+                        sourceProfile.Headers.Main.BitstreamFormat ||
+                    sourceHeaders.PixelFormatGuid !=
+                        sourceProfile.Headers.PixelFormatGuid ||
+                    sourceHeaders.HasPlanarAlpha != sourceProfile.HasPlanarAlpha)
+                    return JxrError.InvalidArgument;
+            }
             JxrProfileEncodingSettings profileSettings;
             JxrError error = JxrProfileEncodingSettings.Create(image,
                 sourceProfile, out profileSettings);
             if (error != JxrError.None) return error;
             JxrEncoderOptions options = new JxrEncoderOptions();
-            options.Layout = JxrBitstreamLayout.Frequency;
+            options.Layout = profileSettings.Layout;
             options.Overlap = sourceProfile.Headers.Main.Overlap;
             options.Subbands = JxrGraySubbandMode.All;
             options.TrimFlexbits = 0;
@@ -26,14 +61,15 @@ namespace Jxr.Managed.Core
             options.Progressive = profileSettings.Progressive;
             if (profileSettings.Alpha != null)
                 return EncodePlanarAlphaProfile(image, options,
-                    profileSettings, out jxr);
+                    profileSettings, sourceJxr, sourceDecodedPixels, out jxr);
             return JxrMinimalColorEncoder.Encode(image, options,
                 profileSettings, out jxr);
         }
 
         private static JxrError EncodePlanarAlphaProfile(JxrImage image,
             JxrEncoderOptions colorOptions,
-            JxrProfileEncodingSettings profileSettings, out byte[] jxr)
+            JxrProfileEncodingSettings profileSettings, byte[] sourceJxr,
+            bool sourceDecodedPixels, out byte[] jxr)
         {
             jxr = null;
             if (image == null || profileSettings == null ||
@@ -67,7 +103,7 @@ namespace Jxr.Managed.Core
             JxrEncoderOptions alphaOptions = new JxrEncoderOptions();
             alphaOptions.QualityIndex = 1;
             alphaOptions.Overlap = alphaProfile.Overlap;
-            alphaOptions.Layout = JxrBitstreamLayout.Frequency;
+            alphaOptions.Layout = alphaProfile.Layout;
             alphaOptions.Subbands = JxrGraySubbandMode.All;
             alphaOptions.TileLayout = alphaProfile.TileLayout;
             alphaOptions.Progressive = alphaProfile.Progressive;
@@ -87,6 +123,37 @@ namespace Jxr.Managed.Core
                 colorHeaders.CodestreamOffset, colorHeaders.CodestreamLength);
             byte[] alphaStream = Slice(alphaContainer,
                 alphaHeaders.CodestreamOffset, alphaHeaders.CodestreamLength);
+            if (sourceJxr != null)
+            {
+                JxrHeaders sourceHeaders;
+                error = JxrHeaders.Read(sourceJxr, out sourceHeaders);
+                if (error != JxrError.None) return error;
+                if (!sourceHeaders.HasPlanarAlpha ||
+                    sourceHeaders.Main.Width != image.Width ||
+                    sourceHeaders.Main.Height != image.Height ||
+                    sourceHeaders.AlphaOffset < 0 ||
+                    sourceHeaders.AlphaByteCount < 1 ||
+                    (long)sourceHeaders.AlphaOffset +
+                        sourceHeaders.AlphaByteCount > sourceJxr.Length)
+                    return JxrError.InvalidArgument;
+                bool alphaUnchanged = sourceDecodedPixels;
+                if (!alphaUnchanged)
+                {
+                    JxrImage sourceAlpha;
+                    error = DecodePlanarAlpha(sourceJxr, sourceHeaders,
+                        out sourceAlpha);
+                    if (error != JxrError.None) return error;
+                    alphaUnchanged = true;
+                    for (int y = 0; y < image.Height && alphaUnchanged; y++)
+                        for (int x = 0; x < image.Width; x++)
+                            if (image.Pixels[y * image.Stride + x * 4 + 3] !=
+                                sourceAlpha.Pixels[y * sourceAlpha.Stride + x])
+                            { alphaUnchanged = false; break; }
+                }
+                if (alphaUnchanged)
+                    alphaStream = Slice(sourceJxr, sourceHeaders.AlphaOffset,
+                        sourceHeaders.AlphaByteCount);
+            }
             bool byteCount = profileSettings.AlphaRangeInterpretation ==
                 JxrAlphaRangeInterpretation.ByteCount;
             if (!byteCount && profileSettings.AlphaRangeInterpretation !=

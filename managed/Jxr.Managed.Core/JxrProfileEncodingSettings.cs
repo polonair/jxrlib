@@ -21,6 +21,7 @@ namespace Jxr.Managed.Core
         internal int DcMode;
         internal int LowpassMode;
         internal int HighpassMode;
+        internal JxrBitstreamLayout Layout;
         internal int Overlap;
         internal bool ScaledArithmetic;
         internal int Subversion;
@@ -109,10 +110,14 @@ namespace Jxr.Managed.Core
             int expectedPlaneFormat = grayPlane ? 0 :
                 (int)JxrChromaSubsampling.Yuv444;
             int expectedChannels = grayPlane ? 1 : 3;
+            bool spatial = main.BitstreamFormat ==
+                (int)JxrBitstreamLayout.Spatial;
+            bool frequency = main.BitstreamFormat ==
+                (int)JxrBitstreamLayout.Frequency;
             int expectedQuantizerMode = grayPlane ? 0 : 2;
             if (main.Version != 1 || (main.Subversion != 0 && main.Subversion != 1) ||
-                main.BitstreamFormat != (int)JxrBitstreamLayout.Frequency ||
-                main.HasHardTileBoundaries || !main.HasIndexTable ||
+                (!spatial && !frequency) || main.HasHardTileBoundaries ||
+                (frequency && !main.HasIndexTable) ||
                 main.HasAlpha || main.Orientation != 0 || main.RedBlueSwapped ||
                 main.Overlap < 0 || main.Overlap > 1 || main.TrimFlexbits ||
                 main.SourceColorFormat != expectedSourceFormat ||
@@ -123,20 +128,33 @@ namespace Jxr.Managed.Core
                 plane.HasChromaCenteringX || plane.HasChromaCenteringY ||
                 plane.HasSampleConversion || !quantizers.HasDc ||
                 !quantizers.HasLowpass || !quantizers.HasHighpass ||
-                quantizers.DcMode != expectedQuantizerMode ||
-                quantizers.LowpassMode != expectedQuantizerMode ||
-                quantizers.HighpassMode != expectedQuantizerMode ||
+                (!spatial && quantizers.DcMode != expectedQuantizerMode) ||
+                (!spatial && quantizers.LowpassMode != expectedQuantizerMode) ||
+                (!spatial && quantizers.HighpassMode != expectedQuantizerMode) ||
+                (spatial && (!SupportedQuantizerMode(quantizers.DcMode) ||
+                    !SupportedQuantizerMode(quantizers.LowpassMode) ||
+                    !SupportedQuantizerMode(quantizers.HighpassMode))) ||
                 profilePlane.TileCount < 1 || profilePlane.TileCount > 4096)
                 return JxrError.UnsupportedFeature;
 
-            byte[] dc = ReadIndices(quantizers, 0, expectedChannels);
-            byte[] lp = ReadIndices(quantizers, 1, expectedChannels);
-            byte[] hp = ReadIndices(quantizers, 2, expectedChannels);
-            if (!HasSupportedTileQuantizers(profilePlane))
+            int tileColumns = main.VerticalSliceCountMinusOne + 1;
+            int tileRows = main.HorizontalSliceCountMinusOne + 1;
+            if ((spatial && (main.HasIndexTable || profilePlane.TileCount != 1 ||
+                    tileColumns != 1 || tileRows != 1)) ||
+                (frequency && !main.HasIndexTable))
                 return JxrError.UnsupportedFeature;
 
-            int columns = main.VerticalSliceCountMinusOne + 1;
-            int rows = main.HorizontalSliceCountMinusOne + 1;
+            byte[] dc = ReadIndices(quantizers, 0, expectedChannels,
+                quantizers.DcMode);
+            byte[] lp = ReadIndices(quantizers, 1, expectedChannels,
+                quantizers.LowpassMode);
+            byte[] hp = ReadIndices(quantizers, 2, expectedChannels,
+                quantizers.HighpassMode);
+            if (!HasSupportedTileQuantizers(profilePlane, spatial))
+                return JxrError.UnsupportedFeature;
+
+            int columns = tileColumns;
+            int rows = tileRows;
             if ((long)columns * rows != profilePlane.TileCount)
                 return JxrError.InvalidBitstream;
             int[] columnWidths = new int[columns];
@@ -160,10 +178,13 @@ namespace Jxr.Managed.Core
                 layout, out geometry) != JxrError.None)
                 return JxrError.InvalidBitstream;
 
-            bool progressive;
-            JxrError orderError = DetectProgressiveOrder(profilePlane,
-                out progressive);
-            if (orderError != JxrError.None) return orderError;
+            bool progressive = true;
+            if (!spatial)
+            {
+                JxrError orderError = DetectProgressiveOrder(profilePlane,
+                    out progressive);
+                if (orderError != JxrError.None) return orderError;
+            }
 
             settings = new JxrProfileEncodingSettings();
             settings.DcIndices = dc;
@@ -172,6 +193,7 @@ namespace Jxr.Managed.Core
             settings.DcMode = quantizers.DcMode;
             settings.LowpassMode = quantizers.LowpassMode;
             settings.HighpassMode = quantizers.HighpassMode;
+            settings.Layout = (JxrBitstreamLayout)main.BitstreamFormat;
             settings.Overlap = main.Overlap;
             settings.ScaledArithmetic = plane.ScaledArithmetic;
             settings.Subversion = main.Subversion;
@@ -181,30 +203,46 @@ namespace Jxr.Managed.Core
             return JxrError.None;
         }
 
+        private static bool SupportedQuantizerMode(int mode)
+        { return mode >= 0 && mode <= 3; }
+
         private static byte[] ReadIndices(JxrImagePlaneQuantizerHeader quantizers,
-            int band, int count)
+            int band, int count, int mode)
         {
             byte[] values = new byte[count];
-            for (int channel = 0; channel < count; channel++)
+            byte first;
+            if (band == 0) first = quantizers.GetDcIndex(0);
+            else if (band == 1) first = quantizers.GetLowpassIndex(0);
+            else first = quantizers.GetHighpassIndex(0);
+            values[0] = first;
+            for (int channel = 1; channel < count; channel++)
             {
-                if (band == 0) values[channel] = quantizers.GetDcIndex(channel);
-                else if (band == 1)
-                    values[channel] = quantizers.GetLowpassIndex(channel);
-                else values[channel] = quantizers.GetHighpassIndex(channel);
+                if (mode == 0) values[channel] = first;
+                else if (mode == 1)
+                {
+                    values[channel] = band == 0 ? quantizers.GetDcIndex(1) :
+                        band == 1 ? quantizers.GetLowpassIndex(1) :
+                        quantizers.GetHighpassIndex(1);
+                }
+                else values[channel] = band == 0 ? quantizers.GetDcIndex(channel) :
+                    band == 1 ? quantizers.GetLowpassIndex(channel) :
+                    quantizers.GetHighpassIndex(channel);
             }
             return values;
         }
 
         private static bool HasSupportedTileQuantizers(
-            JxrSourcePlaneProfile plane)
+            JxrSourcePlaneProfile plane, bool spatial)
         {
             for (int tileIndex = 0; tileIndex < plane.TileCount; tileIndex++)
             {
                 JxrProfileTile tile = plane.GetTile(tileIndex);
                 if (tile.HasTrimFlexbits || tile.TrimFlexbits != 0 ||
                     tile.DcQuantizers != null || tile.LowpassQuantizers != null ||
-                    tile.HighpassQuantizers != null || tile.PacketCount < 3 ||
-                    tile.PacketCount > 4)
+                    tile.HighpassQuantizers != null ||
+                    (spatial ? tile.PacketCount != 1 ||
+                        tile.GetPacket(0).Type != 0 :
+                        tile.PacketCount < 3 || tile.PacketCount > 4))
                     return false;
             }
             return true;

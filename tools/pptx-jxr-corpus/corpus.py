@@ -639,8 +639,19 @@ def managed_profile_reencode(runner: Path, decoder: Path, source_path: Path,
     # drift, but retain exact error metrics in the report for every image.
     status = "match" if metrics["mean_absolute_error"] <= 8.0 and \
         metrics["maximum_component_delta"] <= 96 else "quality_mismatch"
+    managed_width, managed_height, managed_count, managed_output = managed_pixels(
+        runner, encoded_path, work, "color")
+    if (managed_width, managed_height, managed_count) != (width, height, count):
+        return {"status": "managed_decode_mismatch",
+                "encoded_bytes": encoded_path.stat().st_size,
+                "expected_dimensions": [width, height, count],
+                "actual_dimensions": [managed_width, managed_height,
+                                      managed_count]}
     return {"status": status, "encoded_bytes": encoded_path.stat().st_size,
-            "profile_differences": [], "quality": metrics}
+            "profile_differences": [], "quality": metrics,
+            "managed_decoder": {"status": "decoded",
+                "quality_vs_native": difference_metrics(reference_pixels,
+                                                         managed_output, count)}}
 
 
 def plane_semantic_signature(plane: dict[str, Any]) -> tuple[Any, ...]:
@@ -773,6 +784,14 @@ def managed_profile_reencode_alpha(runner: Path, decoder: Path,
                 "encoded_bytes": encoded_path.stat().st_size,
                 "expected_dimensions": [width, height, 1]}
     managed_alpha_equal = alpha_pixels == managed_alpha[3]
+    managed_color = managed_pixels(runner, encoded_path, work, "color")
+    if (managed_color[0], managed_color[1], managed_color[2]) != \
+            (width, height, 3):
+        return {"status": "managed_decode_mismatch",
+                "encoded_bytes": encoded_path.stat().st_size,
+                "expected_dimensions": [width, height, 3],
+                "actual_dimensions": [managed_color[0], managed_color[1],
+                                      managed_color[2]]}
     color_ok = color_metrics["mean_absolute_error"] <= 8.0 and \
         color_metrics["maximum_component_delta"] <= 96
     return {"status": "match" if color_ok and alpha_equal else "quality_mismatch",
@@ -858,7 +877,7 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--profile-only", action="store_true",
                         help="read source profiles without invoking either pixel decoder")
     parser.add_argument("--encode-profile-round-trip", action="store_true",
-                        help="re-encode C-decoded frequency assets with their source profile")
+                        help="re-encode C-decoded frequency or spatial assets with their source profile")
     parser.add_argument("--profile-manifest", type=Path,
                         help="write managed profile results as versioned JSONL")
     parser.add_argument("--diagnostic", action="store_true",
@@ -879,10 +898,11 @@ def main(argv: list[str] | None = None) -> int:
     required_paths = [(root, "corpus root")]
     if args.encode_profile_round_trip and (args.suite != "all" or
             args.profile_filter not in ("frequency-no-alpha",
-                                        "frequency-planar-alpha") or args.profile_only or
+                                        "frequency-planar-alpha", "spatial") or args.profile_only or
             args.manifest_only):
         print("--encode-profile-round-trip requires --suite all and "
-              "--profile-filter frequency-no-alpha or frequency-planar-alpha",
+              "--profile-filter frequency-no-alpha, frequency-planar-alpha, "
+              "or spatial",
               file=sys.stderr)
         return 2
     if not args.manifest_only:
@@ -1082,7 +1102,7 @@ def main(argv: list[str] | None = None) -> int:
                                 if source_differences:
                                     raise ValueError("source profile differs from profiler: " +
                                         "; ".join(source_differences))
-                                if args.profile_filter == "frequency-planar-alpha":
+                                if profile.get("alpha_mode") == "planar":
                                     outcome = managed_profile_reencode_alpha(
                                         runner, decoder, jxr_path, profile,
                                         managed,
