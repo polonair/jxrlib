@@ -53,6 +53,7 @@ namespace Jxr.Managed.Tests
             new TestCase("spatial_tile_native_fixtures", TestSpatialTileNativeFixtures),
             new TestCase("spatial_tile_encode_native_fixtures", TestSpatialTileEncodeNativeFixtures),
             new TestCase("frequency_layout_native_fixtures", TestFrequencyLayoutNativeFixtures),
+            new TestCase("profile_frequency_encoder_round_trip", TestProfileFrequencyEncoderRoundTrip),
             new TestCase("spatial_tile_layout_validation", TestSpatialTileLayoutValidation),
             new TestCase("spatial_tile_invalid_tables", TestSpatialTileInvalidTables),
             new TestCase("minimal_decoder_end_to_end", TestMinimalDecoderEndToEnd),
@@ -3075,6 +3076,82 @@ namespace Jxr.Managed.Tests
                 }
             }
             return true;
+        }
+
+        private static bool TestProfileFrequencyEncoderRoundTrip()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Environment.CurrentDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName,
+                "managed\\fixtures\\frequency-rgb444-tile2x2.jxr")))
+                directory = directory.Parent;
+            if (directory == null) return false;
+            string fixture = Path.Combine(directory.FullName,
+                "managed\\fixtures\\frequency-rgb444-tile2x2.jxr");
+            byte[] source = File.ReadAllBytes(fixture);
+            JxrSourceProfile sourceProfile;
+            if (JxrSourceProfileReader.Read(source, out sourceProfile) != JxrError.None ||
+                sourceProfile == null || !sourceProfile.PacketSyntaxComplete ||
+                sourceProfile.Headers.Main.Subversion != 1)
+                return false;
+
+            JxrDecoderOptions decodeOptions = new JxrDecoderOptions();
+            decodeOptions.OutputFormat = sourceProfile.Headers.PixelFormatGuid.EndsWith("0c") ?
+                JxrPixelFormat.Bgr24 : JxrPixelFormat.Rgb24;
+            JxrImage pixels;
+            if (JxrCodec.Decode(source, decodeOptions, out pixels) != JxrError.None)
+                return false;
+            byte[] encoded;
+            JxrError error = JxrCodec.Encode(pixels, sourceProfile, out encoded);
+            if (error != JxrError.None || encoded == null) return false;
+
+            JxrSourceProfile encodedProfile;
+            if (JxrSourceProfileReader.Read(encoded, out encodedProfile) != JxrError.None ||
+                encodedProfile == null || !encodedProfile.PacketSyntaxComplete)
+                return false;
+            JxrHeaders expected = sourceProfile.Headers;
+            JxrHeaders actual = encodedProfile.Headers;
+            if (actual.ContainerKind != expected.ContainerKind ||
+                actual.PixelFormatGuid != expected.PixelFormatGuid ||
+                actual.ContainerWidth != expected.ContainerWidth ||
+                actual.ContainerHeight != expected.ContainerHeight ||
+                actual.HorizontalDpi != expected.HorizontalDpi ||
+                actual.VerticalDpi != expected.VerticalDpi ||
+                actual.Main.Version != expected.Main.Version ||
+                actual.Main.Subversion != expected.Main.Subversion ||
+                actual.Main.BitstreamFormat != expected.Main.BitstreamFormat ||
+                actual.Main.Overlap != expected.Main.Overlap ||
+                actual.Main.HasIndexTable != expected.Main.HasIndexTable ||
+                actual.Main.VerticalSliceCountMinusOne !=
+                    expected.Main.VerticalSliceCountMinusOne ||
+                actual.Main.HorizontalSliceCountMinusOne !=
+                    expected.Main.HorizontalSliceCountMinusOne ||
+                actual.Plane.ScaledArithmetic != expected.Plane.ScaledArithmetic ||
+                actual.Plane.Subband != expected.Plane.Subband ||
+                actual.Quantizers.Mode != expected.Quantizers.Mode ||
+                encodedProfile.ColorPlane.TileCount !=
+                    sourceProfile.ColorPlane.TileCount)
+                return false;
+            for (int channel = 0; channel < 3; channel++)
+                if (actual.Quantizers.GetDcIndex(channel) !=
+                        expected.Quantizers.GetDcIndex(channel) ||
+                    actual.Quantizers.GetLowpassIndex(channel) !=
+                        expected.Quantizers.GetLowpassIndex(channel) ||
+                    actual.Quantizers.GetHighpassIndex(channel) !=
+                        expected.Quantizers.GetHighpassIndex(channel))
+                    return false;
+            for (int tile = 0; tile < sourceProfile.ColorPlane.TileCount; tile++)
+            {
+                JxrProfileTile left = sourceProfile.ColorPlane.GetTile(tile);
+                JxrProfileTile right = encodedProfile.ColorPlane.GetTile(tile);
+                if (left.PacketCount != right.PacketCount) return false;
+                for (int packet = 0; packet < left.PacketCount; packet++)
+                    if (left.GetPacket(packet).Type != right.GetPacket(packet).Type ||
+                        left.GetPacket(packet).TileId != right.GetPacket(packet).TileId)
+                        return false;
+            }
+            JxrImage decoded;
+            return JxrCodec.Decode(encoded, decodeOptions, out decoded) == JxrError.None &&
+                decoded.Width == pixels.Width && decoded.Height == pixels.Height;
         }
 
         private static bool TestSpatialTileLayoutValidation()

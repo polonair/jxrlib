@@ -47,7 +47,45 @@ namespace Jxr.Managed.Core
             int overlap, JxrChromaSubsampling chromaSubsampling,
             JxrTileLayout tileLayout)
         {
+            return WriteRgbSpatialCore(writer, width, height,
+                new byte[] { dcQuantizerIndex, dcQuantizerIndex, dcQuantizerIndex },
+                new byte[] { lowpassQuantizerIndex, lowpassQuantizerIndex, lowpassQuantizerIndex },
+                new byte[] { highpassQuantizerIndex, highpassQuantizerIndex, highpassQuantizerIndex },
+                2, 2, 2, subbands, scaledArithmetic, trimFlexbits, overlap,
+                chromaSubsampling, tileLayout, 1);
+        }
+
+        internal static JxrError WriteRgbProfile(JxrBitWriter writer,
+            int width, int height, JxrProfileEncodingSettings profile)
+        {
+            if (profile == null) return JxrError.InvalidArgument;
+            return WriteRgbSpatialCore(writer, width, height,
+                profile.DcIndices, profile.LowpassIndices,
+                profile.HighpassIndices, profile.DcMode,
+                profile.LowpassMode, profile.HighpassMode,
+                JxrGraySubbandMode.All, profile.ScaledArithmetic, 0,
+                profile.Overlap,
+                JxrChromaSubsampling.Yuv444, profile.TileLayout,
+                profile.Subversion);
+        }
+
+        private static JxrError WriteRgbSpatialCore(JxrBitWriter writer,
+            int width, int height, byte[] dcQuantizerIndices,
+            byte[] lowpassQuantizerIndices, byte[] highpassQuantizerIndices,
+            int dcQuantizerMode, int lowpassQuantizerMode,
+            int highpassQuantizerMode, JxrGraySubbandMode subbands,
+            bool scaledArithmetic, int trimFlexbits, int overlap,
+            JxrChromaSubsampling chromaSubsampling, JxrTileLayout tileLayout,
+            int subversion)
+        {
             if (writer == null || width < 1 || height < 1 ||
+                dcQuantizerIndices == null || dcQuantizerIndices.Length != 3 ||
+                lowpassQuantizerIndices == null || lowpassQuantizerIndices.Length != 3 ||
+                highpassQuantizerIndices == null || highpassQuantizerIndices.Length != 3 ||
+                dcQuantizerMode < 0 || dcQuantizerMode > 3 ||
+                lowpassQuantizerMode < 0 || lowpassQuantizerMode > 3 ||
+                highpassQuantizerMode < 0 || highpassQuantizerMode > 3 ||
+                (subversion != 0 && subversion != 1) ||
                 writer.BitCount != 0 || (int)subbands < 0 || (int)subbands > 3 ||
                 trimFlexbits < 0 || trimFlexbits > 15 || overlap < 0 || overlap > 2 ||
                 (int)chromaSubsampling < 1 || (int)chromaSubsampling > 3)
@@ -63,7 +101,7 @@ namespace Jxr.Managed.Core
                 (byte)'O', (byte)'T', (byte)'O', 0 };
             for (int index = 0; index < signature.Length; index++)
                 writer.Write(signature[index], 8);
-            writer.Write(1, 4); writer.Write(1, 4); // version, soft-tile subversion
+            writer.Write(1, 4); writer.Write((uint)subversion, 4);
             writer.Write(tiled ? 1U : 0U, 1); writer.Write(0, 1); // tiling, spatial
             writer.Write(0, 3); writer.Write(tiled ? 1U : 0U, 1); // orientation, index
             writer.Write((uint)overlap, 2); writer.Write(abbreviated ? 1U : 0U, 1);
@@ -92,25 +130,33 @@ namespace Jxr.Managed.Core
             writer.Write((uint)subbands, 4);
             writer.Write(0, 8); // no chroma centering
             writer.Write(1, 1); // frame DC quantizer
-            WriteThreeChannelQuantizer(writer, dcQuantizerIndex);
+            WriteThreeChannelQuantizer(writer, dcQuantizerMode,
+                dcQuantizerIndices);
             if (subbands != JxrGraySubbandMode.DcOnly)
             {
                 writer.Write(0, 1); writer.Write(1, 1);
-                WriteThreeChannelQuantizer(writer, lowpassQuantizerIndex);
+                WriteThreeChannelQuantizer(writer, lowpassQuantizerMode,
+                    lowpassQuantizerIndices);
             }
             if ((int)subbands < (int)JxrGraySubbandMode.NoHighpass)
             {
                 writer.Write(0, 1); writer.Write(1, 1);
-                WriteThreeChannelQuantizer(writer, highpassQuantizerIndex);
+                WriteThreeChannelQuantizer(writer, highpassQuantizerMode,
+                    highpassQuantizerIndices);
             }
             writer.AlignByte();
             return JxrError.None;
         }
 
-        private static void WriteThreeChannelQuantizer(JxrBitWriter writer, byte index)
+        private static void WriteThreeChannelQuantizer(JxrBitWriter writer,
+            int mode, byte[] indices)
         {
-            writer.Write(2, 2); // native -q mode: independent channel indices
-            for (int channel = 0; channel < 3; channel++) writer.Write(index, 8);
+            writer.Write((uint)mode, 2);
+            writer.Write(indices[0], 8);
+            if (mode == 1) writer.Write(indices[1], 8);
+            else if (mode > 1)
+                for (int channel = 1; channel < 3; channel++)
+                    writer.Write(indices[channel], 8);
         }
 
         public static JxrError WriteGraySpatial(JxrBitWriter writer,

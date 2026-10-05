@@ -13,6 +13,12 @@ namespace Jxr.Managed.Core
         internal static JxrError Encode(JxrImage image, JxrEncoderOptions options,
             out byte[] jxr)
         {
+            return Encode(image, options, null, out jxr);
+        }
+
+        internal static JxrError Encode(JxrImage image, JxrEncoderOptions options,
+            JxrProfileEncodingSettings profileSettings, out byte[] jxr)
+        {
             jxr = null;
             if (image == null || options == null ||
                 (image.Format != JxrPixelFormat.Rgb24 &&
@@ -32,8 +38,25 @@ namespace Jxr.Managed.Core
             byte dcIndex = QpIndex(options.DcQuantizerIndex, options.QualityIndex);
             byte lpIndex = QpIndex(options.LowpassQuantizerIndex, options.QualityIndex);
             byte hpIndex = QpIndex(options.HighpassQuantizerIndex, options.QualityIndex);
-            bool scaled = options.Subbands != JxrGraySubbandMode.All ||
-                dcIndex > 1 || lpIndex > 1 || hpIndex > 1;
+            byte[] dcIndices = profileSettings == null ?
+                new byte[] { dcIndex, dcIndex, dcIndex } :
+                (byte[])profileSettings.DcIndices.Clone();
+            byte[] lpIndices = profileSettings == null ?
+                new byte[] { lpIndex, lpIndex, lpIndex } :
+                (byte[])profileSettings.LowpassIndices.Clone();
+            byte[] hpIndices = profileSettings == null ?
+                new byte[] { hpIndex, hpIndex, hpIndex } :
+                (byte[])profileSettings.HighpassIndices.Clone();
+            if (profileSettings != null)
+            {
+                dcIndex = EffectiveQuantizerIndex(dcIndices[0]);
+                lpIndex = EffectiveQuantizerIndex(lpIndices[0]);
+                hpIndex = EffectiveQuantizerIndex(hpIndices[0]);
+            }
+            bool scaled = profileSettings == null ?
+                options.Subbands != JxrGraySubbandMode.All || dcIndex > 1 ||
+                    lpIndex > 1 || hpIndex > 1 :
+                profileSettings.ScaledArithmetic;
             int width = image.Width, height = image.Height;
             int[] yPlane, uPlane, vPlane;
             JxrError error = JxrImagePipeline.EncodeRgb8(image.Pixels,
@@ -79,12 +102,15 @@ namespace Jxr.Managed.Core
                 int[][] hpParameters = new int[3][];
                 for (int channel = 0; channel < 3; channel++)
                 {
-                    dc[channel] = JxrQuantization.Remap(dcIndex, scaled,
+                    byte dcQp = EffectiveQuantizerIndex(dcIndices[channel]);
+                    byte lpQp = EffectiveQuantizerIndex(lpIndices[channel]);
+                    byte hpQp = EffectiveQuantizerIndex(hpIndices[channel]);
+                    dc[channel] = JxrQuantization.Remap(dcQp, scaled,
                         channel != 0).WithDcOffset();
                     lp[channel] = new JxrQuantizer[] {
-                        JxrQuantization.Remap(lpIndex, scaled, channel != 0) };
+                        JxrQuantization.Remap(lpQp, scaled, channel != 0) };
                     hp[channel] = new JxrQuantizer[] {
-                        JxrQuantization.Remap(hpIndex, scaled, false) };
+                        JxrQuantization.Remap(hpQp, scaled, false) };
                     hpParameters[channel] = new int[] { hp[channel][0].Parameter };
                 }
                 JxrQuantizerSet quantizers = new JxrQuantizerSet(dc, lp, hp);
@@ -235,14 +261,22 @@ namespace Jxr.Managed.Core
                     }
                 byte[] codestream;
                 if (frequency)
-                    error = JxrFrequencyCodestreamWriter.WriteRgb(
-                        frequencyPackets, frequencyBitCounts, width, height,
-                        dcIndex, lpIndex, hpIndex, options.Subbands, scaled,
-                        options.TrimFlexbits, options.Overlap,
-                        options.ChromaSubsampling, options.TileLayout == null ?
-                            new JxrTileLayout(new int[] { columns },
-                                new int[] { rowsCount }) : options.TileLayout,
-                        options.Progressive, out codestream);
+                {
+                    JxrTileLayout tileLayout = options.TileLayout == null ?
+                        new JxrTileLayout(new int[] { columns },
+                            new int[] { rowsCount }) : options.TileLayout;
+                    if (profileSettings == null)
+                        error = JxrFrequencyCodestreamWriter.WriteRgb(
+                            frequencyPackets, frequencyBitCounts, width, height,
+                            dcIndex, lpIndex, hpIndex, options.Subbands, scaled,
+                            options.TrimFlexbits, options.Overlap,
+                            options.ChromaSubsampling, tileLayout,
+                            options.Progressive, out codestream);
+                    else
+                        error = JxrFrequencyCodestreamWriter.WriteRgbProfile(
+                            frequencyPackets, frequencyBitCounts, width, height,
+                            profileSettings, out codestream);
+                }
                 else error = JxrCodestreamWriter.WriteRgbSpatialTiles(entropyPackets,
                     entropyBitCounts, width, height, dcIndex, lpIndex, hpIndex,
                     options.Subbands, scaled, options.TrimFlexbits,
@@ -252,6 +286,11 @@ namespace Jxr.Managed.Core
                             new int[] { rowsCount }) : options.TileLayout,
                     out codestream);
                 if (error != JxrError.None) return error;
+                if (profileSettings != null)
+                    return JxrContainerWriter.WriteRgb24(codestream,
+                        width, height, profileSettings.HorizontalDpi,
+                        profileSettings.VerticalDpi,
+                        profileSettings.PixelFormatGuid, out jxr);
                 return JxrContainerWriter.WriteRgb24(codestream,
                     width, height, 96.012f, 96.012f, out jxr);
             }
@@ -262,5 +301,8 @@ namespace Jxr.Managed.Core
             int index = overrideIndex < 0 ? qualityIndex : overrideIndex;
             return (byte)(index < 2 ? 0 : index);
         }
+
+        private static byte EffectiveQuantizerIndex(byte index)
+        { return index < 2 ? (byte)0 : index; }
     }
 }

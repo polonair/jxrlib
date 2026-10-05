@@ -9,6 +9,60 @@ namespace Jxr.Managed.CorpusRunner
     {
         private static int Main(string[] args)
         {
+            if (args.Length == 5 && args[0] == "encode-profile")
+            {
+                try
+                {
+                    byte[] source = File.ReadAllBytes(args[1]);
+                    byte[] pixels = File.ReadAllBytes(args[3]);
+                    JxrSourceProfile profile;
+                    JxrError error = JxrSourceProfileReader.Read(source,
+                        out profile);
+                    if (error != JxrError.None)
+                    {
+                        Console.Error.WriteLine("profile: " + error.ToString());
+                        return 1;
+                    }
+                    JxrPixelFormat format;
+                    if (args[2] == "rgb") format = JxrPixelFormat.Rgb24;
+                    else if (args[2] == "bgr") format = JxrPixelFormat.Bgr24;
+                    else
+                    {
+                        Console.Error.WriteLine("pixel format must be rgb or bgr");
+                        return 2;
+                    }
+                    if (profile.Headers.Main.Width > Int32.MaxValue ||
+                        profile.Headers.Main.Height > Int32.MaxValue)
+                    {
+                        Console.Error.WriteLine("source dimensions exceed managed limits");
+                        return 2;
+                    }
+                    int width = (int)profile.Headers.Main.Width;
+                    int height = (int)profile.Headers.Main.Height;
+                    if ((long)width * height * 3 != pixels.Length)
+                    {
+                        Console.Error.WriteLine("pixel buffer length does not match source dimensions");
+                        return 2;
+                    }
+                    JxrImage image = new JxrImage(width, height, format,
+                        pixels, width * 3);
+                    byte[] output;
+                    error = JxrCodec.Encode(image, profile, out output);
+                    if (error != JxrError.None)
+                    {
+                        Console.Error.WriteLine("encode: " + error.ToString());
+                        return 1;
+                    }
+                    File.WriteAllBytes(args[4], output);
+                    return 0;
+                }
+                catch (Exception exception)
+                {
+                    Console.Error.WriteLine(exception.GetType().Name + ": " +
+                        exception.Message);
+                    return 1;
+                }
+            }
             if (args.Length == 5 && args[0] == "decode-trace")
             {
                 try

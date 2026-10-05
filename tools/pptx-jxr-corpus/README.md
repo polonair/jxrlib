@@ -78,6 +78,26 @@ spatial images and planar-alpha files, add
 `bitstream_layout == "frequency"` and `alpha_mode == "none"`; the older
 `has_alpha` profile bit alone does not distinguish planar-alpha assets.
 
+The `--encode-profile-round-trip` mode verifies profile-guided encoding for
+this family. It decodes source pixels with the native C decoder (so the known
+managed legacy-overlap decode mismatches do not contaminate encoder testing),
+re-encodes them through `JxrCodec.Encode(image, sourceProfile)`, checks the
+resulting stream's semantic profile, and verifies that the native C decoder
+accepts it. It records pixel drift from the lossy re-encode; the initial
+quality gate is mean absolute component error <= 8 and maximum component
+delta <= 96 against the native-decoded source. Packet offsets, codestream
+length, and encoded bytes are intentionally not required to match the source.
+
+```powershell
+python .\tools\pptx-jxr-corpus\corpus.py `
+  --root 'D:\ASPOSE\SLIDESNET\TestData' `
+  --report-dir 'D:\JxrReports\TestData' `
+  --native-decoder '.\jxrencoderdecoder\Release\JXRDecApp\x64\JXRDecApp.exe' `
+  --managed-runner '.\managed\Jxr.Managed.CorpusRunner\bin\Release\Jxr.Managed.CorpusRunner.exe' `
+  --suite all --profile-filter frequency-no-alpha --encode-profile-round-trip `
+  --output 'D:\JxrReports\TestData\frequency-no-alpha-reencode.json'
+```
+
 The frequency/no-alpha corpus check is currently **95/128 pixel-identical**.
 The other 33 unique images are differences in the legacy
 `codestream_subversion=0`, `OL_ONE` branch; they are recorded by input SHA-256

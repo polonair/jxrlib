@@ -76,6 +76,55 @@ class CorpusUtilityTests(unittest.TestCase):
                                         "frequency-planar-alpha")
         self.assertEqual(["a"], [item["sha256"] for item in selected])
 
+    def test_profile_comparison_can_ignore_reencoded_container_lengths(self):
+        reference = {"container": "tiff_like_jxr",
+            "pixel_format_guid": "g", "container_width": 16,
+            "container_height": 16, "orientation_tag": 0,
+            "orientation_code": 0, "width": 16,
+            "height": 16, "codestream_offset": 138, "codestream_length": 100,
+            "frame_header_bytes": 40, "codestream_version": 1,
+            "codestream_subversion": 1, "overlap": 0,
+            "source_color_format_code": 7, "source_bit_depth_code": 1,
+            "coded_bit_depth_code": 1, "plane_color_format_code": 3,
+            "subband_code": 0, "index_table": True,
+            "trim_flexbits_flag": False, "red_blue_swapped": False,
+            "has_alpha": False, "tile_columns": 1, "tile_rows": 1,
+            "tile_column_boundaries_mb": [], "tile_row_boundaries_mb": [],
+            "frame_quantizers": {}}
+        managed = {"container": "TiffLike", "pixel_format_guid": "g",
+            "container_width": 16, "container_height": 16,
+            "orientation_tag": 0, "codestream_offset": 134,
+            "alpha_offset": 0, "alpha_byte_count": 0,
+            "alpha_range_tag_value": None, "alpha_range_interpretation": "None",
+            "color_plane": {"width": 16, "height": 16, "version": 1,
+                "subversion": 1, "overlap": 0, "orientation": 0,
+                "source_color_format": 7, "source_bit_depth": 1,
+                "coded_bit_depth": 1, "plane_color_format": 3,
+                "subbands": 0, "index_table": True,
+                "trim_flexbits": False, "red_blue_swapped": False,
+                "has_alpha": False, "tile_columns": 1, "tile_rows": 1,
+                "tile_column_boundaries": [], "tile_row_boundaries": [],
+                "header_bytes": 40, "frame_quantizers": {}}}
+        self.assertEqual([], corpus.compare_managed_profile(reference, managed,
+            compare_serialized_lengths=False))
+        differences = corpus.compare_managed_profile(reference, managed)
+        self.assertIn("codestream_offset", " ".join(differences))
+
+    def test_physical_profile_order_ignores_optional_empty_flexbits(self):
+        def make_profile(include_flex):
+            first = [{"type": 1, "offset": 10}, {"type": 2, "offset": 20},
+                     {"type": 3, "offset": 30}]
+            if include_flex:
+                first.append({"type": 4, "offset": 40})
+            return {"color_plane": {"tiles": [
+                {"row": 0, "column": 0, "packets": first},
+                {"row": 0, "column": 1, "packets": [
+                    {"type": 1, "offset": 50}, {"type": 2, "offset": 60},
+                    {"type": 3, "offset": 70}, {"type": 4, "offset": 80}]},
+            ]}}
+        self.assertEqual(corpus.packet_order(make_profile(True)),
+                         corpus.packet_order(make_profile(False)))
+
     def test_known_mismatch_baseline_is_exact_and_does_not_hide_errors(self):
         path = Path(__file__).resolve().parents[1] / \
             "known-mismatches-frequency-no-alpha.jsonl"

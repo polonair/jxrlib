@@ -446,11 +446,14 @@ def managed_source_profile(runner: Path, jxr_path: Path,
 
 
 def compare_managed_profile(reference: dict[str, Any],
-                            managed: dict[str, Any]) -> list[str]:
+                            managed: dict[str, Any],
+                            compare_serialized_lengths: bool = True) -> list[str]:
     differences = []
     color = managed.get("color_plane") or {}
     fields = (("width", color.get("width")),
               ("height", color.get("height")),
+              ("codestream_version", color.get("version")),
+              ("codestream_subversion", color.get("subversion")),
               ("overlap", color.get("overlap")),
               ("orientation_code", color.get("orientation")),
               ("source_color_format_code", color.get("source_color_format")),
@@ -465,12 +468,19 @@ def compare_managed_profile(reference: dict[str, Any],
               ("tile_columns", color.get("tile_columns")),
               ("tile_rows", color.get("tile_rows")),
               ("tile_column_boundaries_mb", color.get("tile_column_boundaries")),
-              ("tile_row_boundaries_mb", color.get("tile_row_boundaries")),
-              ("frame_header_bytes", color.get("header_bytes")))
+              ("tile_row_boundaries_mb", color.get("tile_row_boundaries")))
+    if compare_serialized_lengths:
+        fields += (("frame_header_bytes", color.get("header_bytes")),)
     for field, actual in fields:
-        if reference.get(field) != actual:
+        expected = reference.get(field)
+        if field in ("horizontal_dpi", "vertical_dpi") and \
+                isinstance(expected, (int, float)) and \
+                isinstance(actual, (int, float)) and \
+                abs(expected - actual) <= 0.01:
+            continue
+        if expected != actual:
             differences.append("%s: profiler=%r managed=%r" %
-                               (field, reference.get(field), actual))
+                               (field, expected, actual))
     reference_quantizers = reference.get("frame_quantizers") or {}
     managed_quantizers = color.get("frame_quantizers") or {}
     for band in ("dc", "lp", "hp"):
@@ -499,15 +509,24 @@ def compare_managed_profile(reference: dict[str, Any],
                   ("container_width", managed.get("container_width")),
                   ("container_height", managed.get("container_height")),
                   ("orientation_tag", managed.get("orientation_tag")),
-                  ("codestream_offset", color.get("codestream_offset")),
-                  ("codestream_length", color.get("codestream_length")),
+                  ("horizontal_dpi", managed.get("horizontal_dpi")),
+                  ("vertical_dpi", managed.get("vertical_dpi")),
                   ("alpha_offset", managed.get("alpha_offset") or None),
                   ("alpha_byte_count", managed.get("alpha_byte_count") or None),
                   ("alpha_range_tag_value", managed.get("alpha_range_tag_value")))
+        if compare_serialized_lengths:
+            fields += (("codestream_offset", color.get("codestream_offset")),
+                       ("codestream_length", color.get("codestream_length")))
         for field, actual in fields:
-            if reference.get(field) != actual:
+            expected = reference.get(field)
+            if field in ("horizontal_dpi", "vertical_dpi") and \
+                    isinstance(expected, (int, float)) and \
+                    isinstance(actual, (int, float)) and \
+                    abs(expected - actual) <= 0.01:
+                continue
+            if expected != actual:
                 differences.append("%s: profiler=%r managed=%r" %
-                                   (field, reference.get(field), actual))
+                                   (field, expected, actual))
         managed_range = managed.get("alpha_range_interpretation")
         mapping = {"None": None, "AbsoluteEndOffset": "absolute_end_offset",
                    "ByteCount": "byte_count"}
@@ -516,6 +535,83 @@ def compare_managed_profile(reference: dict[str, Any],
                                (reference.get("alpha_range_interpretation"),
                                 managed_range))
     return differences
+
+
+def managed_profile_reencode(runner: Path, decoder: Path, source_path: Path,
+                             source_profile: dict[str, Any],
+                             source_managed_profile: dict[str, Any], work: Path
+                             ) -> dict[str, Any]:
+    """Re-encode C-decoded pixels using the source JXR profile and verify it."""
+    guid = str(source_profile.get("pixel_format_guid", "")).lower()
+    if guid.endswith("c90c"):
+        pixel_format, channels = "bgr", 3
+    elif guid.endswith("c90d"):
+        pixel_format, channels = "rgb", 3
+    else:
+        raise ValueError("unsupported source pixel-format GUID for profile re-encode")
+    width, height, count, reference_pixels = native_pixels(
+        decoder, source_path, work, "color")
+    if count != channels:
+        raise ValueError("native source decode has wrong channel count")
+    if pixel_format == "rgb":
+        rgb = bytearray(reference_pixels)
+        for offset in range(0, len(rgb), 3):
+            rgb[offset], rgb[offset + 2] = rgb[offset + 2], rgb[offset]
+        encoder_pixels = bytes(rgb)
+    else:
+        encoder_pixels = reference_pixels
+    raw_path = work / "profile-input.bin"
+    encoded_path = work / "profile-roundtrip.jxr"
+    raw_path.write_bytes(encoder_pixels)
+    code, output = run_process([str(runner), "encode-profile",
+        str(source_path), pixel_format, str(raw_path), str(encoded_path)],
+        runner.parent)
+    if code != 0 or not encoded_path.is_file():
+        raise RuntimeError("profile encoder failed (%d): %s" % (code, output))
+    encoded_profile = managed_source_profile(runner, encoded_path, work)
+    differences = compare_managed_profile(source_profile, encoded_profile,
+                                          compare_serialized_lengths=False)
+    source_order = packet_order(source_managed_profile)
+    encoded_order = packet_order(encoded_profile)
+    if source_order != encoded_order:
+        differences.append("physical packet order differs")
+    if differences:
+        return {"status": "profile_mismatch", "profile_differences": differences,
+                "source_packet_order": source_order,
+                "encoded_packet_order": encoded_order,
+                "encoded_bytes": encoded_path.stat().st_size}
+    out_width, out_height, out_count, actual_pixels = native_pixels(
+        decoder, encoded_path, work, "color")
+    if (out_width, out_height, out_count) != (width, height, count):
+        return {"status": "native_decode_mismatch", "encoded_bytes": encoded_path.stat().st_size,
+                "expected_dimensions": [width, height, count],
+                "actual_dimensions": [out_width, out_height, out_count]}
+    metrics = difference_metrics(reference_pixels, actual_pixels, count)
+    total = max(1, len(reference_pixels))
+    metrics["mean_absolute_error"] = sum(abs(left - right) for left, right in
+        zip(reference_pixels, actual_pixels)) / float(total)
+    metrics["mse"] = sum((left - right) * (left - right) for left, right in
+        zip(reference_pixels, actual_pixels)) / float(total)
+    # Same-quality lossy re-encoding is not pixel-identical. Reject material
+    # drift, but retain exact error metrics in the report for every image.
+    status = "match" if metrics["mean_absolute_error"] <= 8.0 and \
+        metrics["maximum_component_delta"] <= 96 else "quality_mismatch"
+    return {"status": status, "encoded_bytes": encoded_path.stat().st_size,
+            "profile_differences": [], "quality": metrics}
+
+
+def packet_order(profile: dict[str, Any]) -> list[tuple[int, int, int]]:
+    """Return physical DC/LP/HP order; empty flexbits packets are optional."""
+    plane = profile.get("color_plane") or {}
+    ordered = []
+    for tile in plane.get("tiles", []):
+        for packet in tile.get("packets", []):
+            if packet.get("type") == 4:
+                continue
+            ordered.append((packet.get("offset", -1), tile.get("row", -1),
+                            tile.get("column", -1), packet.get("type", -1)))
+    ordered.sort()
+    return [(row, column, kind) for _, row, column, kind in ordered]
 
 
 def native_reference(decoder: Path, jxr: bytes, work: Path,
@@ -557,6 +653,8 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--profile-filter", choices=("frequency-no-alpha",
                         "frequency-planar-alpha"),
                         help="limit a suite to the named JXR profile family")
+    parser.add_argument("--asset-sha256",
+                        help="select one already-filtered asset for targeted diagnostics")
     parser.add_argument("--refresh-inventory", action="store_true",
                         help="run the profiler before loading its assets.jsonl")
     parser.add_argument("--manifest-only", action="store_true",
@@ -575,6 +673,8 @@ def make_parser() -> argparse.ArgumentParser:
                         help="compare PBGRA output with independent pixel digests")
     parser.add_argument("--profile-only", action="store_true",
                         help="read source profiles without invoking either pixel decoder")
+    parser.add_argument("--encode-profile-round-trip", action="store_true",
+                        help="re-encode C-decoded frequency/no-alpha assets with their source profile")
     parser.add_argument("--profile-manifest", type=Path,
                         help="write managed profile results as versioned JSONL")
     parser.add_argument("--diagnostic", action="store_true",
@@ -593,6 +693,12 @@ def main(argv: list[str] | None = None) -> int:
     runner = args.managed_runner.resolve() if args.managed_runner else None
     output_path = (args.output or report_dir / "corpus-results.json").resolve()
     required_paths = [(root, "corpus root")]
+    if args.encode_profile_round_trip and (args.suite != "all" or
+            args.profile_filter != "frequency-no-alpha" or args.profile_only or
+            args.manifest_only):
+        print("--encode-profile-round-trip requires --suite all and "
+              "--profile-filter frequency-no-alpha", file=sys.stderr)
+        return 2
     if not args.manifest_only:
         if runner is None or (not args.profile_only and decoder is None):
             print("--managed-runner is required; --native-decoder is also required "
@@ -660,6 +766,13 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError, json.JSONDecodeError) as error:
         print(str(error), file=sys.stderr)
         return 2
+    if args.asset_sha256:
+        assets = [asset for asset in assets
+                  if asset.get("sha256") == args.asset_sha256]
+        if not assets:
+            print("requested SHA-256 is not in the selected profile suite",
+                  file=sys.stderr)
+            return 2
     if args.write_corpus_manifest:
         write_corpus_manifest(inventory, args.write_corpus_manifest.resolve(),
                               occurrences)
@@ -770,6 +883,23 @@ def main(argv: list[str] | None = None) -> int:
                                     "error": str(error),
                                 })
                                 record["status"] = "managed_profile_error"
+                                record["error"] = str(error)
+                            results.append(record)
+                            continue
+                        if args.encode_profile_round_trip:
+                            try:
+                                managed = managed_source_profile(runner, jxr_path,
+                                                                 work)
+                                source_differences = compare_managed_profile(
+                                    profile, managed)
+                                if source_differences:
+                                    raise ValueError("source profile differs from profiler: " +
+                                        "; ".join(source_differences))
+                                outcome = managed_profile_reencode(runner,
+                                    decoder, jxr_path, profile, managed, work)
+                                record.update(outcome)
+                            except (OSError, RuntimeError, ValueError, KeyError) as error:
+                                record["status"] = "error"
                                 record["error"] = str(error)
                             results.append(record)
                             continue
@@ -950,6 +1080,25 @@ def main(argv: list[str] | None = None) -> int:
         print("Wrote profile manifest: %s" % profile_manifest)
         return 0 if (summary["profiles_metadata_match"] == len(assets) and
                      summary["profile_errors"] == 0) else 1
+
+    if args.encode_profile_round_trip:
+        summary = {"schema_version": SCHEMA_VERSION,
+            "suite": args.suite, "profile_filter": args.profile_filter,
+            "corpus_root": str(root), "assets_selected": len(assets),
+            "assets_match": sum(row["status"] == "match" for row in results),
+            "profile_mismatch": sum(row["status"] == "profile_mismatch" for row in results),
+            "quality_mismatch": sum(row["status"] == "quality_mismatch" for row in results),
+            "native_decode_mismatch": sum(row["status"] == "native_decode_mismatch" for row in results),
+            "assets_error": sum(row["status"] == "error" for row in results),
+            "results": results}
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
+                               encoding="utf-8")
+        print("Profile re-encode: %d/%d passed; %d profile mismatches, %d quality mismatches, %d decoder mismatches, %d errors" % (
+            summary["assets_match"], summary["assets_selected"],
+            summary["profile_mismatch"], summary["quality_mismatch"],
+            summary["native_decode_mismatch"], summary["assets_error"]))
+        return 0 if summary["assets_match"] == summary["assets_selected"] else 1
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     presentation_coverage = None

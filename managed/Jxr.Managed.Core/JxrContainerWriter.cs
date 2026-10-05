@@ -13,6 +13,8 @@ namespace Jxr.Managed.Core
             0x4e03, 0x4bfe, 0xb1, 0x85, 0x3d, 0x77, 0x76, 0x8d, 0xc9, 0x08);
         private static readonly Guid Rgb24PixelFormat = new Guid(0x6fddc324,
             0x4e03, 0x4bfe, 0xb1, 0x85, 0x3d, 0x77, 0x76, 0x8d, 0xc9, 0x0c);
+        private static readonly Guid AlternateRgb24PixelFormat = new Guid(0x6fddc324,
+            0x4e03, 0x4bfe, 0xb1, 0x85, 0x3d, 0x77, 0x76, 0x8d, 0xc9, 0x0d);
         private static readonly Guid Rgba32PixelFormat = new Guid(0xf5c7ad2d,
             0x6a8d, 0x43dd, 0xa7, 0xa8, 0xa2, 0x99, 0x35, 0x26, 0x1a, 0xe9);
         private static readonly Guid Bgra32PixelFormat = new Guid(0x6fddc324,
@@ -23,6 +25,17 @@ namespace Jxr.Managed.Core
         {
             return WriteContainer(codestream, width, height, horizontalDpi,
                 verticalDpi, Rgb24PixelFormat, out container);
+        }
+
+        internal static JxrError WriteRgb24(byte[] codestream, int width,
+            int height, float horizontalDpi, float verticalDpi,
+            Guid pixelFormat, out byte[] container)
+        {
+            if (pixelFormat != Rgb24PixelFormat &&
+                pixelFormat != AlternateRgb24PixelFormat)
+            { container = null; return JxrError.UnsupportedFeature; }
+            return WriteContainer(codestream, width, height, horizontalDpi,
+                verticalDpi, pixelFormat, out container);
         }
 
         public static JxrError WriteGray8(byte[] codestream, int width,

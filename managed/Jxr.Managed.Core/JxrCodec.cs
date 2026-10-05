@@ -6,6 +6,28 @@ namespace Jxr.Managed.Core
     // JPEG XR boundary: pixels in/out, with no BMP dependency.
     public static class JxrCodec
     {
+        // Re-encodes an RGB image using the supported frequency/no-alpha
+        // syntax and stream parameters from an inspected source file.
+        public static JxrError Encode(JxrImage image, JxrSourceProfile sourceProfile,
+            out byte[] jxr)
+        {
+            jxr = null;
+            JxrProfileEncodingSettings profileSettings;
+            JxrError error = JxrProfileEncodingSettings.Create(image,
+                sourceProfile, out profileSettings);
+            if (error != JxrError.None) return error;
+            JxrEncoderOptions options = new JxrEncoderOptions();
+            options.Layout = JxrBitstreamLayout.Frequency;
+            options.Overlap = sourceProfile.Headers.Main.Overlap;
+            options.Subbands = JxrGraySubbandMode.All;
+            options.TrimFlexbits = 0;
+            options.ChromaSubsampling = JxrChromaSubsampling.Yuv444;
+            options.TileLayout = profileSettings.TileLayout;
+            options.Progressive = profileSettings.Progressive;
+            return JxrMinimalColorEncoder.Encode(image, options,
+                profileSettings, out jxr);
+        }
+
         public static JxrError Encode(JxrImage image, JxrEncoderOptions options,
             out byte[] jxr)
         {
@@ -341,6 +363,24 @@ namespace Jxr.Managed.Core
                 if (!destination.CanWrite) return JxrError.InvalidArgument;
                 byte[] jxr;
                 JxrError error = Encode(image, options, out jxr);
+                if (error != JxrError.None) return error;
+                destination.Write(jxr, 0, jxr.Length);
+            }
+            catch (IOException) { return JxrError.IoFailure; }
+            catch (ObjectDisposedException) { return JxrError.IoFailure; }
+            catch (NotSupportedException) { return JxrError.IoFailure; }
+            return JxrError.None;
+        }
+
+        public static JxrError Encode(JxrImage image,
+            JxrSourceProfile sourceProfile, Stream destination)
+        {
+            if (destination == null) return JxrError.InvalidArgument;
+            try
+            {
+                if (!destination.CanWrite) return JxrError.InvalidArgument;
+                byte[] jxr;
+                JxrError error = Encode(image, sourceProfile, out jxr);
                 if (error != JxrError.None) return error;
                 destination.Write(jxr, 0, jxr.Length);
             }
